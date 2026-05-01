@@ -6,7 +6,9 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org)
 [![Supabase](https://img.shields.io/badge/Supabase-green?logo=supabase)](https://supabase.com)
 [![Clerk](https://img.shields.io/badge/Clerk-Auth-purple?logo=clerk)](https://clerk.com)
+## 截图
 
+![界面预览](./public/project-screenshot.png)
 ---
 
 ## ✨ 功能概览
