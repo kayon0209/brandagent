@@ -2,18 +2,11 @@
 // Token 配额查询接口
 // src/app/api/quota/route.ts
 // ============================================================
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/api/supabase-server'
 
 export async function GET() {
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json(
-      { success: false, error: { code: 'AUTH_REQUIRED', message: '请先登录' } },
-      { status: 401 }
-    )
-  }
+  const userId = 'anonymous'
 
   const admin = createSupabaseAdminClient()
   const { data: user, error } = await admin

@@ -1,0 +1,8 @@
+.git
+.next
+node_modules
+services/agent-api/.venv
+**/.pytest_cache
+**/__pycache__
+.env*
+*.log

@@ -2,8 +2,6 @@
 // 文章历史列表页
 // src/app/(dashboard)/dashboard/articles/page.tsx
 // ============================================================
-import { currentUser } from '@clerk/nextjs/server'
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseAdminClient } from '@/lib/api/supabase-server'
 import type { Article } from '@/types'
@@ -177,14 +175,13 @@ function EmptyState() {
 // ── Server Component 主体 ─────────────────────────────────────────
 
 export default async function ArticlesPage() {
-  const user = await currentUser()
-  if (!user) redirect('/sign-in')
+  const userId = 'anonymous'
 
   const supabase = createSupabaseAdminClient()
   const { data, error } = await supabase
     .from('articles')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .order('updated_at', { ascending: false })
 
   if (error) {

@@ -4,7 +4,6 @@
  * Body: { title: string, content: string }
  * Response: { success: true, data: { seoResult: SeoResult } }
  */
-import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { glmClient, MODEL_WRITER } from '@/lib/api/anthropic'
@@ -43,14 +42,8 @@ const SeoResultSchema = z.object({
 const ESTIMATED_TOKENS = 2000
 
 export async function POST(req: NextRequest) {
-  // Step 1：认证
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json(
-      { success: false, error: { code: 'AUTH_REQUIRED', message: '请先登录' } },
-      { status: 401 }
-    )
-  }
+  // Step 1：认证（已移除 Clerk，使用匿名用户）
+  const userId = 'anonymous'
 
   // Step 2：入参校验
   const parsed = RequestSchema.safeParse(await req.json().catch(() => ({})))

@@ -11,7 +11,6 @@
  * src/app/api/moderation/check/route.ts
  */
 
-import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -40,11 +39,8 @@ function fail(code: string, message: string, status = 400) {
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // 1. 认证校验
-  const { userId } = await auth()
-  if (!userId) {
-    return fail('AUTH_REQUIRED', '请先登录后再使用', 401)
-  }
+  // 1. 认证校验（已移除 Clerk，使用匿名用户）
+  const userId = 'anonymous'
 
   // 2. 解析并校验请求体
   let body: unknown

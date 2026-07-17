@@ -4,7 +4,6 @@
  * PATCH  /api/articles/[id]  — 更新文章（保存草稿）
  * DELETE /api/articles/[id]  — 删除文章
  */
-import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSupabaseAdminClient } from '@/lib/api/supabase-server'
@@ -52,13 +51,7 @@ interface RouteParams {
 // ── GET /api/articles/[id] ────────────────────────────────────────
 
 export async function GET(_req: NextRequest, { params }: RouteParams) {
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json(
-      { success: false, error: { code: 'AUTH_REQUIRED', message: '请先登录' } },
-      { status: 401 }
-    )
-  }
+  const userId = 'anonymous'
 
   const { id } = await params
 
@@ -97,13 +90,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 // ── PATCH /api/articles/[id] ──────────────────────────────────────
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json(
-      { success: false, error: { code: 'AUTH_REQUIRED', message: '请先登录' } },
-      { status: 401 }
-    )
-  }
+  const userId = 'anonymous'
 
   const { id } = await params
 
@@ -183,13 +170,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 // ── DELETE /api/articles/[id] ─────────────────────────────────────
 
 export async function DELETE(_req: NextRequest, { params }: RouteParams) {
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json(
-      { success: false, error: { code: 'AUTH_REQUIRED', message: '请先登录' } },
-      { status: 401 }
-    )
-  }
+  const userId = 'anonymous'
 
   const { id } = await params
 

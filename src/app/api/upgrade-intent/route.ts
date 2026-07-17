@@ -3,7 +3,6 @@
 // POST /api/upgrade-intent
 // 在正式接入支付前，记录想升级的用户信息
 // ============================================================
-import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSupabaseAdminClient } from '@/lib/api/supabase-server'
@@ -16,7 +15,8 @@ const bodySchema = z.object({
 })
 
 export async function POST(req: Request) {
-  const { userId } = await auth()
+  // 已移除 Clerk 认证，使用匿名用户
+  const userId = 'anonymous'
 
   let body: unknown
   try {

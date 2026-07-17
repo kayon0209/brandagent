@@ -1,3 +1,23 @@
+# BrandFlow
+
+BrandFlow 是企业品牌内容工作流：结构化 Brief、权威事实取证、版本化品牌/渠道规范、明确的人类审批、多渠道谱系、可恢复 LangGraph 流程和真实 MCP 工具调用。它不是聊天机器人，也不把模型配置作为主界面。
+
+## BrandFlow 快速启动
+
+1. 复制 `.env.example` 为 `.env.local`，填写数据库、Clerk、GLM 和内部 MCP 服务凭证。密钥不得提交。
+2. 本地分别启动 PostgreSQL、`services/brand-tools-mcp`、`services/agent-api` 和 Next.js，或运行 `docker compose up --build`。
+3. 访问 `http://localhost:3000/brandflow`。Web 通过 Clerk token 调用 `/api/v1`，任务更新使用可恢复 SSE。
+
+```powershell
+.\services\agent-api\.venv\Scripts\python.exe -m pytest -p no:cacheprovider services\agent-api\tests services\brand-tools-mcp\tests
+C:\Users\Rose\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe node_modules\next\dist\bin\next lint
+C:\Users\Rose\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe node_modules\next\dist\bin\next build
+```
+
+部署、恢复、密钥轮换和故障处理见 `docs/deployment/RUNBOOK.md`；产品与里程碑状态见 `docs/MASTER_PLAN.md`。
+
+## 旧版 AI 写作助手
+
 # AI 写作助手 · AI Blog Assistant
 
 > 从一句话主题，10 分钟生成一篇完整的中文博客——由 Multi-Agent 协作驱动，带内容审核、SEO 分析和全文润色。

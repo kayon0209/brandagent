@@ -38,9 +38,15 @@ ai-blog-assistant/
 │   └── styles/            # 全局 CSS（globals.css）
 ├── docs/                  # 项目文档（PRD、架构图、会议记录）
 │   ├── PRD-ai-blog-assistant.md
-│   └── architecture.md
+│   ├── architecture.md
+│   ├── brandflow-openapi.yaml  # BrandFlow V2 API 权威契约
+│   └── migrations/        # 按编号递增、只前进的 SQL migration
+│   └── deployment/        # 容器启动、数据库角色初始化与运维手册
 ├── _sandbox/              # 实验区（Prompt 测试、临时脚本）不进生产
 ├── public/                # 静态资源
+├── services/
+│   └── agent-api/         # BrandFlow FastAPI + LangGraph 服务（Python）
+│   └── brand-tools-mcp/   # 独立 MCP server；九项品牌工具与高风险审批门禁
 ├── tests/
 │   ├── unit/              # 单元测试（Jest + Testing Library）
 │   └── e2e/               # 端到端测试（Playwright）
@@ -98,7 +104,7 @@ interface OutlineSection {
 
 ## 5. API 设计规范
 
-所有 `/api/*` 路由统一返回格式：
+所有返回 JSON 的 `/api/*` 路由统一返回格式；SSE 端点使用版本化事件 envelope，不套 JSON HTTP envelope：
 ```typescript
 // 成功
 { success: true, data: T }
@@ -160,7 +166,7 @@ SUPABASE_SERVICE_ROLE_KEY= # 必填，Supabase 服务密钥（仅服务端）
 
 ## 9. 禁止事项
 
-- 禁止在 `src/` 外写业务代码。
+- Next.js 业务代码仅放 `src/`；BrandFlow Python 服务业务代码仅放 `services/agent-api/src/`。
 - 禁止硬编码 API Key、密码等敏感信息。
 - 禁止在未更新 AGENTS.md 的情况下新增顶层目录。
 - 禁止跳过测试直接合并到 main。
@@ -171,11 +177,12 @@ SUPABASE_SERVICE_ROLE_KEY= # 必填，Supabase 服务密钥（仅服务端）
 
 ## 10. 当前阶段
 
-**阶段**：P0 项目初始化
-**下一步**：技术框架搭建（Next.js 初始化 → Codex API 接入 → 核心编辑器）
-**PRD**：见 `docs/PRD-ai-blog-assistant.md`
+**阶段**：BrandFlow Milestone 5 — Evaluation and completion
+**下一步**：全量集成验证、前端旅程、容器化、运行手册与最终审查
+**权威计划**：见 `docs/MASTER_PLAN.md`
+**迁移规则**：Milestone 1 只新增 V2 表，不执行远端数据库变更，不删除或重命名旧表/列
 
 ---
 
-_最后更新：2026-04-14 | 维护人：李凯盟_
+_最后更新：2026-07-14 | 维护人：李凯盟_
 _修改本文件需通知相关开发者，规则变更先改文档再改代码。_

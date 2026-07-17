@@ -9,7 +9,6 @@
  * - H-3：audience 字段加长度与类型校验
  * - M-1：TitleItem 从 @/types 导入，移除本地重复定义
  */
-import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { glmClient, MODEL_WRITER } from '@/lib/api/anthropic'
@@ -31,14 +30,8 @@ const TitlesResponseSchema = z.object({
 const ESTIMATED_TOKENS = 600
 
 export async function POST(req: NextRequest) {
-  // Step 1：认证
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json(
-      { success: false, error: { code: 'AUTH_REQUIRED', message: '请先登录' } },
-      { status: 401 }
-    )
-  }
+  // Step 1：认证（已移除 Clerk，使用匿名用户）
+  const userId = 'anonymous'
 
   // Step 2：入参校验（H-3：audience 同步校验）
   const RequestSchema = z.object({

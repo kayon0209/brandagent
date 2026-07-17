@@ -6,7 +6,6 @@
  * 响应：text/event-stream，每条 SSE 事件为 JSON 序列化的 SSEEvent
  * 详见：src/lib/agents/expand-state-machine.ts
  */
-import { auth } from '@clerk/nextjs/server'
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { checkQuota, recordTokenUsage } from '@/lib/quota'
@@ -29,14 +28,8 @@ function encodeSSE(event: SSEEvent): string {
 }
 
 export async function POST(req: NextRequest) {
-  // Step 1：认证
-  const { userId } = await auth()
-  if (!userId) {
-    return new Response(
-      encodeSSE({ type: 'error', code: 'AUTH_REQUIRED', message: '请先登录' }),
-      { status: 401, headers: { 'Content-Type': 'text/event-stream' } }
-    )
-  }
+  // Step 1：认证（已移除 Clerk，使用匿名用户）
+  const userId = 'anonymous'
 
   // Step 2：入参校验
   const parsed = RequestSchema.safeParse(await req.json().catch(() => ({})))

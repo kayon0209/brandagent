@@ -7,7 +7,6 @@
  *
  * Body: { articleId: string, aiDraftHash: string, userFinalText: string }
  */
-import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSupabaseAdminClient } from '@/lib/api/supabase-server'
@@ -20,13 +19,7 @@ const RequestSchema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json(
-      { success: false, error: { code: 'AUTH_REQUIRED', message: '请先登录' } },
-      { status: 401 }
-    )
-  }
+  const userId = 'anonymous'
 
   const parsed = RequestSchema.safeParse(await req.json().catch(() => ({})))
   if (!parsed.success) {

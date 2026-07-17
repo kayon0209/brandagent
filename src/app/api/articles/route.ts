@@ -3,7 +3,6 @@
  * GET  /api/articles  — 获取当前用户的文章列表
  * POST /api/articles  — 创建新文章（草稿）
  */
-import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSupabaseAdminClient } from '@/lib/api/supabase-server'
@@ -45,13 +44,7 @@ function rowToArticle(row: Record<string, any>): Article {
 // ── GET /api/articles ─────────────────────────────────────────────
 
 export async function GET() {
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json(
-      { success: false, error: { code: 'AUTH_REQUIRED', message: '请先登录' } },
-      { status: 401 }
-    )
-  }
+  const userId = 'anonymous'
 
   try {
     const supabase = createSupabaseAdminClient()
@@ -83,13 +76,7 @@ export async function GET() {
 // ── POST /api/articles ────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json(
-      { success: false, error: { code: 'AUTH_REQUIRED', message: '请先登录' } },
-      { status: 401 }
-    )
-  }
+  const userId = 'anonymous'
 
   const parsed = ArticleBodySchema.safeParse(await req.json().catch(() => ({})))
   if (!parsed.success) {

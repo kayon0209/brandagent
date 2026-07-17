@@ -7,12 +7,6 @@
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useState } from 'react'
-import {
-  SignedIn,
-  SignedOut,
-  SignUpButton,
-  useUser,
-} from '@clerk/nextjs'
 
 // ─── 套餐信息 ──────────────────────────────────────────────
 const PLAN_INFO = {
@@ -51,8 +45,8 @@ function UpgradeForm() {
   const plan: PlanKey = planParam === 'team' ? 'team' : 'pro'
   const info = PLAN_INFO[plan]
 
-  const { user } = useUser()
-  const [email, setEmail] = useState(user?.primaryEmailAddress?.emailAddress ?? '')
+  // Mock: no Clerk auth — email left empty for user to fill in
+  const [email, setEmail] = useState('')
   const [wechat, setWechat] = useState('')
   const [note, setNote] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -323,18 +317,9 @@ export default function UpgradePage() {
               <Link href="/#pricing" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--color-ink-muted)', textDecoration: 'none', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                 ← 返回定价
               </Link>
-              <SignedOut>
-                <SignUpButton mode="modal">
-                  <button className="btn-ghost" style={{ padding: '0.5rem 1.25rem', fontSize: '0.6875rem' }}>
-                    注册免费版
-                  </button>
-                </SignUpButton>
-              </SignedOut>
-              <SignedIn>
-                <Link href="/dashboard" className="btn-ghost" style={{ padding: '0.5rem 1.25rem', fontSize: '0.6875rem' }}>
-                  工作台
-                </Link>
-              </SignedIn>
+              <Link href="/dashboard" className="btn-ghost" style={{ padding: '0.5rem 1.25rem', fontSize: '0.6875rem' }}>
+                工作台
+              </Link>
             </div>
           </div>
         </div>

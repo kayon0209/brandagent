@@ -1,4 +1,8 @@
 node_modules/
+.pnpm-store/
+.venv/
+__pycache__/
+.pytest_cache/
 .next/
 .env.local
 .env.*.local

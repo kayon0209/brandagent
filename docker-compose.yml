@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: brandflow
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?set POSTGRES_ADMIN_PASSWORD}
+      AGENT_DB_PASSWORD: ${AGENT_DB_PASSWORD:?set AGENT_DB_PASSWORD}
+      CHECKPOINT_DB_PASSWORD: ${CHECKPOINT_DB_PASSWORD:?set CHECKPOINT_DB_PASSWORD}
+    volumes:
+      - brandflow-postgres:/var/lib/postgresql/data
+      - ./docs/deployment/01-postgres-roles.sh:/docker-entrypoint-initdb.d/01-postgres-roles.sh:ro
+      - ./docs/deployment/postgres-roles.sql:/opt/brandflow/postgres-roles.sql:ro
+      - ./docs/migrations/001_init.sql:/docker-entrypoint-initdb.d/02-legacy.sql:ro
+      - ./docs/migrations/002_brandflow_v2_foundation.sql:/docker-entrypoint-initdb.d/03-brandflow.sql:ro
+      - ./docs/deployment/postgres-grants.sql:/docker-entrypoint-initdb.d/04-grants.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d brandflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  brand-tools-mcp:
+    build:
+      context: .
+      dockerfile: services/brand-tools-mcp/Dockerfile
+    environment:
+      BRAND_MCP_DATABASE_URL: postgresql://brandflow_app:${AGENT_DB_PASSWORD}@postgres:5432/brandflow
+      BRAND_MCP_SERVICE_TOKEN: ${BRAND_MCP_SERVICE_TOKEN:?set BRAND_MCP_SERVICE_TOKEN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  agent-api:
+    build:
+      context: .
+      dockerfile: services/agent-api/Dockerfile
+    environment:
+      ENVIRONMENT: production
+      AGENT_DATABASE_URL: postgresql://brandflow_app:${AGENT_DB_PASSWORD}@postgres:5432/brandflow
+      AGENT_CHECKPOINT_DATABASE_URL: postgresql://brandflow_checkpoint:${CHECKPOINT_DB_PASSWORD}@postgres:5432/brandflow
+      BRAND_MCP_URL: http://brand-tools-mcp:8100/mcp
+      BRAND_MCP_SERVICE_TOKEN: ${BRAND_MCP_SERVICE_TOKEN}
+      GLM_API_KEY: ${GLM_API_KEY:?set GLM_API_KEY}
+      GLM_MODEL: glm-4.7
+      CLERK_JWKS_URL: ${CLERK_JWKS_URL:?set CLERK_JWKS_URL}
+      CLERK_ISSUER: ${CLERK_ISSUER:?set CLERK_ISSUER}
+      CLERK_AUDIENCE: ${CLERK_AUDIENCE:-}
+      CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      brand-tools-mcp:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  web:
+    build:
+      context: .
+      args:
+        BRANDFLOW_AGENT_INTERNAL_URL: http://agent-api:8000
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+    environment:
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?set CLERK_SECRET_KEY}
+      BRANDFLOW_AGENT_INTERNAL_URL: http://agent-api:8000
+    depends_on:
+      agent-api:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+volumes:
+  brandflow-postgres:
