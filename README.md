@@ -168,8 +168,8 @@ npm run build
 #### 1. 克隆并安装
 
 ```bash
-git clone https://github.com/kayon0209/ai-blog-assistant.git
-cd ai-blog-assistant
+git clone https://github.com/kayon0209/brandflow.git
+cd brandflow
 npm install
 ```
 
