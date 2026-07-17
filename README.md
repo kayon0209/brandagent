@@ -1,24 +1,82 @@
 # BrandFlow
 
+> 企业品牌内容工作流平台 · 由 AI Blog Assistant 重构演进而来
+
 BrandFlow 是企业品牌内容工作流：结构化 Brief、权威事实取证、版本化品牌/渠道规范、明确的人类审批、多渠道谱系、可恢复 LangGraph 流程和真实 MCP 工具调用。它不是聊天机器人，也不把模型配置作为主界面。
 
-## BrandFlow 快速启动
+## 为什么是 BrandFlow，而不是"另一个 AI 写作助手"
+
+本项目的前身 AI Blog Assistant 已经能把一句话主题变成一篇完整博客；但品牌内容生产的核心矛盾不是"生成文字"，而是**可追溯、可审批、可复用规范、可跨渠道一致**。BrandFlow 把写作助手沉淀为一套工作流：需求先变成结构化 Brief，事实先取证再落笔，规范版本化管理，关键节点必须人工审批，产出带多渠道谱系。模型是执行单元，不是主界面。
+
+## 核心能力
+
+- **结构化 Brief** — 把零散需求收敛为可执行的品牌内容任务书
+- **权威事实取证** — 引用可溯源，拒绝编造
+- **版本化品牌 / 渠道规范** — 规范可迭代、可回滚
+- **明确的人类审批** — 关键节点必须人审，模型不独裁
+- **多渠道谱系** — 一次创作，多平台内容可追溯同源
+- **可恢复 LangGraph 流程** — 任务中断可从检查点恢复，不丢失进度
+- **真实 MCP 工具调用** — 通过 MCP 调用真实业务工具，而非假装
+
+## 系统架构
+
+```
+Next.js 14（前端 / Clerk 鉴权）
+   │  Clerk token → /api/v1
+   ▼
+services/agent-api      （Python · LangGraph 编排 · 可恢复 SSE）
+   │  MCP
+   ▼
+services/brand-tools-mcp（真实工具：事实取证 / 规范读取 / 多渠道生成）
+   │
+   ▼
+PostgreSQL             （任务 / 版本 / 谱系）
+```
+
+## 快速启动
 
 1. 复制 `.env.example` 为 `.env.local`，填写数据库、Clerk、GLM 和内部 MCP 服务凭证。密钥不得提交。
 2. 本地分别启动 PostgreSQL、`services/brand-tools-mcp`、`services/agent-api` 和 Next.js，或运行 `docker compose up --build`。
 3. 访问 `http://localhost:3000/brandflow`。Web 通过 Clerk token 调用 `/api/v1`，任务更新使用可恢复 SSE。
 
-```powershell
-.\services\agent-api\.venv\Scripts\python.exe -m pytest -p no:cacheprovider services\agent-api\tests services\brand-tools-mcp\tests
-C:\Users\Rose\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe node_modules\next\dist\bin\next lint
-C:\Users\Rose\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe node_modules\next\dist\bin\next build
+```bash
+# 后端测试（agent-api + brand-tools-mcp）
+cd services/agent-api && python -m pytest -p no:cacheprovider services/agent-api/tests services/brand-tools-mcp/tests
+
+# 前端 lint & build
+npm run lint
+npm run build
 ```
 
 部署、恢复、密钥轮换和故障处理见 `docs/deployment/RUNBOOK.md`；产品与里程碑状态见 `docs/PRD-v2.md`。
 
-## 旧版 AI 写作助手
+## 文档
 
-# AI 写作助手 · AI Blog Assistant
+- [PRD v2（双引擎：写作助手 + BrandFlow）](./docs/PRD-v2.md)
+- [部署 Runbook](./docs/deployment/RUNBOOK.md)
+- [项目开发规范](./CLAUDE.md)
+
+## 技术栈
+
+| 分类 | 技术 |
+|------|------|
+| 前端框架 | Next.js 14 App Router |
+| 样式 | TailwindCSS + CSS Variables |
+| 身份认证 | Clerk v6 |
+| 后端编排 | Python · LangGraph（可恢复流程） |
+| 工具协议 | MCP（brand-tools-mcp） |
+| 数据库 | PostgreSQL |
+| AI 模型 | 智谱 GLM (glm-4.5-air) |
+| 部署 | Docker / Vercel |
+| 语言 | TypeScript 5 · Python |
+
+---
+
+## 前身项目：AI Blog Assistant（旧版）
+
+> 以下是本项目的起点——一个面向中文博客的 AI 写作助手。保留在此以便理解演进脉络；新功能开发请以 BrandFlow 为准。
+
+### AI 写作助手 · AI Blog Assistant
 
 > 从一句话主题，10 分钟生成一篇完整的中文博客——由 Multi-Agent 协作驱动，带内容审核、SEO 分析和全文润色。
 
@@ -26,12 +84,14 @@ C:\Users\Rose\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org)
 [![Supabase](https://img.shields.io/badge/Supabase-green?logo=supabase)](https://supabase.com)
 [![Clerk](https://img.shields.io/badge/Clerk-Auth-purple?logo=clerk)](https://clerk.com)
-## 截图
+
+### 截图
 
 ![界面预览](./public/project-screenshot.png)
+
 ---
 
-## ✨ 功能概览
+### ✨ 功能概览
 
 | 步骤 | 功能 | 说明 |
 |------|------|------|
@@ -43,6 +103,7 @@ C:\Users\Rose\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\
 | 6 | **导出** | 下载 `.md` 文件 / 复制 Markdown / 复制纯文本（适合微信/掘金） |
 
 **系统特性：**
+
 - 🔐 Clerk 身份认证（支持 Google / 邮箱注册）
 - 📊 Token 级配额系统（Free: 30,000 tokens/月，每月自动重置）
 - 🛡️ 内容合规护栏（本地敏感词过滤 + 拦截日志）
@@ -51,7 +112,7 @@ C:\Users\Rose\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\
 
 ---
 
-## 🏗️ 技术架构
+### 🏗️ 技术架构
 
 ```
 用户浏览器
@@ -70,7 +131,7 @@ C:\Users\Rose\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\
 └── Clerk                      ← 身份认证 + 用户管理
 ```
 
-### Multi-Agent 扩写流程（F04）
+#### Multi-Agent 扩写流程（F04）
 
 ```
 用户点击"生成" → /api/generate/expand（SSE）
@@ -95,16 +156,16 @@ C:\Users\Rose\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\
 
 ---
 
-## 🚀 本地运行
+### 🚀 本地运行
 
-### 前置要求
+#### 前置要求
 
 - Node.js 18+
 - [智谱 GLM API Key](https://open.bigmodel.cn)（免费注册，有免费额度）
 - [Clerk](https://clerk.com) 应用（免费套餐够用）
 - [Supabase](https://supabase.com) 项目（免费套餐够用）
 
-### 1. 克隆并安装
+#### 1. 克隆并安装
 
 ```bash
 git clone https://github.com/kayon0209/ai-blog-assistant.git
@@ -112,7 +173,7 @@ cd ai-blog-assistant
 npm install
 ```
 
-### 2. 配置环境变量
+#### 2. 配置环境变量
 
 ```bash
 cp .env.example .env.local
@@ -131,7 +192,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 ```
 
-### 3. 初始化数据库
+#### 3. 初始化数据库
 
 在 Supabase SQL Editor 中执行以下建表语句：
 
@@ -216,7 +277,7 @@ create table upgrade_intents (
 
 </details>
 
-### 4. 启动开发服务器
+#### 4. 启动开发服务器
 
 ```bash
 npm run dev
@@ -226,7 +287,7 @@ npm run dev
 
 ---
 
-## 📁 项目结构
+### 📁 项目结构
 
 ```
 src/
@@ -265,30 +326,27 @@ src/
 
 ---
 
-## 🎯 设计亮点
+### 🎯 设计亮点
 
-### 1. Multi-Agent 协作（不是单次 LLM 调用）
+#### 1. Multi-Agent 协作（不是单次 LLM 调用）
+
 每个章节扩写经过三个 Agent 串联处理，前端通过 SSE 实时展示各 Agent 状态（研究中 / 写作中 / 审校中）。
 
-### 2. 自动保存，内容不丢失
+#### 2. 自动保存，内容不丢失
+
 大纲生成后自动创建草稿，每个章节扩写完成后自动更新。刷新页面、关闭浏览器，下次通过 URL `?id=` 参数完整恢复。
 
-### 3. Token 级配额系统
+#### 3. Token 级配额系统
+
 按实际消耗 token 数计费（而非篇数），更精准。Free 用户 30,000 tokens/月，每月 1 日自动重置，超额直接拒绝服务防止成本失控。
 
-### 4. 内容合规护栏
+#### 4. 内容合规护栏
+
 405 个敏感词（政治/色情/暴力三类）本地即时过滤，命中后记录日志但不阻断 UX，降级优雅。
 
 ---
 
-## 📄 文档
-
-- [PRD v2（双引擎：写作助手 + BrandFlow）](./docs/PRD-v2.md)
-- [项目开发规范](./CLAUDE.md)
-
----
-
-## 🛠️ 技术栈
+### 🛠️ 技术栈
 
 | 分类 | 技术 |
 |------|------|
@@ -301,8 +359,6 @@ src/
 | AI SDK | Anthropic SDK（兼容 GLM 接口） |
 | 部署 | Vercel |
 | 语言 | TypeScript 5 |
-
----
 
 ## License
 
