@@ -14,7 +14,7 @@ C:\Users\Rose\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\
 C:\Users\Rose\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe node_modules\next\dist\bin\next build
 ```
 
-部署、恢复、密钥轮换和故障处理见 `docs/deployment/RUNBOOK.md`；产品与里程碑状态见 `docs/MASTER_PLAN.md`。
+部署、恢复、密钥轮换和故障处理见 `docs/deployment/RUNBOOK.md`；产品与里程碑状态见 `docs/PRD-v2.md`。
 
 ## 旧版 AI 写作助手
 
@@ -107,7 +107,7 @@ C:\Users\Rose\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\
 ### 1. 克隆并安装
 
 ```bash
-git clone https://github.com/kayon09/ai-blog-assistant.git
+git clone https://github.com/kayon0209/ai-blog-assistant.git
 cd ai-blog-assistant
 npm install
 ```
@@ -283,8 +283,7 @@ src/
 
 ## 📄 文档
 
-- [PRD — 产品需求文档](./docs/PRD-ai-blog-assistant.md)
-- [架构决策记录](./docs/architecture.md)
+- [PRD v2（双引擎：写作助手 + BrandFlow）](./docs/PRD-v2.md)
 - [项目开发规范](./CLAUDE.md)
 
 ---
