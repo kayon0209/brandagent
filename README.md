@@ -8,6 +8,8 @@
 [![MCP](https://img.shields.io/badge/MCP-Tools-green)](https://modelcontextprotocol.io)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
+![BrandFlow Hero Banner](assets/hero-banner.jpg)
+
 ## 为什么是 BrandFlow，而不是「另一个 AI 写作助手」
 
 把一句话主题变成一篇完整博客，前身 AI Blog Assistant 已经能做到。但品牌内容生产的**核心矛盾不是"生成文字"**，而是：产出要可追溯、关键节点要有人审、品牌规范要能复用迭代、同一份内容要能跨渠道保持一致。
