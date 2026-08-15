@@ -57,8 +57,25 @@ class FakeTasks:
         return {"task_id": task_id, "status": "reviewing_channels"}
 
 
+class FakeKnowledge:
+    async def product_facts(self, workspace_id):
+        return []
+
+    async def brand_guidelines(self, workspace_id):
+        return []
+
+    async def channel_guidelines(self, workspace_id):
+        return []
+
+    async def approved_content(self, workspace_id):
+        return []
+
+    async def forbidden_claims(self, workspace_id):
+        return []
+
+
 def client() -> TestClient:
-    return TestClient(create_app(tasks=FakeTasks(), verifier=FakeVerifier()))
+    return TestClient(create_app(tasks=FakeTasks(), verifier=FakeVerifier(), knowledge=FakeKnowledge()))
 
 
 def test_health_is_public_but_readiness_is_explicit() -> None:
@@ -67,7 +84,7 @@ def test_health_is_public_but_readiness_is_explicit() -> None:
 
 
 def test_readiness_is_unavailable_before_runtime_dependencies_initialize() -> None:
-    response = TestClient(create_app(tasks=RuntimeTasks(), verifier=FakeVerifier())).get("/api/v1/readiness")
+    response = TestClient(create_app(tasks=RuntimeTasks(), verifier=FakeVerifier(), knowledge=FakeKnowledge())).get("/api/v1/readiness")
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "DEPENDENCY_UNAVAILABLE"
 
@@ -75,7 +92,7 @@ def test_readiness_is_unavailable_before_runtime_dependencies_initialize() -> No
 def test_readiness_becomes_ready_only_after_delegate_is_installed() -> None:
     runtime = RuntimeTasks()
     runtime.delegate = FakeTasks()
-    response = TestClient(create_app(tasks=runtime, verifier=FakeVerifier())).get("/api/v1/readiness")
+    response = TestClient(create_app(tasks=runtime, verifier=FakeVerifier(), knowledge=FakeKnowledge())).get("/api/v1/readiness")
     assert response.status_code == 200
     assert response.json() == {"success": True, "data": {"status": "ready"}}
 

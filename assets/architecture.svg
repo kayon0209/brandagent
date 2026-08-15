@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 600" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+  <rect width="820" height="600" fill="#ffffff"/>
+  <text x="40" y="38" font-size="21" font-weight="700" fill="#0f172a">BrandFlow · 系统架构</text>
+  <text x="40" y="60" font-size="13" fill="#64748b">有状态的品牌内容 Agent 工作流：人工只做终审</text>
+
+  <!-- Next.js -->
+  <rect x="40" y="92" width="340" height="64" rx="12" fill="#0f172a"/>
+  <text x="60" y="120" font-size="15" font-weight="600" fill="#ffffff">Next.js 14 前端</text>
+  <text x="60" y="140" font-size="12" fill="#cbd5e1">Clerk 鉴权 · 品牌内容创作界面</text>
+
+  <line x1="210" y1="156" x2="210" y2="188" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+  <text x="225" y="178" font-size="11" fill="#475569">Clerk token → /api/v1</text>
+
+  <!-- agent-api -->
+  <rect x="40" y="192" width="340" height="74" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+  <text x="60" y="220" font-size="15" font-weight="600" fill="#1e3a8a">services/agent-api</text>
+  <text x="60" y="240" font-size="12" fill="#1e40af">LangGraph 编排 · 可恢复 SSE · checkpoint 断点</text>
+
+  <line x1="210" y1="266" x2="210" y2="298" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+  <text x="225" y="288" font-size="11" fill="#475569">MCP 协议</text>
+
+  <!-- brand-tools-mcp -->
+  <rect x="40" y="302" width="340" height="84" rx="12" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+  <text x="60" y="330" font-size="15" font-weight="600" fill="#065f46">services/brand-tools-mcp</text>
+  <text x="60" y="350" font-size="12" fill="#047857">真实工具：事实取证 · 规范读取 · 多渠道生成</text>
+
+  <line x1="210" y1="386" x2="210" y2="418" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- PostgreSQL -->
+  <rect x="40" y="422" width="340" height="64" rx="12" fill="#e8f0fe" stroke="#336791" stroke-width="2"/>
+  <text x="60" y="450" font-size="15" font-weight="600" fill="#1e3a5f">PostgreSQL</text>
+  <text x="60" y="470" font-size="12" fill="#1e3a5f">任务 · 版本 · 多渠道谱系</text>
+
+  <!-- Human approval -->
+  <rect x="470" y="192" width="310" height="130" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="490" y="222" font-size="15" font-weight="700" fill="#92400e">人类审批门控（终审）</text>
+  <text x="490" y="246" font-size="12" fill="#92400e">一致性 / 合规 / 品牌安全校验</text>
+  <text x="490" y="268" font-size="12" fill="#92400e">人工只做终审，模型不独裁</text>
+  <text x="490" y="290" font-size="11" fill="#92400e">4 类门控 · 可审计 · 可回滚</text>
+
+  <path d="M380 224 C 430 224 430 224 470 234" fill="none" stroke="#d97706" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#b)"/>
+  <path d="M470 300 C 430 312 430 312 380 256" fill="none" stroke="#d97706" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#b)"/>
+
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker>
+    <marker id="b" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#d97706"/></marker>
+  </defs>
+</svg>

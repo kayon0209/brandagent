@@ -6,6 +6,10 @@ from uuid import uuid4
 import httpx
 import psycopg
 import pytest
+
+pytest.importorskip("langgraph")
+pytest.importorskip("agent_api")
+
 from langgraph.checkpoint.memory import InMemorySaver
 
 from agent_api.domain.models import AgentState, Channel, ContentBrief, DecisionOutcome

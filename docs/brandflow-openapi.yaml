@@ -1,0 +1,1128 @@
+openapi: 3.1.0
+info:
+  title: BrandFlow Agent API
+  version: 0.1.0
+paths:
+  /api/v1/health:
+    get:
+      summary: Health
+      operationId: health_api_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/readiness:
+    get:
+      summary: Readiness
+      operationId: readiness_api_v1_readiness_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/workspaces/bootstrap:
+    post:
+      summary: Bootstrap Workspace
+      operationId: bootstrap_workspace_api_v1_workspaces_bootstrap_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/tasks:
+    post:
+      summary: Create Task
+      operationId: create_task_api_v1_tasks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          maxLength: 128
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      summary: List Tasks
+      operationId: list_tasks_api_v1_tasks_get
+      security:
+      - HTTPBearer: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/tasks/{task_id}:
+    get:
+      summary: Get Task
+      operationId: get_task_api_v1_tasks__task_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/workspace:
+    get:
+      summary: Get Workspace
+      operationId: get_workspace_api_v1_tasks__task_id__workspace_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/cancel:
+    post:
+      summary: Cancel Task
+      operationId: cancel_task_api_v1_tasks__task_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          maxLength: 128
+          title: Idempotency-Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/retry:
+    post:
+      summary: Retry Task
+      operationId: retry_task_api_v1_tasks__task_id__retry_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          maxLength: 128
+          title: Idempotency-Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/events:
+    get:
+      summary: Task Events
+      operationId: task_events_api_v1_tasks__task_id__events_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: follow
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+          title: Follow
+      - name: Last-Event-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last-Event-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/clarification:
+    post:
+      summary: Clarification
+      operationId: clarification_api_v1_tasks__task_id__clarification_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          maxLength: 128
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClarificationRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/outline/approve:
+    post:
+      summary: Outline Approve
+      operationId: outline_approve_api_v1_tasks__task_id__outline_approve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/outline/reject:
+    post:
+      summary: Outline Reject
+      operationId: outline_reject_api_v1_tasks__task_id__outline_reject_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/master/approve:
+    post:
+      summary: Master Approve
+      operationId: master_approve_api_v1_tasks__task_id__master_approve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/master/reject:
+    post:
+      summary: Master Reject
+      operationId: master_reject_api_v1_tasks__task_id__master_reject_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/channels/generate:
+    post:
+      summary: Generate Channels
+      operationId: generate_channels_api_v1_tasks__task_id__channels_generate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/channels/{channel}/approve:
+    post:
+      summary: Channel Approve
+      operationId: channel_approve_api_v1_tasks__task_id__channels__channel__approve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: channel
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Channel
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/channels/{channel}/reject:
+    post:
+      summary: Channel Reject
+      operationId: channel_reject_api_v1_tasks__task_id__channels__channel__reject_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: channel
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Channel
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/channels/{channel}/revise:
+    post:
+      summary: Channel Revise
+      operationId: channel_revise_api_v1_tasks__task_id__channels__channel__revise_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: channel
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Channel'
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelRevisionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/final/prepare:
+    post:
+      summary: Prepare Final
+      operationId: prepare_final_api_v1_tasks__task_id__final_prepare_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/final/approve:
+    post:
+      summary: Final Approve
+      operationId: final_approve_api_v1_tasks__task_id__final_approve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/final/reject:
+    post:
+      summary: Final Reject
+      operationId: final_reject_api_v1_tasks__task_id__final_reject_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/export:
+    post:
+      summary: Export Package
+      operationId: export_package_api_v1_tasks__task_id__export_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/preview:
+    post:
+      summary: Create Preview
+      operationId: create_preview_api_v1_tasks__task_id__preview_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/versions/diff:
+    get:
+      summary: Compare Versions
+      operationId: compare_versions_api_v1_tasks__task_id__versions_diff_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: parent_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Parent Id
+      - name: current_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Current Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/evaluation/runs:
+    post:
+      summary: Run Evaluation
+      operationId: run_evaluation_api_v1_evaluation_runs_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/evaluation/runs/{run_id}/report:
+    get:
+      summary: Evaluation Report
+      operationId: evaluation_report_api_v1_evaluation_runs__run_id__report_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          default: json
+          title: Format
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/evaluation/bad-cases:
+    get:
+      summary: List Bad Cases
+      operationId: list_bad_cases_api_v1_evaluation_bad_cases_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/knowledge/{category}:
+    get:
+      summary: Get Knowledge
+      operationId: get_knowledge_api_v1_knowledge__category__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: category
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Category
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    BriefInput:
+      properties:
+        topic:
+          type: string
+          maxLength: 500
+          title: Topic
+          default: ''
+        brand_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Brand Id
+        product_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Product Id
+        target_audience:
+          type: string
+          maxLength: 2000
+          title: Target Audience
+          default: ''
+        publishing_objective:
+          type: string
+          maxLength: 2000
+          title: Publishing Objective
+          default: ''
+        primary_channel:
+          anyOf:
+          - $ref: '#/components/schemas/Channel'
+          - type: 'null'
+        desired_audience_action:
+          type: string
+          maxLength: 1000
+          title: Desired Audience Action
+          default: ''
+      additionalProperties: false
+      type: object
+      title: BriefInput
+    Channel:
+      type: string
+      enum:
+      - wechat_website
+      - xiaohongshu
+      - video_script_60s
+      - marketing_email
+      title: Channel
+    ChannelRevisionRequest:
+      properties:
+        instructions:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          minItems: 1
+          title: Instructions
+      additionalProperties: false
+      type: object
+      required:
+      - instructions
+      title: ChannelRevisionRequest
+    ClarificationRequest:
+      properties:
+        answers:
+          additionalProperties: true
+          type: object
+          title: Answers
+      additionalProperties: false
+      type: object
+      required:
+      - answers
+      title: ClarificationRequest
+    CreateTaskRequest:
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        selected_channels:
+          items:
+            $ref: '#/components/schemas/Channel'
+          type: array
+          minItems: 1
+          title: Selected Channels
+        brief:
+          $ref: '#/components/schemas/BriefInput'
+      additionalProperties: false
+      type: object
+      required:
+      - title
+      - selected_channels
+      - brief
+      title: CreateTaskRequest
+    DecisionRequest:
+      properties:
+        content_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content Version Id
+        target_snapshot_hash:
+          type: string
+          maxLength: 128
+          minLength: 32
+          title: Target Snapshot Hash
+        decision:
+          type: string
+          title: Decision
+        comment:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Comment
+      additionalProperties: false
+      type: object
+      required:
+      - target_snapshot_hash
+      - decision
+      - comment
+      title: DecisionRequest
+    ExportRequest:
+      properties:
+        decision_id:
+          type: string
+          title: Decision Id
+        target_snapshot_hash:
+          type: string
+          maxLength: 64
+          minLength: 64
+          title: Target Snapshot Hash
+        formats:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Formats
+      additionalProperties: false
+      type: object
+      required:
+      - decision_id
+      - target_snapshot_hash
+      title: ExportRequest
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    PreviewRequest:
+      properties:
+        decision_id:
+          type: string
+          title: Decision Id
+        target_snapshot_hash:
+          type: string
+          maxLength: 64
+          minLength: 64
+          title: Target Snapshot Hash
+      additionalProperties: false
+      type: object
+      required:
+      - decision_id
+      - target_snapshot_hash
+      title: PreviewRequest
+    SuccessResponse:
+      properties:
+        success:
+          type: boolean
+          title: Success
+          default: true
+        data:
+          additionalProperties: true
+          type: object
+          title: Data
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      title: SuccessResponse
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

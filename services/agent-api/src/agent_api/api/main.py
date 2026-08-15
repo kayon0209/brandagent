@@ -42,9 +42,7 @@ def create_app(*, tasks: TaskApplication, verifier: TokenVerifier, knowledge) ->
 
     async def principal(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> Principal:
         if credentials is None:
-            from uuid import NAMESPACE_URL, uuid5
-            workspace_id = str(uuid5(NAMESPACE_URL, "brandflow:dev:default"))
-            return Principal(user_id="anonymous", workspace_id=workspace_id, role="admin")
+            raise HTTPException(status_code=401, detail="Authentication required")
         try:
             return await verifier.verify(credentials.credentials)
         except Exception as error:
