@@ -14,6 +14,9 @@ out/
 # Claude Code 本地配置（含私有设置，不提交）
 .claude/settings.local.json
 
+# WorkBuddy 项目私有记忆（工作日志/记忆，禁止进入公开仓库）
+.workbuddy/
+
 # TypeScript 构建缓存
 tsconfig.tsbuildinfo
 
