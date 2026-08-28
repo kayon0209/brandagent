@@ -218,7 +218,7 @@ export default function BrandFlowTaskDetail() {
                   ))}
                 </article>
               ) : (
-                <BriefSummary brief={workspace.brief} />
+                <BriefSummary brief={workspace.brief ?? null} />
               )}
             </>
           )}
@@ -394,12 +394,31 @@ export default function BrandFlowTaskDetail() {
 }
 
 function ContextContent({ tab, workspace }: { tab: string; workspace: BrandFlowWorkspace }) {
-  const items =
-    tab === 'issues' ? workspace.issues
-    : tab === 'versions' ? workspace.versions
-    : tab === 'tools' ? workspace.tool_calls
-    : workspace.lineage
-  if (!items.length) {
+  const rows =
+    tab === 'issues'
+      ? workspace.issues.map((item, index) => ({
+          key: String(item.issue_id ?? index),
+          title: String(item.reason),
+          detail: String(item.status ?? ''),
+        }))
+      : tab === 'versions'
+        ? workspace.versions.map((item, index) => ({
+            key: String(item.content_version_id ?? index),
+            title: versionTitle(item),
+            detail: `${String(item.created_by_type)} · v${String(item.version_number)}`,
+          }))
+        : tab === 'tools'
+          ? workspace.tool_calls.map((item, index) => ({
+              key: String(item.tool_call_id ?? index),
+              title: String(item.tool_name),
+              detail: `${String(item.output_status)} · ${String(item.latency_ms)} ms`,
+            }))
+          : workspace.lineage.map((item, index) => ({
+              key: String(item.lineage_id ?? index),
+              title: String(item.transformation_type ?? '内容谱系'),
+              detail: String(item.status ?? ''),
+            }))
+  if (!rows.length) {
     return (
       <div className={styles.contextEmpty}>
         <Check size={16} />
@@ -409,19 +428,10 @@ function ContextContent({ tab, workspace }: { tab: string; workspace: BrandFlowW
   }
   return (
     <div className={styles.contextList}>
-      {items.map((item, index) => (
-        <div key={String(item.issue_id ?? item.content_version_id ?? item.tool_call_id ?? item.lineage_id ?? index)}>
-          <b>
-            {tab === 'issues' ? String(item.reason)
-            : tab === 'versions' ? versionTitle(item)
-            : tab === 'tools' ? String(item.tool_name)
-            : String(item.transformation_type ?? '内容谱系')}
-          </b>
-          <small>
-            {tab === 'tools' ? `${String(item.output_status)} · ${String(item.latency_ms)} ms`
-            : tab === 'versions' ? `${String(item.created_by_type)} · v${String(item.version_number)}`
-            : String(item.status ?? '')}
-          </small>
+      {rows.map((row) => (
+        <div key={row.key}>
+          <b>{row.title}</b>
+          <small>{row.detail}</small>
         </div>
       ))}
     </div>

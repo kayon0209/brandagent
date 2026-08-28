@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "generate:types": "openapi-typescript docs/brandflow-openapi.yaml -o src/types/generated/brandflow-api.ts",
     "test:contracts": "node --test tests/unit/brandflow-contracts.test.mjs",
     "test:unit": "jest --runInBand",
     "test:all": "npm run test:contracts && npm run test:unit",
@@ -52,6 +53,7 @@
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "js-yaml": "^4.3.0",
+    "openapi-typescript": "^7.13.0",
     "prettier": "^3.8.3",
     "typescript": "^6.0.2"
   }

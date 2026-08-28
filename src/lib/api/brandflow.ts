@@ -1,29 +1,8 @@
-export type BrandFlowTask = {
-  task_id: string
-  title: string
-  status: string
-  selected_channels: string[]
-  current_node: string | null
-  error: null | {
-    code: string
-    message: string
-    recoverable: boolean
-    saved_work_safe: boolean
-    requires_human: boolean
-  }
-}
+import type { components } from '@/types/generated/brandflow-api'
 
-export type BrandFlowWorkspace = {
-  task: BrandFlowTask
-  brief: Record<string, unknown> | null
-  versions: Array<Record<string, unknown>>
-  reviews: Array<Record<string, unknown>>
-  issues: Array<Record<string, unknown>>
-  approval_requirements: Array<Record<string, unknown>>
-  human_decisions: Array<Record<string, unknown>>
-  tool_calls: Array<Record<string, unknown>>
-  lineage: Array<Record<string, unknown>>
-}
+export type BrandFlowTask = components['schemas']['Task']
+
+export type BrandFlowWorkspace = components['schemas']['TaskWorkspace']
 
 type Envelope<T> =
   { success: true; data: T } | { success: false; error: { code: string; message: string } }

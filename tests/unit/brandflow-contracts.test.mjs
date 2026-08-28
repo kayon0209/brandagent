@@ -8,6 +8,24 @@ const yaml = require('js-yaml')
 
 const read = path => readFile(new URL(`../../${path}`, import.meta.url), 'utf8')
 
+const readPythonTaskStatus = async () => {
+  const source = await read('services/agent-api/src/agent_api/domain/models.py')
+  const block = source.match(/class TaskStatus\(StrEnum\):\n((?:[ \t]+\w+ = "[^"]+"\n)+)/)
+  assert.ok(block, 'Python TaskStatus enum not found in domain/models.py')
+  return [...block[1].matchAll(/"([^"]+)"/g)].map(match => match[1])
+}
+
+const readGeneratedTaskStatus = async () => {
+  const source = await readFile(
+    new URL('../../src/types/generated/brandflow-api.ts', import.meta.url),
+    'utf8',
+  ).catch(() => null)
+  assert.ok(source, 'src/types/generated/brandflow-api.ts is missing; run the openapi-typescript codegen')
+  const segment = source.match(/TaskStatus:\s*([^;]+);/)
+  assert.ok(segment, 'TaskStatus union not found in generated types')
+  return [...segment[1].matchAll(/"([^"]+)"/g)].map(match => match[1])
+}
+
 test('V2 domain contract contains every required entity and serializable AgentState', async () => {
   const source = await read('src/types/brandflow.types.ts')
   for (const entity of [
@@ -113,4 +131,85 @@ test('OpenAPI contract exposes task lifecycle and approval endpoints', async () 
       .reduce((value, key) => value?.[key.replaceAll('~1', '/').replaceAll('~0', '~')], document)
   const refs = [...contract.matchAll(/\$ref:\s*['"](#[^'"]+)['"]/g)].map(match => match[1])
   for (const ref of refs) assert.ok(resolvePointer(ref), `Unresolved OpenAPI ref: ${ref}`)
+})
+
+test('OpenAPI, Python domain, and generated TypeScript share one task status lifecycle', async () => {
+  const document = yaml.load(await read('docs/brandflow-openapi.yaml'))
+  const openApiStatus = document.components?.schemas?.TaskStatus?.enum
+  assert.ok(Array.isArray(openApiStatus), 'OpenAPI must define a TaskStatus enum schema')
+  for (const status of [
+    'generating_channels',
+    'reviewing_channels',
+    'waiting_for_final_approval',
+    'exporting',
+  ]) {
+    assert.ok(openApiStatus.includes(status), `TaskStatus lifecycle is missing ${status}`)
+  }
+
+  const pythonStatus = await readPythonTaskStatus()
+  assert.deepEqual(
+    pythonStatus,
+    openApiStatus,
+    'Python TaskStatus drifted from the OpenAPI contract',
+  )
+
+  const generatedStatus = await readGeneratedTaskStatus()
+  assert.deepEqual(
+    [...generatedStatus].sort(),
+    [...openApiStatus].sort(),
+    'Generated TypeScript TaskStatus drifted from the OpenAPI contract',
+  )
+})
+
+test('OpenAPI defines a Task schema bound to the task lifecycle', async () => {
+  const document = yaml.load(await read('docs/brandflow-openapi.yaml'))
+  const task = document.components?.schemas?.Task
+  assert.ok(task, 'OpenAPI must define a Task schema')
+  for (const field of ['task_id', 'workspace_id', 'title', 'status', 'selected_channels']) {
+    assert.ok(task.properties?.[field], `Task schema is missing ${field}`)
+  }
+  assert.equal(task.properties.status.$ref, '#/components/schemas/TaskStatus')
+  assert.equal(task.properties.selected_channels.items.$ref, '#/components/schemas/Channel')
+  for (const field of ['task_id', 'workspace_id', 'title', 'status']) {
+    assert.ok(task.required?.includes(field), `Task schema must require ${field}`)
+  }
+})
+
+test('BrandFlow client types use the shared contract instead of loose records', async () => {
+  const source = await read('src/lib/api/brandflow.ts')
+  assert.match(
+    source,
+    /from '@\/types\/generated\/brandflow-api'/,
+    'brandflow.ts must import the generated contract types',
+  )
+  const taskAlias = source.match(/export type BrandFlowTask = ([^\n]+)/)
+  assert.ok(taskAlias, 'BrandFlowTask type not found')
+  assert.equal(
+    taskAlias[1].trim(),
+    "components['schemas']['Task']",
+    'BrandFlowTask must alias the OpenAPI Task schema',
+  )
+  const workspaceAlias = source.match(/export type BrandFlowWorkspace = ([^\n]+)/)
+  assert.ok(workspaceAlias, 'BrandFlowWorkspace type not found')
+  assert.equal(
+    workspaceAlias[1].trim(),
+    "components['schemas']['TaskWorkspace']",
+    'BrandFlowWorkspace must alias the OpenAPI TaskWorkspace schema',
+  )
+})
+
+test('hand-written brandflow.types.ts re-exports server enums instead of duplicating them', async () => {
+  const source = await read('src/types/brandflow.types.ts')
+  assert.match(
+    source,
+    /from '\.\/generated\/brandflow-api'/,
+    'brandflow.types.ts must import the generated contract types',
+  )
+  assert.match(source, /export type TaskStatus = components\['schemas'\]\['TaskStatus'\]/)
+  assert.match(source, /export type Channel = components\['schemas'\]\['Channel'\]/)
+  assert.doesNotMatch(
+    source,
+    /'waiting_for_outline_approval'/,
+    'server enum literals must not be hand-duplicated in brandflow.types.ts',
+  )
 })

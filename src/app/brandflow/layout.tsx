@@ -40,7 +40,7 @@ export default function BrandFlowLayout({ children }: { children: ReactNode }) {
     }
   }, [loading, tasks.length])
 
-  const pendingCount = tasks.filter((t) => t.status === 'pending_approval' || t.status.startsWith('waiting_for_')).length
+  const pendingCount = tasks.filter((t) => t.status.startsWith('waiting_for_')).length
 
   const segments = pathname.replace('/brandflow', '').split('/').filter(Boolean)
   const isTaskId = (s: string) => /^[a-f0-9-]{20,}$/.test(s)

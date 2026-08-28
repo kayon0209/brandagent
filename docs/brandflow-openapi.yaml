@@ -103,7 +103,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SuccessResponse'
+                $ref: '#/components/schemas/TaskResponse'
         '422':
           description: Validation Error
           content:
@@ -129,7 +129,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SuccessResponse'
+                $ref: '#/components/schemas/TaskWorkspaceResponse'
         '422':
           description: Validation Error
           content:
@@ -1096,6 +1096,151 @@ components:
       required:
       - data
       title: SuccessResponse
+    Task:
+      properties:
+        task_id:
+          type: string
+        workspace_id:
+          type: string
+        user_id:
+          type: string
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        selected_channels:
+          items:
+            $ref: '#/components/schemas/Channel'
+          type: array
+        current_node:
+          type:
+          - string
+          - 'null'
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/TaskError'
+          - type: 'null'
+        cancellation_requested:
+          type: boolean
+      type: object
+      required:
+      - task_id
+      - workspace_id
+      - user_id
+      - title
+      - status
+      - selected_channels
+      - cancellation_requested
+      title: Task
+    TaskError:
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        failed_node:
+          type:
+          - string
+          - 'null'
+        recoverable:
+          type: boolean
+        saved_work_safe:
+          type: boolean
+        requires_human:
+          type: boolean
+      type: object
+      required:
+      - code
+      - message
+      title: TaskError
+    TaskResponse:
+      properties:
+        success:
+          type: boolean
+          default: true
+        data:
+          $ref: '#/components/schemas/Task'
+      type: object
+      required:
+      - data
+      title: TaskResponse
+    TaskStatus:
+      type: string
+      enum:
+      - draft
+      - validating_brief
+      - waiting_for_clarification
+      - researching
+      - waiting_for_outline_approval
+      - generating_master
+      - reviewing_master
+      - waiting_for_master_approval
+      - generating_channels
+      - reviewing_channels
+      - waiting_for_final_approval
+      - exporting
+      - completed
+      - failed
+      - cancelled
+      title: TaskStatus
+    TaskWorkspace:
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+        brief:
+          anyOf:
+          - $ref: '#/components/schemas/WorkspaceBrief'
+          - type: 'null'
+        versions:
+          items:
+            $ref: '#/components/schemas/WorkspaceVersion'
+          type: array
+        reviews:
+          items:
+            $ref: '#/components/schemas/WorkspaceReview'
+          type: array
+        issues:
+          items:
+            $ref: '#/components/schemas/WorkspaceIssue'
+          type: array
+        approval_requirements:
+          items:
+            $ref: '#/components/schemas/WorkspaceApprovalRequirement'
+          type: array
+        human_decisions:
+          items:
+            $ref: '#/components/schemas/WorkspaceDecision'
+          type: array
+        tool_calls:
+          items:
+            $ref: '#/components/schemas/WorkspaceToolCall'
+          type: array
+        lineage:
+          items:
+            $ref: '#/components/schemas/WorkspaceLineage'
+          type: array
+      type: object
+      required:
+      - task
+      - versions
+      - reviews
+      - issues
+      - approval_requirements
+      - human_decisions
+      - tool_calls
+      - lineage
+      title: TaskWorkspace
+    TaskWorkspaceResponse:
+      properties:
+        success:
+          type: boolean
+          default: true
+        data:
+          $ref: '#/components/schemas/TaskWorkspace'
+      type: object
+      required:
+      - data
+      title: TaskWorkspaceResponse
     ValidationError:
       properties:
         loc:
@@ -1122,6 +1267,507 @@ components:
       - msg
       - type
       title: ValidationError
+    WorkspaceApprovalRequirement:
+      properties:
+        approval_requirement_id:
+          type: string
+        content_version_id:
+          type:
+          - string
+          - 'null'
+        decision_type:
+          type: string
+          enum:
+          - outline
+          - master_brand
+          - master_final
+          - channel
+          - final_package
+          - export
+          - preview
+          - replace_approved_content
+        required_role:
+          type: string
+          enum:
+          - content_operator
+          - brand_reviewer
+          - final_approver
+          - admin
+        status:
+          type: string
+          enum:
+          - pending
+          - satisfied
+          - rejected
+          - invalidated
+        target_snapshot_hash:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      type: object
+      required:
+      - approval_requirement_id
+      - decision_type
+      - required_role
+      - status
+      - target_snapshot_hash
+      - created_at
+      title: WorkspaceApprovalRequirement
+    WorkspaceBrief:
+      properties:
+        brief_id:
+          type: string
+        workspace_id:
+          type: string
+        task_id:
+          type: string
+        topic:
+          type: string
+        brand_id:
+          type:
+          - string
+          - 'null'
+        product_id:
+          type:
+          - string
+          - 'null'
+        target_audience:
+          type: string
+        publishing_objective:
+          type: string
+        primary_channel:
+          type:
+          - string
+          - 'null'
+        selected_derivative_channels:
+          items:
+            type: string
+          type: array
+        desired_audience_action:
+          type: string
+        deadline:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        target_length:
+          type:
+          - integer
+          - 'null'
+        required_messages:
+          items:
+            type: string
+          type: array
+        required_facts:
+          items:
+            type: string
+          type: array
+        required_source_ids:
+          items:
+            type: string
+          type: array
+        forbidden_claims:
+          items:
+            type: string
+          type: array
+        tone:
+          items:
+            type: string
+          type: array
+        brand_keywords:
+          items:
+            type: string
+          type: array
+        reference_content_ids:
+          items:
+            type: string
+          type: array
+        clarification_history:
+          items:
+            type: object
+          type: array
+        schema_version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      type: object
+      required:
+      - brief_id
+      - workspace_id
+      - task_id
+      - topic
+      - target_audience
+      - publishing_objective
+      - selected_derivative_channels
+      - desired_audience_action
+      - required_messages
+      - required_facts
+      - required_source_ids
+      - forbidden_claims
+      - tone
+      - brand_keywords
+      - reference_content_ids
+      - clarification_history
+      - schema_version
+      - created_at
+      - updated_at
+      title: WorkspaceBrief
+    WorkspaceDecision:
+      properties:
+        decision_id:
+          type: string
+        content_version_id:
+          type:
+          - string
+          - 'null'
+        approval_requirement_id:
+          type:
+          - string
+          - 'null'
+        decision_type:
+          type: string
+          enum:
+          - outline
+          - master_brand
+          - master_final
+          - channel
+          - final_package
+          - export
+          - preview
+          - replace_approved_content
+        decision:
+          type: string
+          enum:
+          - approve
+          - reject
+          - request_revision
+          - cancel
+          - authorize
+        comment:
+          type: string
+        user_id:
+          type: string
+        user_role:
+          type: string
+          enum:
+          - content_operator
+          - brand_reviewer
+          - final_approver
+          - admin
+        target_snapshot_hash:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      type: object
+      required:
+      - decision_id
+      - decision_type
+      - decision
+      - comment
+      - user_id
+      - user_role
+      - target_snapshot_hash
+      - created_at
+      title: WorkspaceDecision
+    WorkspaceIssue:
+      properties:
+        issue_id:
+          type: string
+        review_id:
+          type: string
+        issue_type:
+          type: string
+        severity:
+          type: string
+          enum:
+          - info
+          - warning
+          - critical
+        problematic_text:
+          type:
+          - string
+          - 'null'
+        reason:
+          type: string
+        supporting_fact_ids:
+          items:
+            type: string
+          type: array
+        missing_evidence:
+          type:
+          - string
+          - 'null'
+        suggested_action:
+          type: string
+        target_block_id:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+          enum:
+          - open
+          - resolved
+          - accepted_risk
+        created_at:
+          type: string
+          format: date-time
+      type: object
+      required:
+      - issue_id
+      - review_id
+      - issue_type
+      - severity
+      - reason
+      - supporting_fact_ids
+      - suggested_action
+      - status
+      - created_at
+      title: WorkspaceIssue
+    WorkspaceLineage:
+      properties:
+        lineage_id:
+          type: string
+        fact_id:
+          type:
+          - string
+          - 'null'
+        master_content_version_id:
+          type: string
+        master_block_id:
+          type: string
+        channel_variant_id:
+          type:
+          - string
+          - 'null'
+        channel_block_id:
+          type:
+          - string
+          - 'null'
+        transformation_type:
+          anyOf:
+          - type: string
+            enum:
+            - condense
+            - rewrite
+            - reorder
+            - style_adaptation
+            - cta_adaptation
+            - format_conversion
+          - type: 'null'
+        status:
+          type: string
+          enum:
+          - supported
+          - unsupported_new_claim
+          - invalidated
+        created_at:
+          type: string
+          format: date-time
+      type: object
+      required:
+      - lineage_id
+      - master_content_version_id
+      - master_block_id
+      - status
+      - created_at
+      title: WorkspaceLineage
+    WorkspaceReview:
+      properties:
+        review_id:
+          type: string
+        content_version_id:
+          type: string
+        review_type:
+          type: string
+          enum:
+          - factual
+          - citation
+          - brief_coverage
+          - brand
+          - channel_format
+          - compliance
+          - cross_channel_consistency
+        passed:
+          type: boolean
+        max_severity:
+          anyOf:
+          - type: string
+            enum:
+            - info
+            - warning
+            - critical
+          - type: 'null'
+        revision_instructions:
+          items:
+            type: string
+          type: array
+        reviewer_type:
+          type: string
+          enum:
+          - deterministic
+          - model
+          - human
+        reviewer_version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      type: object
+      required:
+      - review_id
+      - content_version_id
+      - review_type
+      - passed
+      - revision_instructions
+      - reviewer_type
+      - reviewer_version
+      - created_at
+      title: WorkspaceReview
+    WorkspaceToolCall:
+      properties:
+        tool_call_id:
+          type: string
+        workflow_node:
+          type: string
+        mcp_server:
+          type: string
+        tool_name:
+          type: string
+        capability:
+          type: string
+          enum:
+          - read
+          - write
+          - high_risk
+        output_status:
+          type: string
+          enum:
+          - succeeded
+          - failed
+          - timed_out
+          - degraded
+          - rejected
+        latency_ms:
+          type: integer
+        error_code:
+          type:
+          - string
+          - 'null'
+        error_summary:
+          type:
+          - string
+          - 'null'
+        approval_result:
+          type: string
+          enum:
+          - not_required
+          - verified
+          - missing
+          - invalid
+        target_snapshot_hash:
+          type:
+          - string
+          - 'null'
+        created_at:
+          type: string
+          format: date-time
+      type: object
+      required:
+      - tool_call_id
+      - workflow_node
+      - mcp_server
+      - tool_name
+      - capability
+      - output_status
+      - latency_ms
+      - approval_result
+      - created_at
+      title: WorkspaceToolCall
+    WorkspaceVersion:
+      properties:
+        content_version_id:
+          type: string
+        content_type:
+          type: string
+          enum:
+          - master_outline
+          - master_draft
+          - master_revised
+          - master_approved
+          - channel_draft
+          - channel_revised
+          - channel_approved
+        channel:
+          anyOf:
+          - $ref: '#/components/schemas/Channel'
+          - type: 'null'
+        version_number:
+          type: integer
+        parent_version_id:
+          type:
+          - string
+          - 'null'
+        master_content_version_id:
+          type:
+          - string
+          - 'null'
+        content:
+          type: string
+        review_status:
+          type: string
+          enum:
+          - not_started
+          - in_review
+          - passed
+          - failed
+        approval_status:
+          type: string
+          enum:
+          - not_required
+          - pending
+          - approved
+          - rejected
+          - invalidated
+        immutable_hash:
+          type: string
+        created_by_type:
+          type: string
+          enum:
+          - human
+          - model
+          - workflow
+        created_by_id:
+          type: string
+        prompt_version:
+          type:
+          - string
+          - 'null'
+        change_summary:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      type: object
+      required:
+      - content_version_id
+      - content_type
+      - version_number
+      - content
+      - review_status
+      - approval_status
+      - immutable_hash
+      - created_by_type
+      - created_by_id
+      - change_summary
+      - created_at
+      title: WorkspaceVersion
   securitySchemes:
     HTTPBearer:
       type: http

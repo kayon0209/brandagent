@@ -1,25 +1,13 @@
+import type { components } from './generated/brandflow-api'
+
 export type ISODateTime = string
 export type UUID = string
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue }
 
-export type Channel = 'wechat_website' | 'xiaohongshu' | 'video_script_60s' | 'marketing_email'
-export type TaskStatus =
-  | 'draft'
-  | 'validating_brief'
-  | 'waiting_for_clarification'
-  | 'researching'
-  | 'waiting_for_outline_approval'
-  | 'generating_master'
-  | 'reviewing_master'
-  | 'waiting_for_master_approval'
-  | 'generating_channels'
-  | 'reviewing_channels'
-  | 'waiting_for_final_approval'
-  | 'exporting'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
+// 服务端 enum 的权威来源是 docs/brandflow-openapi.yaml，运行 npm run generate:types 重新生成。
+export type Channel = components['schemas']['Channel']
+export type TaskStatus = components['schemas']['TaskStatus']
 
 export type AuthorityLevel = 'primary' | 'approved' | 'reference' | 'unverified'
 export type DocumentType =

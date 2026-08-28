@@ -2,16 +2,11 @@
 
 import Link from 'next/link'
 import { AlertTriangle, Check, RefreshCw, Send, X, UserPlus, ShieldCheck } from 'lucide-react'
+import type { components } from '@/types/generated/brandflow-api'
 import styles from './brandflow-live-workspace.module.css'
 
 interface RecoveryWizardProps {
-  error: {
-    code: string
-    message: string
-    recoverable: boolean
-    saved_work_safe: boolean
-    requires_human: boolean
-  }
+  error: components['schemas']['TaskError']
   retryCount?: number
   onRetry: () => void
   onManualContinue?: () => void
