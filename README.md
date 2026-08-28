@@ -1,6 +1,6 @@
-# BrandFlow · 品牌内容智能体工作台（BrandAgent）
+# BrandAgent · 品牌写作智能体
 
-> 把"写文章"变成一条**可追溯、可审批、可复用规范、可跨渠道一致**的品牌内容生产工作流——而不是又一个聊天机器人。
+> 当前产品方向：面向**个人创作者**的品牌写作工作台——素材抽屉、核心观点、稿纸编辑、平台预览（微信 / 小红书 / 60 秒口播）。企业版 BrandFlow 审批工作台在兼容窗口内保留。
 
 [![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org)
@@ -10,7 +10,16 @@
 
 ![BrandFlow Hero Banner](assets/hero-banner.jpg)
 
-## 为什么是 BrandFlow，而不是「另一个 AI 写作助手」
+## 产品方向（2026-08 起）
+
+| 界面 | 路由 | 面向用户 | 状态 |
+|---|---|---|---|
+| 个人创作工作台 | `/app` | 个人创作者 | 升级目标，逐阶段交付中 |
+| 企业审批工作台（BrandFlow） | `/brandflow` | 品牌团队 | 现可用，兼容窗口保留 |
+
+升级阶段与门禁见 [MASTER_PLAN](./docs/MASTER_PLAN.md)；产品与架构权威规格见 [升级计划](./docs/superpowers/plans/2026-08-28-consumer-brandagent-upgrade.md)。
+
+## 企业版 BrandFlow：可追溯、可审批的品牌内容工作流
 
 把一句话主题变成一篇完整博客，前身 AI Blog Assistant 已经能做到。但品牌内容生产的**核心矛盾不是"生成文字"**，而是：产出要可追溯、关键节点要有人审、品牌规范要能复用迭代、同一份内容要能跨渠道保持一致。
 

@@ -61,6 +61,31 @@ test('V2 migration is additive and defines tenant-scoped foundations', async () 
   assert.match(sql, /approval_requirement_id = NEW\.approval_requirement_id\s+FOR UPDATE/i)
 })
 
+test('Consumer upgrade master plan exists and separates consumer from enterprise surfaces', async () => {
+  const plan = await read('docs/MASTER_PLAN.md')
+  assert.match(plan, /\/app\b/, 'MASTER_PLAN must name the /app consumer route group')
+  assert.match(plan, /\/brandflow/, 'MASTER_PLAN must name the /brandflow enterprise route group')
+  assert.match(plan, /个人创作者/, 'MASTER_PLAN must describe the consumer creator product')
+  assert.match(plan, /企业/, 'MASTER_PLAN must keep the enterprise BrandFlow surface explicit')
+  assert.match(plan, /Phase 0/i, 'MASTER_PLAN must be organized by upgrade phases')
+})
+
+test('PRD defines consumer material as traceable excerpt, not verified fact', async () => {
+  const prd = await read('docs/PRD-v2.md')
+  assert.match(prd, /material_excerpt/, 'PRD must define the material_excerpt term')
+  assert.match(
+    prd,
+    /素材[^。]*不等于[^。]*verified[ _]fact/i,
+    'PRD must state that consumer material is not a verified fact',
+  )
+})
+
+test('README presents the consumer creator product as the current direction', async () => {
+  const readme = await read('README.md')
+  assert.match(readme, /个人创作者/, 'README must present the consumer creator product')
+  assert.match(readme, /前身|旧版/, 'README must keep the blog assistant marked as legacy')
+})
+
 test('OpenAPI contract exposes task lifecycle and approval endpoints', async () => {
   const contract = await read('docs/brandflow-openapi.yaml')
   const document = yaml.load(contract)

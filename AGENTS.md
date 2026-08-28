@@ -1,4 +1,4 @@
-# AGENTS.md — ai-blog-assistant 项目规范
+# AGENTS.md — BrandAgent 项目规范
 > 中间层约束文档（项目级）
 > 继承自：~/.Codex/rules/common/ 全局规范
 > 优先级：项目级规则 > 全局规则（具体覆盖一般）
@@ -7,8 +7,8 @@
 
 ## 1. 项目身份
 
-**产品名**：AI写作助手（ai-blog-assistant）
-**定位**：帮助博主/营销人员从0快速生成中文博客，克服写作启动难。
+**产品名**：BrandAgent（仓库前身 ai-blog-assistant）
+**定位**：面向个人创作者的品牌写作工作台（素材 → 核心观点 → 稿纸编辑 → 平台预览）；企业版 BrandFlow 审批工作台（`/brandflow`）在兼容窗口内保留，不承载 C 端新功能。
 **技术栈**：Next.js 14 + TailwindCSS + Shadcn/UI + Anthropic Codex API + Supabase + Clerk + Vercel
 **商业模式**：Freemium（Free 5篇/月 | Pro ¥39/月 | Team ¥99/月）
 
@@ -37,7 +37,8 @@ ai-blog-assistant/
 │   ├── types/             # TypeScript 类型定义（全局类型放 index.ts）
 │   └── styles/            # 全局 CSS（globals.css）
 ├── docs/                  # 项目文档（PRD、架构图、会议记录）
-│   ├── PRD-ai-blog-assistant.md
+│   ├── MASTER_PLAN.md     # 升级阶段与门禁权威索引
+│   ├── PRD-v2.md
 │   ├── architecture.md
 │   ├── brandflow-openapi.yaml  # BrandFlow V2 API 权威契约
 │   └── migrations/        # 按编号递增、只前进的 SQL migration
@@ -177,12 +178,12 @@ SUPABASE_SERVICE_ROLE_KEY= # 必填，Supabase 服务密钥（仅服务端）
 
 ## 10. 当前阶段
 
-**阶段**：BrandFlow Milestone 5 — Evaluation and completion
-**下一步**：全量集成验证、前端旅程、容器化、运行手册与最终审查
-**权威计划**：见 `docs/MASTER_PLAN.md`
-**迁移规则**：Milestone 1 只新增 V2 表，不执行远端数据库变更，不删除或重命名旧表/列
+**阶段**：Consumer Upgrade Phase 0 — 规格、工具链与契约基线
+**下一步**：按 `docs/MASTER_PLAN.md` 逐 Phase 推进；每个 Phase 的验收门禁通过并经用户明确回复「继续」后，才进入下一 Phase
+**权威计划**：`docs/MASTER_PLAN.md`（阶段与门禁索引）；升级规格全文见 `docs/superpowers/plans/2026-08-28-consumer-brandagent-upgrade.md`
+**迁移规则**：数据库迁移只新增表/列，不删除、不重命名旧表或旧列；旧 B 端接口在兼容窗口内继续工作
 
 ---
 
-_最后更新：2026-07-14 | 维护人：李凯盟_
+_最后更新：2026-08-28 | 维护人：李凯盟_
 _修改本文件需通知相关开发者，规则变更先改文档再改代码。_
