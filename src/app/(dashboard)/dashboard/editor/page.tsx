@@ -694,7 +694,7 @@ interface WritingStepProps {
   expandedContent: Record<string, string>
   agentStatus: Record<string, SectionAgentStatus>
   expandingSections: Set<string>
-  activeSectionRef: React.RefObject<HTMLDivElement | null>
+  activeSectionRef: React.RefObject<HTMLDivElement>
   onExpandSection: (section: OutlineSection) => void
   onExpandAll: () => void
   onUpdateSectionContent: (id: string, content: string) => void

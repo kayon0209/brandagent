@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 test.skip(!process.env.BRANDFLOW_E2E_STORAGE_STATE, 'Requires an authenticated Clerk storage state; no fake production identity is used.')
 
@@ -11,7 +11,7 @@ const workspace = {
   approval_requirements: [{ approval_requirement_id: 'r1', content_version_id: 'v1', decision_type: 'outline', status: 'pending', target_snapshot_hash: 'a'.repeat(64) }],
 }
 
-async function mockApi(page) {
+async function mockApi(page: Page) {
   await page.route('**/api/v1/tasks', async (route) => {
     if (route.request().method() === 'POST') return route.fulfill({ json: { success: true, data: task }, status: 201 })
     return route.fulfill({ json: { success: true, data: { items: [task] } } })
