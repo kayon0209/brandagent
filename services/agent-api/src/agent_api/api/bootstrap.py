@@ -52,15 +52,15 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
         party.strip() for party in (settings.clerk_authorized_parties or "").split(",") if party.strip()
     ]
     if not settings.clerk_audience and not authorized_parties:
-        if settings.environment != "development":
-            raise RuntimeError("CLERK_AUDIENCE or CLERK_AUTHORIZED_PARTIES is required outside development")
+        if settings.auth_mode != "dev":
+            raise RuntimeError("CLERK_AUDIENCE or CLERK_AUTHORIZED_PARTIES is required outside dev auth mode")
         authorized_parties = ["http://localhost:3000", "http://localhost:3001"]
     verifier = ClerkJWTVerifier(
         jwks_url=settings.clerk_jwks_url or "",
         issuer=settings.clerk_issuer or "",
         audience=settings.clerk_audience or "",
         authorized_parties=authorized_parties,
-        dev_mode=(settings.environment == "development"),
+        dev_mode=(settings.auth_mode == "dev"),
     )
     task_repository = PostgresTaskRepository(database_url)
     workflow_repository = PostgresWorkflowRepository(database_url)

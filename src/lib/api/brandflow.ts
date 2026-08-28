@@ -7,7 +7,7 @@ export type BrandFlowWorkspace = components['schemas']['TaskWorkspace']
 type Envelope<T> =
   { success: true; data: T } | { success: false; error: { code: string; message: string } }
 
-const API_URL = '/brandflow-api'
+const API_URL = '/api/brandagent'
 
 export class BrandFlowApiError extends Error {
   constructor(

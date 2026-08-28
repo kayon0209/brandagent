@@ -12,6 +12,7 @@ class Principal:
     user_id: str
     workspace_id: str
     role: str
+    experience: str = "organization"
 
 
 class TokenVerifier(Protocol):
@@ -44,7 +45,7 @@ class ClerkJWTVerifier:
     async def verify(self, token: str) -> Principal:
         if self._dev_mode:
             from uuid import uuid4
-            return Principal(user_id="anonymous", workspace_id=str(uuid4()), role="content_operator")
+            return Principal(user_id="anonymous", workspace_id=str(uuid4()), role="content_operator", experience="organization")
         signing_key = await asyncio.to_thread(self._client.get_signing_key_from_jwt, token)
         kwargs = {"issuer": self._issuer}
         required = ["exp", "iat", "iss", "sub"]
@@ -64,6 +65,9 @@ class ClerkJWTVerifier:
                 raise ValueError("Token authorized party is not allowed")
         organization = claims.get("o") if isinstance(claims.get("o"), dict) else {}
         external_workspace_id = claims.get("org_id") or organization.get("id")
+        if not isinstance(external_workspace_id, str):
+            workspace_id = str(uuid5(NAMESPACE_URL, f"brandagent:personal:{claims['sub']}"))
+            return Principal(user_id=claims["sub"], workspace_id=workspace_id, role="admin", experience="personal")
         raw_role = claims.get("org_role") or organization.get("rol")
         role_map = {
             "org:content_operator": "content_operator",
@@ -77,11 +81,6 @@ class ClerkJWTVerifier:
             "admin": "admin",
             "member": "content_operator",
         }
-        if not isinstance(external_workspace_id, str):
-            if self._dev_mode:
-                external_workspace_id = "dev-workspace-default"
-            else:
-                raise ValueError("Active organization context is required")
         if raw_role not in role_map:
             if self._dev_mode:
                 raw_role = "org:member"
@@ -91,4 +90,4 @@ class ClerkJWTVerifier:
             workspace_id = str(UUID(external_workspace_id))
         except ValueError:
             workspace_id = str(uuid5(NAMESPACE_URL, f"brandflow:clerk-org:{external_workspace_id}"))
-        return Principal(user_id=claims["sub"], workspace_id=workspace_id, role=role_map[raw_role])
+        return Principal(user_id=claims["sub"], workspace_id=workspace_id, role=role_map[raw_role], experience="organization")

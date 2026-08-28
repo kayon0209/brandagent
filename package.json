@@ -9,7 +9,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "generate:types": "openapi-typescript docs/brandflow-openapi.yaml -o src/types/generated/brandflow-api.ts",
-    "test:contracts": "node --test tests/unit/brandflow-contracts.test.mjs",
+    "test:contracts": "node --test tests/unit/brandflow-contracts.test.mjs tests/unit/consumer-auth.test.mjs",
     "test:unit": "jest --runInBand",
     "test:all": "npm run test:contracts && npm run test:unit",
     "test:db": "node --test tests/unit/brandflow-migration-docker.test.mjs",

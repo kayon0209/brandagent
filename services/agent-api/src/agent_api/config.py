@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=None, extra="ignore")
 
     environment: str = "development"
+    auth_mode: str | None = None
     glm_api_key: SecretStr | None = None
     glm_model: str = "glm-4.7"
     agent_database_url: SecretStr | None = None

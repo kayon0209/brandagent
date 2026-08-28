@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAuth } from '@clerk/nextjs'
 import {
   BrandFlowApiError,
   BrandFlowTask,
@@ -10,11 +11,14 @@ import {
 } from '@/lib/api/brandflow'
 
 export function useBrandFlow() {
+  const { isLoaded: authLoaded, isSignedIn } = useAuth()
   const [tasks, setTasks] = useState<BrandFlowTask[]>([])
   const [workspace, setWorkspace] = useState<BrandFlowWorkspace | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<BrandFlowApiError | null>(null)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [hasActiveWorkspace, setHasActiveWorkspace] = useState(false)
+  const [organizationRole, setOrganizationRole] = useState<string | null>(null)
   const [reconnecting, setReconnecting] = useState(false)
   const eventCursor = useRef(0)
   const workspaceRef = useRef(workspace)
@@ -22,20 +26,30 @@ export function useBrandFlow() {
   const activeTaskId = workspace?.task.task_id
 
   const refreshTasks = useCallback(async () => {
+    if (!isSignedIn) {
+      setTasks([])
+      setHasActiveWorkspace(false)
+      setOrganizationRole(null)
+      setLoading(false)
+      return
+    }
     try {
       setError(null)
-      await brandFlowRequest<{ workspace_id: string; role: string }>(
+      const bootstrap = await brandFlowRequest<{ workspace_id: string; role: string; created?: boolean }>(
         '/api/v1/workspaces/bootstrap',
         { method: 'POST' }
       )
+      setHasActiveWorkspace(true)
+      setOrganizationRole(bootstrap.role)
       const data = await brandFlowRequest<{ items: BrandFlowTask[] }>('/api/v1/tasks')
       setTasks(data.items)
     } catch (caught) {
+      setHasActiveWorkspace(false)
       setError(caught as BrandFlowApiError)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isSignedIn])
 
   const openTask = useCallback(async (taskId: string) => {
     setLoading(true)
@@ -114,10 +128,10 @@ export function useBrandFlow() {
   }, [activeTaskId, openTask])
 
   return {
-    isLoaded: true,
-    isSignedIn: true,
-    hasActiveWorkspace: true,
-    organizationRole: 'content_operator' as const,
+    isLoaded: authLoaded,
+    isSignedIn: Boolean(isSignedIn),
+    hasActiveWorkspace,
+    organizationRole,
     tasks,
     workspace,
     loading,
