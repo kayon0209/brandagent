@@ -125,6 +125,16 @@ def create_materials_router(materials: MaterialApplication, *, principal) -> API
     return router
 
 
+class ConsumerUsage(Protocol):
+    async def usage_summary(self, principal: Principal) -> dict: ...
+
+
+class ConsumerUsageLedger(Protocol):
+    async def reserve(self, principal: Principal, *, request_id: str, operation: str, estimated_tokens: int) -> dict: ...
+    async def settle(self, principal: Principal, *, request_id: str, operation: str, input_tokens: int | None, output_tokens: int | None, model: str | None) -> dict: ...
+    async def refund(self, principal: Principal, *, request_id: str, reason: str) -> dict: ...
+
+
 class ConsumerProjectsApp(Protocol):
     """Protocol bundling the consumer project/draft applications."""
 
@@ -133,6 +143,8 @@ class ConsumerProjectsApp(Protocol):
     generation: ConsumerGeneration
     assist: ConsumerAssist
     variants: ConsumerVariants
+    usage: ConsumerUsage
+    usage_ledger: ConsumerUsageLedger
 
 
 class ConsumerAssist(Protocol):
@@ -315,18 +327,31 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
         return {"success": True, "data": result}
 
     @router.post("/{task_id}/draft/generate")
-    async def generate_draft(task_id: str, actor: Principal = Depends(principal)):
+    async def generate_draft(
+        task_id: str,
+        actor: Principal = Depends(principal),
+        idempotency_key: str | None = Header(alias="Idempotency-Key", default=None, min_length=8, max_length=128),
+    ):
+        from agent_api.application.usage import ledgered_call
         from agent_api.domain.errors import ApplicationError, NotFoundError
+        from uuid import uuid4
 
+        request_id = idempotency_key or f"gen-{uuid4().hex}"
         try:
             await apps.drafts.get_or_create_draft(actor, task_id)  # ensure the draft exists
-            result = await apps.generation.generate(actor, task_id)
+            async with ledgered_call(apps.usage_ledger, actor, request_id=request_id, operation="draft_generation", estimated_tokens=2000):
+                result = await apps.generation.generate(actor, task_id)
         except NotFoundError:
             raise HTTPException(status_code=404, detail="Project or draft not found") from None
+        except ApplicationError as error:
+            if error.code == "QUOTA_EXCEEDED":
+                return JSONResponse(
+                    status_code=409,
+                    content={"success": False, "error": {"code": "QUOTA_EXCEEDED", "message": str(error)}},
+                )
+            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
         except RuntimeError as error:
             raise HTTPException(status_code=502, detail=str(error)) from error
-        except ApplicationError as error:
-            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
         return {"success": True, "data": result}
 
     @router.post("/{task_id}/draft/apply-candidate")
@@ -363,15 +388,21 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
         base_revision = body.get("baseRevision")
         if not isinstance(selected_text, str) or not block_id or not isinstance(base_revision, int):
             raise HTTPException(status_code=422, detail="selectedText, blockId and baseRevision (int) are required")
+        from uuid import uuid4
+
+        from agent_api.application.usage import ledgered_call
+
+        request_id = f"suggest-{uuid4().hex}"
         try:
-            suggestion = await apps.assist.propose(
-                actor,
-                task_id,
-                action=action,
-                selected_text=selected_text,
-                block_id=block_id,
-                base_revision=base_revision,
-            )
+            async with ledgered_call(apps.usage_ledger, actor, request_id=request_id, operation="suggestion", estimated_tokens=600):
+                suggestion = await apps.assist.propose(
+                    actor,
+                    task_id,
+                    action=action,
+                    selected_text=selected_text,
+                    block_id=block_id,
+                    base_revision=base_revision,
+                )
         except ActionNotSupported:
             return JSONResponse(
                 status_code=422,
@@ -384,13 +415,18 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
             )
         except NotFoundError:
             raise HTTPException(status_code=404, detail="Draft not found") from None
+        except ApplicationError as error:
+            if error.code == "QUOTA_EXCEEDED":
+                return JSONResponse(
+                    status_code=409,
+                    content={"success": False, "error": {"code": "QUOTA_EXCEEDED", "message": str(error)}},
+                )
+            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
         except RuntimeError as error:
             return JSONResponse(
                 status_code=502,
                 content={"success": False, "error": {"code": "ASSIST_UNAVAILABLE", "message": "AI 助手暂时不可用，稿件未做任何改动"}},
             )
-        except ApplicationError as error:
-            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
         if suggestion is None:
             return JSONResponse(
                 status_code=422,
@@ -445,11 +481,16 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
 
     @router.post("/{task_id}/variants/generate")
     async def variants_generate(task_id: str, actor: Principal = Depends(principal)):
+        from uuid import uuid4
+
         from agent_api.application.platform_variants import VariantGenerationError
+        from agent_api.application.usage import ledgered_call
         from agent_api.domain.errors import ApplicationError, NotFoundError
 
+        request_id = f"variants-{uuid4().hex}"
         try:
-            return {"success": True, "data": await apps.variants.generate_variants(actor, task_id)}
+            async with ledgered_call(apps.usage_ledger, actor, request_id=request_id, operation="variants", estimated_tokens=3000):
+                return {"success": True, "data": await apps.variants.generate_variants(actor, task_id)}
         except NotFoundError:
             raise HTTPException(status_code=404, detail="先采用当前稿，再生成平台版本") from None
         except VariantGenerationError as error:
@@ -458,6 +499,11 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
                 content={"success": False, "error": {"code": error.code, "message": str(error), "retryable": error.retryable}},
             )
         except ApplicationError as error:
+            if error.code == "QUOTA_EXCEEDED":
+                return JSONResponse(
+                    status_code=409,
+                    content={"success": False, "error": {"code": "QUOTA_EXCEEDED", "message": str(error)}},
+                )
             raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
 
     @router.post("/{task_id}/variants/{channel}/regenerate")
@@ -485,6 +531,36 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
             return {"success": True, "data": await apps.variants.prepare_export(actor, task_id)}
         except NotFoundError:
             raise HTTPException(status_code=404, detail="先采用当前稿，再导出") from None
+        except ApplicationError as error:
+            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+
+    @router.get("/{task_id}/usage")
+    async def project_usage(task_id: str, actor: Principal = Depends(principal)):
+        from agent_api.domain.errors import ApplicationError, NotFoundError
+
+        try:
+            return {"success": True, "data": await apps.usage.usage_summary(actor)}
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="Usage not found") from None
+        except ApplicationError as error:
+            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+
+    return router
+
+
+def create_usage_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter:
+    """Workspace-level usage summary (task-scoped variant lives in projects)."""
+
+    router = APIRouter(prefix="/api/v1/consumer/usage", tags=["consumer-usage"])
+
+    @router.get("")
+    async def usage_summary(actor: Principal = Depends(principal)):
+        from agent_api.domain.errors import ApplicationError, NotFoundError
+
+        try:
+            return {"success": True, "data": await apps.usage.usage_summary(actor)}
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="Usage not found") from None
         except ApplicationError as error:
             raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
 

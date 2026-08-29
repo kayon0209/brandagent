@@ -693,6 +693,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/consumer/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Consumer Usage
+         * @description Per-workspace usage summary from the FastAPI usage ledger (the single C-end quota authority; the legacy Supabase quota endpoint is deprecated and never double-written).
+         */
+        get: operations["get_consumer_usage_api_v1_consumer_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/consumer/projects/{task_id}/draft/generate": {
         parameters: {
             query?: never;
@@ -704,7 +724,7 @@ export interface paths {
         put?: never;
         /**
          * Generate Draft Candidate
-         * @description Run the draft generation graph (core idea + linked excerpts + base revision) and persist a master_revised candidate; the live draft is never overwritten automatically.
+         * @description Run the draft generation graph (core idea + linked excerpts + base revision) and persist a master_revised candidate; the live draft is never overwritten automatically. Quota is reserved BEFORE the model call; exhausted quota returns 409 QUOTA_EXCEEDED while manual saving stays available.
          */
         post: operations["generate_draft_api_v1_consumer_projects__task_id__draft_generate_post"];
         delete?: never;
@@ -2608,10 +2628,41 @@ export interface operations {
             };
         };
     };
-    generate_draft_api_v1_consumer_projects__task_id__draft_generate_post: {
+    get_consumer_usage_api_v1_consumer_usage_get: {
         parameters: {
             query?: never;
             header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Usage summary (used, quota) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+            /** @description Workspace usage not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+        };
+    };
+    generate_draft_api_v1_consumer_projects__task_id__draft_generate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
             path: {
                 task_id: string;
             };

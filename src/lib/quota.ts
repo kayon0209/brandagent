@@ -1,9 +1,13 @@
 /**
- * Token 配额检查与扣减
- * src/lib/quota.ts
+ * DEPRECATED — consumer quota authority moved to the FastAPI usage ledger
+ * (services/agent-api/src/agent_api/application/usage.py) in upgrade plan
+ * task 13. This module is kept for one release cycle so existing B-end
+ * callers keep working; it must not be double-written: the new C-end
+ * surfaces read quota through the BFF (/api/brandagent passthrough) and
+ * the agent-api usage_ledger table.
  *
- * 所有 AI 生成接口在调用模型前必须通过此函数检查配额。
- * 使用 Supabase Admin Client 绕过 RLS，确保服务端可信写入。
+ * Do not add new call sites.
+ * @deprecated since consumer upgrade task 13 — use the BFF consumer usage endpoint.
  */
 import { createSupabaseAdminClient } from '@/lib/api/supabase-server'
 
@@ -15,9 +19,25 @@ export interface QuotaCheckResult {
 }
 
 /**
- * 检查用户配额是否充足
- * @param clerkUserId Clerk 用户 ID
- * @param estimatedTokens 本次请求预计消耗的 tokens
+ * Read the consumer usage summary through the BFF (agent-api usage ledger).
+ * The ledger is the single authority for C-end quota.
+ */
+export async function fetchConsumerUsage(): Promise<QuotaCheckResult> {
+  const { brandFlowRequest } = await import('@/lib/api/brandflow')
+  const summary = await brandFlowRequest<{ used: number; quota: number }>(
+    '/api/v1/consumer/usage',
+  )
+  return {
+    allowed: summary.used < summary.quota,
+    remaining: summary.quota - summary.used,
+    used: summary.used,
+    quota: summary.quota,
+  }
+}
+
+/**
+ * @deprecated Legacy Supabase-backed quota check. Kept for one release
+ * cycle for existing B-end callers; new code must use fetchConsumerUsage.
  */
 export async function checkQuota(
   clerkUserId: string,

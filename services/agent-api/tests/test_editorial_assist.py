@@ -354,6 +354,18 @@ class AssistAppsStub:
         self.drafts = DraftsShim(self.drafts_store)
         self.generation = None
         self.assist = EditorialAssistService(store=self.drafts_store, provider=RecordingProvider())
+        self.usage_ledger = LedgerStub()
+
+
+class LedgerStub:
+    async def reserve(self, principal, *, request_id: str, operation: str, estimated_tokens: int) -> dict:
+        return {"state": "reserved", "replayed": False}
+
+    async def settle(self, principal, *, request_id: str, operation: str, input_tokens, output_tokens, model) -> dict:
+        return {"state": "settled", "replayed": False}
+
+    async def refund(self, principal, *, request_id: str, reason: str) -> dict:
+        return {"state": "refunded", "replayed": False}
 
 
 class TypeShimProjectStore:

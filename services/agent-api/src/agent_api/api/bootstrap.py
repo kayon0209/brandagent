@@ -104,6 +104,12 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
         channels=("wechat_website", "xiaohongshu", "video_script_60s"),
     )
 
+    from agent_api.application.usage import UsageLedgerService
+    from agent_api.repositories.postgres_usage import PostgresUsageLedgerStore
+
+    usage_store = PostgresUsageLedgerStore(database_url)
+    consumer_usage = UsageLedgerService(store=usage_store)
+
     class ConsumerApps:
         """ConsumerProjectsApp protocol bundle wired into create_app."""
 
@@ -113,6 +119,8 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             self.generation = consumer_generation
             self.assist = consumer_assist
             self.variants = consumer_variants
+            self.usage = consumer_usage
+            self.usage_ledger = consumer_usage
 
     consumer_apps = ConsumerApps()
     provider = ZhipuProvider(api_key=settings.require_glm_key(), model=settings.glm_model)
@@ -141,6 +149,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             await consumer_project_store.open()
             await suggestion_store.open()
             await variant_store.open()
+            await usage_store.open()
             stack.push_async_callback(task_repository.close)
             stack.push_async_callback(workflow_repository.close)
             stack.push_async_callback(channel_store.close)
@@ -150,6 +159,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             stack.push_async_callback(consumer_project_store.close)
             stack.push_async_callback(suggestion_store.close)
             stack.push_async_callback(variant_store.close)
+            stack.push_async_callback(usage_store.close)
             await mcp_client.discover()
             saver = await stack.enter_async_context(postgres_checkpointer(checkpoint_database_url))
             runtime.delegate = TaskWorkflowService(

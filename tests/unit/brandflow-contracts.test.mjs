@@ -330,3 +330,32 @@ test('OpenAPI documents the consumer platform variant endpoints', async () => {
     'prepare export must document that publishing stays fail-closed',
   )
 })
+
+test('OpenAPI documents the consumer usage ledger endpoints', async () => {
+  const contract = yaml.load(await read('docs/brandflow-openapi.yaml'))
+  const paths = contract.paths
+  const usage = paths['/api/v1/consumer/usage']
+  assert.ok(usage, 'consumer usage path is missing')
+  assert.ok(
+    usage.get.description.includes('usage ledger'),
+    'usage endpoint must document the FastAPI ledger as the single authority',
+  )
+  assert.ok(usage.get.description.includes('deprecated'), 'legacy quota must be marked deprecated')
+  const generate = paths['/api/v1/consumer/projects/{task_id}/draft/generate'].post
+  assert.ok(
+    generate.description.includes('QUOTA_EXCEEDED'),
+    'generate must document the quota-enforced 409',
+  )
+
+  const legacyQuota = await read('src/lib/quota.ts')
+  assert.match(
+    legacyQuota,
+    /@deprecated/,
+    'the legacy Supabase quota helper must be marked deprecated',
+  )
+  assert.match(
+    legacyQuota,
+    /fetchConsumerUsage/,
+    'the BFF-backed usage reader must exist for new callers',
+  )
+})

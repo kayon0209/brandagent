@@ -358,6 +358,30 @@ class ConsumerAppsStub:
         self.projects = ConsumerProjectService(store=self.project_store)
         self.drafts = DraftService(store=self.draft_store)
         self.generation = DraftGenerationService(store=self.draft_store, generator=StubCandidateGenerator(), projects=self.projects)
+        self.usage_ledger = MemoryLedgerStub()
+
+
+class MemoryLedgerStub:
+    """No-op usage ledger for HTTP tests; drafts never touch it."""
+
+    def __init__(self) -> None:
+        self.exhausted = False
+
+    async def reserve(self, principal, *, request_id: str, operation: str, estimated_tokens: int) -> dict:
+        if self.exhausted:
+            from agent_api.application.usage import QuotaExceeded
+
+            raise QuotaExceeded()
+        return {"state": "reserved", "replayed": False}
+
+    async def settle(self, principal, *, request_id: str, operation: str, input_tokens, output_tokens, model) -> dict:
+        return {"state": "settled", "replayed": False}
+
+    async def refund(self, principal, *, request_id: str, reason: str) -> dict:
+        return {"state": "refunded", "replayed": False}
+
+    async def usage_summary(self, principal) -> dict:
+        return {"workspace_id": principal.workspace_id, "used": 0, "quota": 30000}
 
 
 def http_client(apps: ConsumerAppsStub) -> TestClient:
@@ -462,3 +486,30 @@ def test_generate_and_apply_candidate_over_http() -> None:
     )
     assert applied.status_code == 200
     assert applied.json()["data"]["revision"] == 1
+
+
+def test_quota_exhausted_blocks_generation_but_not_saving() -> None:
+    apps = ConsumerAppsStub()
+    apps.usage_ledger.exhausted = True
+    client = http_client(apps)
+    created = client.post(
+        "/api/v1/consumer/projects",
+        json={"title": "t", "core_idea": "c", "writing_intent": ""},
+        headers={"Authorization": "Bearer valid-token"},
+    )
+    task_id = created.json()["data"]["task_id"]
+    headers = {"Authorization": "Bearer valid-token"}
+
+    # AI generation is rejected BEFORE the model runs
+    blocked = client.post(f"/api/v1/consumer/projects/{task_id}/draft/generate", headers=headers)
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "QUOTA_EXCEEDED"
+
+    # manual draft saving is untouched by quota
+    saved = client.put(
+        f"/api/v1/consumer/projects/{task_id}/draft",
+        json={"document": {"blocks": [{"block_id": "b1", "block_type": "paragraph", "text": "手工编辑"}]}, "plainText": "手工编辑", "baseRevision": 0},
+        headers=headers,
+    )
+    assert saved.status_code == 200
+    assert saved.json()["data"]["revision"] == 1

@@ -1365,10 +1365,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/usage:
+    get:
+      summary: Get Consumer Usage
+      description: Per-workspace usage summary from the FastAPI usage ledger (the single C-end quota authority; the legacy Supabase quota endpoint is deprecated and never double-written).
+      operationId: get_consumer_usage_api_v1_consumer_usage_get
+      security:
+      - HTTPBearer: []
+      responses:
+        '200':
+          description: Usage summary (used, quota)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Workspace usage not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
   /api/v1/consumer/projects/{task_id}/draft/generate:
     post:
       summary: Generate Draft Candidate
-      description: Run the draft generation graph (core idea + linked excerpts + base revision) and persist a master_revised candidate; the live draft is never overwritten automatically.
+      description: Run the draft generation graph (core idea + linked excerpts + base revision) and persist a master_revised candidate; the live draft is never overwritten automatically. Quota is reserved BEFORE the model call; exhausted quota returns 409 QUOTA_EXCEEDED while manual saving stays available.
       operationId: generate_draft_api_v1_consumer_projects__task_id__draft_generate_post
       security:
       - HTTPBearer: []
@@ -1379,6 +1399,14 @@ paths:
         schema:
           type: string
           title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+          title: Idempotency-Key
       responses:
         '200':
           description: Candidate ready
