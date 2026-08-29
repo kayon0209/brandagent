@@ -79,6 +79,17 @@ async def test_clerk_verifier_derives_stable_personal_workspace_without_organiza
 
 
 @pytest.mark.asyncio
+async def test_dev_mode_resolves_a_stable_personal_workspace() -> None:
+    verifier = ClerkJWTVerifier(jwks_url="", issuer="", dev_mode=True)
+    first = await verifier.verify("dev-token")
+    second = await verifier.verify("dev-token")
+    assert first.workspace_id == second.workspace_id
+    assert first.experience == "personal"
+    assert first.role == "admin"
+    assert first.workspace_id == str(uuid5(NAMESPACE_URL, "brandagent:personal:anonymous"))
+
+
+@pytest.mark.asyncio
 async def test_clerk_verifier_rejects_unsupported_roles_and_foreign_parties() -> None:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     verifier = ClerkJWTVerifier(jwks_url="https://unused", issuer="https://clerk.test", authorized_parties=["http://localhost:3000"], jwk_client=StaticJWKClient(private_key.public_key()))

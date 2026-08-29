@@ -911,6 +911,210 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/consumer/materials:
+    get:
+      summary: List Materials
+      description: List consumer material documents for the authenticated personal workspace.
+      operationId: list_materials_api_v1_consumer_materials_get
+      security:
+      - HTTPBearer: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/materials/text:
+    post:
+      summary: Import Material Text
+      description: Import inline text material; deduplicated by content checksum and idempotent per Idempotency-Key.
+      operationId: import_material_text_api_v1_consumer_materials_text_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - text
+              properties:
+                text:
+                  type: string
+                  minLength: 1
+                  maxLength: 200000
+                  title: Text
+                name:
+                  type: string
+                  maxLength: 200
+                  title: Name
+      responses:
+        '200':
+          description: Material accepted (distilled, needs_review, duplicate, or needs_distillation)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/consumer/materials/url:
+    post:
+      summary: Import Material URL
+      description: Reserved for the fetch adapter; returns 501 with error code NOT_IMPLEMENTED.
+      operationId: import_material_url_api_v1_consumer_materials_url_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - url
+              properties:
+                url:
+                  type: string
+                  title: Url
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '501':
+          description: Fetch adapter not implemented yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/materials/upload:
+    post:
+      summary: Upload Material File
+      description: Upload a .md/.txt material file (<=10MB); mimetypes are sniffed and unsafe payloads rejected.
+      operationId: upload_material_api_v1_consumer_materials_upload_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  title: File
+      responses:
+        '200':
+          description: Material accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/consumer/materials/{document_id}:
+    get:
+      summary: Get Material Document
+      description: Fetch one material document with its chunks; cross-workspace ids resolve to 404.
+      operationId: get_material_api_v1_consumer_materials__document_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: document_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Document Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/materials/{document_id}/excerpts:
+    get:
+      summary: List Material Excerpts
+      description: List distilled excerpts for a material document, each traceable to chunk and provenance hash.
+      operationId: list_material_excerpts_api_v1_consumer_materials__document_id__excerpts_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: document_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Document Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
 components:
   schemas:
     BriefInput:

@@ -213,3 +213,37 @@ test('hand-written brandflow.types.ts re-exports server enums instead of duplica
     'server enum literals must not be hand-duplicated in brandflow.types.ts',
   )
 })
+
+test('OpenAPI documents the consumer material endpoints with idempotency headers', async () => {
+  const contract = yaml.load(await read('docs/brandflow-openapi.yaml'))
+  const paths = contract.paths
+  for (const path of [
+    '/api/v1/consumer/materials',
+    '/api/v1/consumer/materials/text',
+    '/api/v1/consumer/materials/url',
+    '/api/v1/consumer/materials/upload',
+    '/api/v1/consumer/materials/{document_id}',
+    '/api/v1/consumer/materials/{document_id}/excerpts',
+  ]) {
+    assert.ok(paths[path], `material path ${path} is missing from the OpenAPI contract`)
+  }
+  for (const path of [
+    '/api/v1/consumer/materials/text',
+    '/api/v1/consumer/materials/url',
+    '/api/v1/consumer/materials/upload',
+  ]) {
+    const parameters = paths[path].post.parameters || []
+    const idempotency = parameters.find(parameter => parameter.name === 'Idempotency-Key')
+    assert.ok(idempotency, `${path} must declare an Idempotency-Key header`)
+    assert.equal(idempotency.in, 'header')
+  }
+  const generated = await readFile(
+    new URL('../../src/types/generated/brandflow-api.ts', import.meta.url),
+    'utf8',
+  )
+  assert.match(
+    generated,
+    /"\/api\/v1\/consumer\/materials"/,
+    'generated types must include the consumer materials route',
+  )
+})

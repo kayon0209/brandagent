@@ -44,8 +44,10 @@ class ClerkJWTVerifier:
 
     async def verify(self, token: str) -> Principal:
         if self._dev_mode:
-            from uuid import uuid4
-            return Principal(user_id="anonymous", workspace_id=str(uuid4()), role="content_operator", experience="organization")
+            # Development auth must resolve a STABLE personal workspace so the
+            # consumer experience survives reconnects and restarts.
+            workspace_id = str(uuid5(NAMESPACE_URL, "brandagent:personal:anonymous"))
+            return Principal(user_id="anonymous", workspace_id=workspace_id, role="admin", experience="personal")
         signing_key = await asyncio.to_thread(self._client.get_signing_key_from_jwt, token)
         kwargs = {"issuer": self._issuer}
         required = ["exp", "iat", "iss", "sub"]
