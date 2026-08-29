@@ -23,8 +23,25 @@
 | Phase 3 | 稿纸、自动保存与选区改写 | 连续编辑 / 刷新 / 断网 / 409 冲突均有测试；工具栏跟随真实选区；AI 建议失败不改稿 |
 | Phase 4 | 平台预览与发布前检查 | 渠道版本绑定母稿 snapshot 与 lineage；普通预览免审批，真正发布 fail closed |
 | Phase 5 | 配额、评测、完整旅程与兼容迁移 | 全量质量命令有当前 checkout 证据；consumer golden gate 达标；B 端兼容旅程仍绿；安全审查无 P0/P1 |
+| Phase 6（候选） | 深度调研与受限多 Agent 取证 | 仅在 Phase 5 完成后单独立项；相对单工作流基线显著提高可引用材料覆盖率，且引用有效性、成本、时延、安全与取消恢复门禁全部达标 |
 
 推进规则：一次只做一个 Phase；门禁全部通过且用户明确回复「继续」后，才进入下一 Phase。
+
+Phase 6 不属于当前 Consumer Upgrade 的默认交付范围。Phase 5 完成只代表具备开展对照实验的基础，不自动授权 Phase 6 的数据库、外部搜索服务、模型预算或产品上线；这些事项届时单独确认。
+
+## Consumer Golden Gate（Phase 5，consumer_golden_v1）
+
+数据集：`services/agent-api/evaluation/consumer_golden_v1.jsonl`（110 条合成样例：45 选区建议 + 45 渠道改写 + 10 无证据拒绝 + 10 stale/conflict 工程样例；不含任何生产素材）。
+
+| 指标 | 阈值 | 判定来源 |
+|---|---|---|
+| excerpt attribution precision | = 1.0 | structured `supportingExcerptIds`（不从生成文本猜测） |
+| unsupported claim rate | = 0 | 数字断言必须能在 source_texts 中溯源 |
+| core idea preservation | = 1.0 | 输出含核心观点前缀，或为核心观点的精简前缀 |
+| channel format pass rate | = 1.0 | 三渠道各自结构约束（段落≥2 / 含 # 标签 / 行数≥2） |
+| shorten compression pass rate | = 1.0 | 精简输出不得长于原选区 |
+
+suggestion acceptance rate 只作产品指标，不进离线质量真值。门槛由 `agent_api.evaluation.consumer_metrics.GATE_THRESHOLDS` 单点定义，测试 `test_consumer_evaluation.py` 验证。
 
 ## 红线（所有 Phase 适用）
 
