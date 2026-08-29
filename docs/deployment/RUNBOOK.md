@@ -4,6 +4,12 @@
 
 This runbook covers the Web, Agent API, Brand Tools MCP and PostgreSQL services. External platform publication is not implemented; preview is internal HTML only.
 
+### Consumer upgrade compatibility window (plan task 15)
+
+- The consumer workspace (`/app`) and the B-end BrandFlow workspace (`/brandflow`) run side by side during the compatibility window; both stay deployed.
+- The default landing entry still routes to `/brandflow`; switching the default entry to `/app` (and any removal of legacy routes) requires separate user authorization plus a rollback switch.
+- Quota authority for C-end users is the FastAPI usage ledger (`usage_ledger`); the legacy Supabase quota endpoint is deprecated and not double-written.
+
 ## Required secrets
 
 - `GLM_API_KEY`
