@@ -19,6 +19,18 @@
 
 升级阶段与门禁见 [MASTER_PLAN](./docs/MASTER_PLAN.md)；产品与架构权威规格见 [升级计划](./docs/superpowers/plans/2026-08-28-consumer-brandagent-upgrade.md)。
 
+### 个人创作工作台（/app）当前能力（Phase 0–5 交付）
+
+- 素材抽屉：文本导入 → 分块 → 蒸馏摘录（可溯源 document + chunk + provenance hash）
+- 稿纸：720px 中心稿纸、800ms 防抖自动保存、revision 冲突保护（409 不覆盖服务器稿、本地可恢复）
+- 选区改写：展开 / 换例子 / 精简；AI 建议失败绝不动稿；数字断言无素材溯源即拒绝
+- 平台预览：公众号 / 小红书 / 口播三套独立结构；预览免审批，真正发布 fail-closed（走 MCP 持久授权）
+- 配额：FastAPI usage ledger 唯一权威（reserve→settle/refund 幂等），额度耗尽只停 AI、不影响写作与保存
+
+### 兼容窗口（升级计划 Task 15）
+
+`/brandflow` 与旧 dashboard 在兼容窗口内保留并保持可用；它们不再获得 C 端新功能。默认首页入口切换、任何旧路由删除，均需单独的用户授权。
+
 ## 企业版 BrandFlow：可追溯、可审批的品牌内容工作流
 
 把一句话主题变成一篇完整博客，前身 AI Blog Assistant 已经能做到。但品牌内容生产的**核心矛盾不是"生成文字"**，而是：产出要可追溯、关键节点要有人审、品牌规范要能复用迭代、同一份内容要能跨渠道保持一致。

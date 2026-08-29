@@ -68,6 +68,13 @@ test('channel approval, cross-channel final gate, version comparison and export 
   }
 })
 
+test('B-end workspace stays available alongside the consumer app (compatibility window)', async ({ page }) => {
+  await mockApi(page)
+  await page.goto('/brandflow')
+  // the B-end journey still renders its task list; /app coexists in the same build
+  await expect(page.getByText('Nova 发布任务')).toBeVisible({ timeout: 10000 })
+})
+
 const materialDocument = {
   document_id: '00000000-0000-0000-0000-0000000000d1',
   document_name: '第一份素材',
