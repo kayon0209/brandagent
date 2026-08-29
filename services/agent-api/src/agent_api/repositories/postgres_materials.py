@@ -196,9 +196,20 @@ class PostgresMaterialStore:
                     "consumer-material",
                     request_id,
                     f"material-import:{request_id}",
-                    json.dumps(result),
+                    json.dumps(self._jsonable(result)),
                 ),
             )
+
+    @staticmethod
+    def _jsonable(value):
+        """Postgres returns UUID/timestamp objects; normalize before JSONB writes."""
+        if isinstance(value, dict):
+            return {key: PostgresMaterialStore._jsonable(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [PostgresMaterialStore._jsonable(item) for item in value]
+        if hasattr(value, "hex") and not isinstance(value, str):
+            return str(value)
+        return value
 
     async def find_import(self, workspace_id: str, request_id: str) -> dict | None:
         async with self._pool.connection() as connection:
@@ -248,7 +259,7 @@ class PostgresMaterialStore:
                     workspace_id,
                     task_id,
                     event["type"],
-                    json.dumps(event.get("data", {}), ensure_ascii=False),
+                    json.dumps(self._jsonable(event.get("data", {})), ensure_ascii=False),
                     event.get("request_id", ""),
                 ),
             )
