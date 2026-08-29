@@ -1,0 +1,14 @@
+/* Shared consumer design tokens (upgrade plan task 10).
+   Baseline: _sandbox/consumer-ui-concept/index-v4.html */
+
+:root {
+  --paper: #fffdf8;
+  --paper-warm: #f5f1e8;
+  --paper-edge: rgba(39, 36, 31, 0.08);
+  --ink: #27241f;
+  --ink-soft: #514b43;
+  --accent: #ad5641;
+  --accent-soft: #f3e5df;
+  --safe: #4f7a4f;
+  --danger: #a33d2e;
+}

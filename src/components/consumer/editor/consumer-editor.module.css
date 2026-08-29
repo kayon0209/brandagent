@@ -1,0 +1,237 @@
+/* Consumer editor surfaces (upgrade plan task 10). */
+
+.shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-height: 100vh;
+  background: var(--paper-warm);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--paper-edge);
+  background: var(--paper);
+}
+
+.headerTitle {
+  font-size: 14px;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
+.main {
+  display: flex;
+  justify-content: center;
+  padding: 32px 20px 96px;
+}
+
+.manuscriptColumn {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.manuscriptCanvas {
+  width: 100%;
+  max-width: 720px;
+  background: var(--paper);
+  border: 1px solid var(--paper-edge);
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(39, 36, 31, 0.05);
+  padding: 48px 56px 64px;
+  transition: transform 160ms ease;
+}
+
+.zoomControl {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  gap: 2px;
+  background: var(--paper);
+  border: 1px solid var(--paper-edge);
+  border-radius: 999px;
+  padding: 4px;
+  box-shadow: 0 2px 6px rgba(39, 36, 31, 0.08);
+}
+
+.zoomButton {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.zoomButton:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.coreIdea {
+  margin: 0 0 32px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed rgba(39, 36, 31, 0.15);
+}
+
+.coreIdeaLabel {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-soft);
+  margin: 0 0 6px;
+}
+
+.coreIdeaText {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.draftProse .ProseMirror {
+  outline: none;
+  min-height: 400px;
+  font-size: 16px;
+  line-height: 1.9;
+  color: var(--ink);
+}
+
+.draftProse .ProseMirror p {
+  margin: 0 0 20px;
+}
+
+.draftProse .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: rgba(81, 75, 67, 0.4);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.toolbar {
+  position: fixed;
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #ffffff;
+  border: 1px solid var(--paper-edge);
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(39, 36, 31, 0.12);
+  z-index: 40;
+}
+
+.pillButton {
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pillButton:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.pillButtonBusy {
+  composes: pillButton;
+  opacity: 0.5;
+  cursor: default;
+}
+
+.saveStatus {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--paper);
+  border: 1px solid var(--paper-edge);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  box-shadow: 0 2px 8px rgba(39, 36, 31, 0.1);
+  z-index: 50;
+}
+
+.saveStatusIconSaved {
+  color: var(--safe);
+}
+
+.saveStatusIconConflict {
+  color: var(--danger);
+}
+
+.resolveButton {
+  border: 1px solid rgba(173, 86, 65, 0.4);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--accent);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.suggestionPopover {
+  position: fixed;
+  max-width: 360px;
+  background: #ffffff;
+  border: 1px solid var(--paper-edge);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 24px rgba(39, 36, 31, 0.14);
+  z-index: 60;
+}
+
+.suggestionLabel {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
+}
+
+.suggestionText {
+  margin: 0 0 10px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+.suggestionActions {
+  display: flex;
+  gap: 8px;
+}
+
+.ghostButton {
+  border: 1px solid var(--paper-edge);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.accentButton {
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fffdf8;
+  padding: 4px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
