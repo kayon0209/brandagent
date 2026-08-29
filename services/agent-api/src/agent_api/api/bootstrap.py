@@ -6,6 +6,7 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI
 
 from agent_api.application.tasks import TaskWorkflowService
+from agent_api.application.materials import HeuristicDistiller, MaterialService, SimpleTextParser
 from agent_api.config import Settings
 from agent_api.providers.zhipu import ZhipuProvider
 from agent_api.mcp.client import RealMCPClient
@@ -16,6 +17,7 @@ from agent_api.repositories.postgres_channels import PostgresChannelStore
 from agent_api.repositories.postgres_evaluation import PostgresEvaluationStore
 from agent_api.evaluation.metrics import EvaluationService
 from agent_api.repositories.postgres_knowledge import PostgresKnowledgeRepository
+from agent_api.repositories.postgres_materials import PostgresMaterialStore
 from agent_api.repositories.postgres_tasks import PostgresTaskRepository
 from agent_api.repositories.postgres_workflow import PostgresWorkflowRepository
 from agent_api.workflow.checkpoint import postgres_checkpointer, verify_checkpoint_isolation
@@ -67,6 +69,12 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
     channel_store = PostgresChannelStore(database_url)
     evaluation_store = PostgresEvaluationStore(database_url)
     knowledge_repository = PostgresKnowledgeRepository(database_url)
+    material_store = PostgresMaterialStore(database_url)
+    material_service = MaterialService(
+        store=material_store,
+        parser=SimpleTextParser(),
+        distiller=HeuristicDistiller(),
+    )
     provider = ZhipuProvider(api_key=settings.require_glm_key(), model=settings.glm_model)
     mcp_client = RealMCPClient(
         mcp_url,
@@ -89,11 +97,13 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             await channel_store.open()
             await evaluation_store.open()
             await knowledge_repository.open()
+            await material_store.open()
             stack.push_async_callback(task_repository.close)
             stack.push_async_callback(workflow_repository.close)
             stack.push_async_callback(channel_store.close)
             stack.push_async_callback(evaluation_store.close)
             stack.push_async_callback(knowledge_repository.close)
+            stack.push_async_callback(material_store.close)
             await mcp_client.discover()
             saver = await stack.enter_async_context(postgres_checkpointer(checkpoint_database_url))
             runtime.delegate = TaskWorkflowService(
@@ -117,6 +127,6 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             finally:
                 runtime.delegate = None
 
-    app = create_app(tasks=runtime, verifier=verifier, knowledge=knowledge_repository)
+    app = create_app(tasks=runtime, verifier=verifier, knowledge=knowledge_repository, materials=material_service)
     app.router.lifespan_context = lifespan
     return app

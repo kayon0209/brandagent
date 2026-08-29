@@ -36,17 +36,23 @@ class TaskApplication(Protocol):
     async def get_workspace(self, principal: Principal, task_id: str) -> dict: ...
 
 
-def create_app(*, tasks: TaskApplication, verifier: TokenVerifier, knowledge) -> FastAPI:
-    app = FastAPI(title="BrandFlow Agent API", version="0.1.0")
-    bearer = HTTPBearer(auto_error=False)
+def create_principal_dependency(verifier: TokenVerifier):
+    """Build the shared Principal resolver used by every protected route."""
 
-    async def principal(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> Principal:
+    async def principal(credentials: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False))) -> Principal:
         if credentials is None:
             raise HTTPException(status_code=401, detail="Authentication required")
         try:
             return await verifier.verify(credentials.credentials)
         except Exception as error:
             raise HTTPException(status_code=401, detail="Invalid authentication") from error
+
+    return principal
+
+
+def create_app(*, tasks: TaskApplication, verifier: TokenVerifier, knowledge, materials=None) -> FastAPI:
+    app = FastAPI(title="BrandFlow Agent API", version="0.1.0")
+    principal = create_principal_dependency(verifier)
 
     @app.get("/api/v1/health", response_model=SuccessResponse)
     async def health() -> SuccessResponse:
@@ -239,6 +245,11 @@ def create_app(*, tasks: TaskApplication, verifier: TokenVerifier, knowledge) ->
         if handler is None:
             raise HTTPException(status_code=404, detail=f"Unknown knowledge category: {category}")
         return SuccessResponse(data={"items": await handler(actor.workspace_id)})
+
+    if materials is not None:
+        from .consumer import create_materials_router
+
+        app.include_router(create_materials_router(materials, principal=principal))
 
     @app.exception_handler(HTTPException)
     async def http_error(_request, error: HTTPException):
