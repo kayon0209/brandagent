@@ -51,7 +51,8 @@ describe('SelectionToolbar', () => {
         onAction={jest.fn()}
       />,
     )
-    for (const label of ['展开', '换例子', '精简']) {
+    // plan-mandated wording (L90): 展开说说 / 换个例子 / 短一点
+    for (const label of ['展开说说', '换个例子', '短一点']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
   })
@@ -107,7 +108,7 @@ describe('SelectionToolbar', () => {
         onAction={onAction}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: '展开' }))
+    fireEvent.click(screen.getByRole('button', { name: '展开说说' }))
     expect(onAction).toHaveBeenCalledWith('expand')
   })
 })

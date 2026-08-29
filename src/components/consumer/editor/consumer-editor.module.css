@@ -1,10 +1,11 @@
-/* Consumer editor surfaces (upgrade plan task 10). */
+/* Consumer editor surfaces (plan §8.2 + task 10; Phase 5 design review fixes). */
 
 .shell {
   display: grid;
   grid-template-columns: 1fr;
   min-height: 100vh;
-  background: var(--paper-warm);
+  background: var(--canvas);
+  font-family: var(--sans);
 }
 
 .header {
@@ -13,7 +14,7 @@
   justify-content: space-between;
   height: 52px;
   padding: 0 20px;
-  border-bottom: 1px solid var(--paper-edge);
+  border-bottom: 1px solid var(--line);
   background: var(--paper);
 }
 
@@ -21,6 +22,12 @@
   font-size: 14px;
   color: var(--ink);
   letter-spacing: 0.02em;
+}
+
+.headerStatus {
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--mono);
 }
 
 .main {
@@ -36,14 +43,14 @@
   align-items: center;
 }
 
+/* the paper figure on the canvas desk (baseline L579/L589) */
 .manuscriptCanvas {
   width: 100%;
   max-width: 720px;
   background: var(--paper);
-  border: 1px solid var(--paper-edge);
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(39, 36, 31, 0.05);
-  padding: 48px 56px 64px;
+  border: 1px solid var(--line);
+  box-shadow: 0 14px 34px rgba(67, 57, 44, 0.08);
+  padding: 42px 48px 120px;
   transition: transform 160ms ease;
 }
 
@@ -54,8 +61,8 @@
   display: flex;
   gap: 2px;
   background: var(--paper);
-  border: 1px solid var(--paper-edge);
-  border-radius: 999px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
   padding: 4px;
   box-shadow: 0 2px 6px rgba(39, 36, 31, 0.08);
 }
@@ -65,10 +72,11 @@
   height: 32px;
   border: none;
   background: transparent;
-  border-radius: 999px;
+  border-radius: 4px;
   color: var(--ink-soft);
   cursor: pointer;
   font-size: 14px;
+  font-family: var(--mono);
 }
 
 .zoomButton:disabled {
@@ -76,24 +84,30 @@
   cursor: default;
 }
 
+/* core idea: warm sand intent panel (baseline L173-201) */
 .coreIdea {
   margin: 0 0 32px;
-  padding-bottom: 12px;
-  border-bottom: 1px dashed rgba(39, 36, 31, 0.15);
+  width: 100%;
+  max-width: 720px;
+  background: #f3eee4;
+  border: 1px solid #e2d8c8;
+  border-radius: 2px;
+  padding: 16px 20px;
 }
 
 .coreIdeaLabel {
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.12em;
-  color: var(--ink-soft);
+  color: var(--brown);
   margin: 0 0 6px;
 }
 
 .coreIdeaText {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.6;
   color: var(--ink);
+  font-family: var(--serif);
 }
 
 .draftProse .ProseMirror {
@@ -102,6 +116,7 @@
   font-size: 16px;
   line-height: 1.9;
   color: var(--ink);
+  font-family: var(--serif);
 }
 
 .draftProse .ProseMirror p {
@@ -110,28 +125,29 @@
 
 .draftProse .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
-  color: rgba(81, 75, 67, 0.4);
+  color: var(--muted);
   float: left;
   height: 0;
   pointer-events: none;
 }
 
+/* selection toolbar: paper surface, square-ish buttons, neutral hover */
 .toolbar {
   position: fixed;
   display: flex;
-  gap: 8px;
-  padding: 6px 8px;
-  background: #ffffff;
-  border: 1px solid var(--paper-edge);
-  border-radius: 999px;
-  box-shadow: 0 4px 14px rgba(39, 36, 31, 0.12);
+  gap: 4px;
+  padding: 4px;
+  background: var(--paper);
+  border: 1px solid var(--line-dark);
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(67, 57, 44, 0.12);
   z-index: 40;
 }
 
 .pillButton {
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
-  border-radius: 999px;
+  border-radius: 3px;
   padding: 5px 12px;
   font-size: 13px;
   color: var(--ink);
@@ -140,8 +156,8 @@
 }
 
 .pillButton:hover {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: #faf7f0;
+  border-color: var(--sand-deep);
 }
 
 .pillButtonBusy {
@@ -159,8 +175,8 @@
   align-items: center;
   gap: 10px;
   background: var(--paper);
-  border: 1px solid var(--paper-edge);
-  border-radius: 999px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
   padding: 8px 16px;
   font-size: 13px;
   color: var(--ink-soft);
@@ -169,7 +185,7 @@
 }
 
 .saveStatusIconSaved {
-  color: var(--safe);
+  color: var(--green);
 }
 
 .saveStatusIconConflict {
@@ -178,7 +194,7 @@
 
 .resolveButton {
   border: 1px solid rgba(173, 86, 65, 0.4);
-  border-radius: 999px;
+  border-radius: 3px;
   background: var(--paper);
   color: var(--accent);
   padding: 3px 10px;
@@ -186,14 +202,15 @@
   cursor: pointer;
 }
 
+/* suggestion popover: paper, serif reading text */
 .suggestionPopover {
   position: fixed;
   max-width: 360px;
-  background: #ffffff;
-  border: 1px solid var(--paper-edge);
-  border-radius: 12px;
+  background: var(--paper);
+  border: 1px solid var(--line-dark);
+  border-radius: 4px;
   padding: 14px 16px;
-  box-shadow: 0 8px 24px rgba(39, 36, 31, 0.14);
+  box-shadow: 0 8px 24px rgba(67, 57, 44, 0.14);
   z-index: 60;
 }
 
@@ -201,7 +218,7 @@
   margin: 0 0 6px;
   font-size: 11px;
   letter-spacing: 0.1em;
-  color: var(--ink-soft);
+  color: var(--brown);
 }
 
 .suggestionText {
@@ -209,6 +226,7 @@
   font-size: 15px;
   line-height: 1.7;
   color: var(--ink);
+  font-family: var(--serif);
 }
 
 .suggestionActions {
@@ -217,8 +235,8 @@
 }
 
 .ghostButton {
-  border: 1px solid var(--paper-edge);
-  border-radius: 999px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
   background: transparent;
   color: var(--ink-soft);
   padding: 4px 12px;
@@ -226,12 +244,35 @@
   cursor: pointer;
 }
 
+.ghostButton:hover {
+  background: #faf7f0;
+}
+
 .accentButton {
   border: none;
-  border-radius: 999px;
+  border-radius: 3px;
   background: var(--accent);
-  color: #fffdf8;
+  color: var(--paper);
   padding: 4px 14px;
   font-size: 12px;
   cursor: pointer;
+}
+
+/* write page layout: manuscript column + warm receding rail */
+.writeLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 384px);
+  gap: 32px;
+  align-items: start;
+  background: var(--canvas);
+}
+
+.writeRail {
+  background: var(--paper-warm);
+  border-left: 1px solid var(--line-dark);
+  min-height: 100vh;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }

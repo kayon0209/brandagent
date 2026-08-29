@@ -22,8 +22,12 @@ async def health(_request: Request) -> JSONResponse:
 mcp_app.routes.insert(0, Route("/health", health, methods=["GET"]))
 
 
-# Local dev: no auth on MCP endpoints
-app = mcp_app
+# The service auth middleware is REQUIRED in every environment (security
+# review P1): without it no TrustedCallScope is ever bound and every tool
+# call dies at require_scope(), while the transport itself would be
+# unauthenticated. Token-only requests fall back to the default system
+# scope; the agent API always sends the scoped headers.
+app = ServiceAuthMiddleware(mcp_app, settings.require_service_token())
 
 
 if __name__ == "__main__":

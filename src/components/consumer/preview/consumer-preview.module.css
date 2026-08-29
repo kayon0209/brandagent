@@ -1,99 +1,115 @@
-/* Consumer platform preview surfaces (upgrade plan task 12). */
+/* Consumer platform preview surfaces (plan task 12 + Phase 5 design fixes). */
 
 .panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
   width: 100%;
-  max-width: 612px; /* 85% of the 720px manuscript */
-  margin: 0 auto;
 }
 
 .panelTitle {
   font-size: 15px;
-  color: var(--ink, #27241f);
+  color: var(--ink);
   margin: 0;
   letter-spacing: 0.02em;
 }
 
 .hint {
   padding: 12px 14px;
-  border-radius: 8px;
-  background: var(--paper-warm, #f5f1e8);
-  color: var(--ink-soft, #514b43);
+  border-radius: 4px;
+  background: var(--accent-soft);
+  border-left: 3px solid var(--sand-deep);
+  color: var(--ink-soft);
   font-size: 13px;
   line-height: 1.7;
-  border-left: 2px solid var(--danger, #a33d2e);
 }
 
 .channelTabs {
   display: flex;
-  gap: 8px;
+  gap: 18px;
+  border-bottom: 1px solid var(--line);
 }
 
 .channelTab {
-  border: 1px solid var(--paper-edge, rgba(39, 36, 31, 0.08));
-  border-radius: 999px;
-  background: var(--paper, #fffdf8);
-  color: var(--ink-soft, #514b43);
-  font-size: 12px;
-  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13px;
+  padding: 6px 2px 8px;
   cursor: pointer;
+  border-bottom: 2px solid transparent;
 }
 
 .channelTabActive {
   composes: channelTab;
-  border-color: rgba(173, 86, 65, 0.4);
-  color: var(--accent, #ad5641);
+  color: var(--ink);
+  border-bottom-color: var(--brown);
 }
 
 .progress {
   font-size: 12px;
-  color: var(--ink-soft, #514b43);
+  color: var(--ink-soft);
 }
 
-/* WeChat: light paper article */
+/* WeChat: light paper article (tokens only, no foreign ink) */
 .wechat {
-  background: #ffffff;
-  border: 1px solid var(--paper-edge, rgba(39, 36, 31, 0.08));
-  border-radius: 6px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 2px;
   padding: 20px 22px;
-  color: #1a1a1a;
+  color: var(--ink);
 }
 
 .wechatTitle {
   font-size: 17px;
   font-weight: 600;
   margin: 0 0 14px;
-  color: #1a1a1a;
+  color: var(--ink);
+  font-family: var(--serif);
 }
 
 .wechatParagraph {
   font-size: 15px;
   line-height: 1.9;
   margin: 0 0 12px;
+  color: var(--ink);
+  font-family: var(--serif);
 }
 
-/* Xiaohongshu: white card + tags */
+/* Xiaohongshu: white card, cover block, quiet tags */
 .xiaohongshu {
   background: #ffffff;
-  border: 1px solid rgba(39, 36, 31, 0.1);
-  border-radius: 14px;
-  padding: 18px;
-  box-shadow: 0 2px 8px rgba(39, 36, 31, 0.06);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(67, 57, 44, 0.06);
+}
+
+.xhsCover {
+  height: 88px;
+  background: var(--sand);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 12px;
+  color: var(--brown);
+  font-size: 22px;
+  font-family: var(--serif);
 }
 
 .xiaohongshuTitle {
   font-size: 16px;
   font-weight: 600;
   margin: 0 0 8px;
-  color: #27241f;
+  color: var(--ink);
+  font-family: var(--serif);
 }
 
 .xiaohongshuBody {
   font-size: 14px;
   line-height: 1.8;
-  color: #27241f;
+  color: var(--ink-soft);
   margin: 0 0 12px;
 }
 
@@ -108,24 +124,25 @@
 
 .xiaohongshuTags li {
   font-size: 12px;
-  color: var(--accent, #ad5641);
-  background: var(--accent-soft, #f3e5df);
-  padding: 2px 10px;
-  border-radius: 999px;
+  color: #6f7891;
+  background: transparent;
+  padding: 2px 0;
+  border-radius: 0;
 }
 
-/* Video script: spoken lines */
+/* Video script: mono time grid (baseline L406-408) */
 .videoScript {
-  background: var(--paper, #fffdf8);
-  border: 1px dashed rgba(39, 36, 31, 0.2);
-  border-radius: 8px;
+  background: var(--paper);
+  border: 1px dashed var(--line-dark);
+  border-radius: 4px;
   padding: 16px 18px;
 }
 
 .videoDuration {
   font-size: 11px;
-  color: var(--ink-soft, #514b43);
+  color: var(--muted);
   margin: 0 0 10px;
+  font-family: var(--mono);
 }
 
 .videoLines {
@@ -137,10 +154,23 @@
   gap: 8px;
 }
 
-.videoLines li {
+.videoLine {
+  display: grid;
+  grid-template-columns: 35px 1fr;
+  gap: 10px;
+}
+
+.videoTime {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.videoText {
   font-size: 14px;
   line-height: 1.8;
-  color: var(--ink, #27241f);
+  color: var(--ink);
 }
 
 /* Review bubbles */
@@ -152,34 +182,34 @@
 
 .reviewTitle {
   font-size: 15px;
-  color: var(--ink, #27241f);
+  color: var(--ink);
   margin: 0;
 }
 
 .needsFix {
   padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--paper-warm, #f5f1e8);
-  border-left: 2px solid var(--accent, #ad5641);
+  border-radius: 4px;
+  background: var(--paper-warm);
+  border-left: 2px solid var(--accent);
   font-size: 13px;
   line-height: 1.7;
-  color: var(--ink-soft, #514b43);
+  color: var(--ink-soft);
 }
 
 .blocking {
   composes: needsFix;
-  border-left-color: var(--danger, #a33d2e);
+  border-left-color: var(--danger);
 }
 
 .reviewEmpty {
   padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--paper-warm, #f5f1e8);
+  border-radius: 4px;
+  background: var(--paper-warm);
   font-size: 13px;
-  color: var(--ink-soft, #514b43);
+  color: var(--ink-soft);
 }
 
-/* Action bar */
+/* Action bar: squared buttons, accent reserved for adopt */
 .actionBar {
   display: flex;
   align-items: center;
@@ -188,32 +218,36 @@
 
 .primaryRed {
   border: none;
-  border-radius: 999px;
-  background: var(--accent, #ad5641);
-  color: #fffdf8;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--paper);
   font-size: 14px;
   padding: 8px 22px;
   cursor: pointer;
 }
 
 .secondary {
-  border: 1px solid var(--paper-edge, rgba(39, 36, 31, 0.15));
-  border-radius: 999px;
+  border: 1px solid var(--line-dark);
+  border-radius: 3px;
   background: transparent;
-  color: var(--ink-soft, #514b43);
+  color: var(--ink-soft);
   font-size: 13px;
   padding: 7px 16px;
   cursor: pointer;
 }
 
+.secondary:hover {
+  background: #faf7f0;
+}
+
 .inkSecondary {
   composes: secondary;
-  border-color: rgba(39, 36, 31, 0.35);
-  color: var(--ink, #27241f);
+  border-color: var(--brown);
+  color: var(--brown);
 }
 
 .retry {
   composes: secondary;
-  border-color: rgba(173, 86, 65, 0.4);
-  color: var(--accent, #ad5641);
+  border-color: var(--sand-deep);
+  color: var(--ink-soft);
 }

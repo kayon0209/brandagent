@@ -54,3 +54,28 @@ def test_production_composition_rejects_same_database_role_with_different_option
     )
     with pytest.raises(RuntimeError, match="distinct database roles"):
         create_production_app(settings)
+
+
+def test_production_composition_wires_the_full_consumer_stack() -> None:
+    """The real entrypoint must construct without UnboundLocalError (design
+    review P0): provider is created before every consumer service uses it."""
+
+    settings = Settings(
+        environment="development",
+        auth_mode="dev",
+        agent_database_url=SecretStr("postgresql://business@localhost:5432/app"),
+        agent_checkpoint_database_url=SecretStr("postgresql://checkpoint@localhost:5433/checkpoint"),
+        glm_api_key=SecretStr("not-a-real-key"),
+        brand_mcp_url="https://example.invalid/mcp",
+        brand_mcp_service_token=SecretStr("not-a-real-token"),
+        clerk_jwks_url="https://example.invalid/jwks",
+        clerk_issuer="https://example.invalid",
+        clerk_audience="brandflow",
+    )
+    app = create_production_app(settings)
+    # the consumer routers are mounted with the full bundle wired
+    openapi = app.openapi()
+    paths = set(openapi["paths"].keys())
+    assert "/api/v1/consumer/projects" in paths
+    assert "/api/v1/consumer/usage" in paths
+    assert "/api/v1/consumer/materials" in paths

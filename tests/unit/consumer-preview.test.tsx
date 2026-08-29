@@ -17,24 +17,23 @@ import { XiaohongshuPreview } from '@/components/consumer/preview/XiaohongshuPre
 import { VideoScriptPreview } from '@/components/consumer/preview/VideoScriptPreview'
 import { PrePublishReview } from '@/components/consumer/preview/PrePublishReview'
 import { PrimaryActionBar } from '@/components/consumer/preview/PrimaryActionBar'
-import { usePlatformVariants } from '@/hooks/usePlatformVariants'
-
-const wechatContent = { title: '文章标题', paragraphs: ['第一段正文。', '第二段正文。'] }
-const xhsContent = { title: '笔记标题', body: '正文一句话。', tags: ['标签一', '标签二'] }
-const scriptContent = { duration_seconds: 60, lines: ['开场口播。', '核心卖点。'] }
 
 describe('platform-specific preview structures', () => {
-  it('renders WeChat as a light paper article with black text', () => {
-    const { container } = render(<WeChatPreview data={wechatContent} />)
+  it('renders WeChat as a light paper article deriving its title from content', () => {
+    const { container } = render(
+      <WeChatPreview data={{ content: '第一段标题。\n第二段正文。\n第三段结尾。' }} />,
+    )
     const article = container.querySelector('[data-testid="wechat-preview"]')!
     expect(article).not.toBeNull()
-    expect(screen.getByText('文章标题')).toBeInTheDocument()
-    expect(screen.getByText('第一段正文。')).toBeInTheDocument()
+    expect(screen.getByText('第一段标题。')).toBeInTheDocument()
+    expect(screen.getByText('第二段正文。')).toBeInTheDocument()
     expect(getComputedStyle(article).background).not.toBe('rgb(20, 20, 28)')
   })
 
-  it('renders Xiaohongshu as a white card with tags', () => {
-    const { container } = render(<XiaohongshuPreview data={xhsContent} />)
+  it('renders Xiaohongshu as a white card with a cover and quiet tags', () => {
+    const { container } = render(
+      <XiaohongshuPreview data={{ content: '笔记标题\n正文一句话。 #标签一 #标签二' }} />,
+    )
     const card = container.querySelector('[data-testid="xiaohongshu-preview"]')!
     expect(card).not.toBeNull()
     expect(screen.getByText('笔记标题')).toBeInTheDocument()
@@ -42,17 +41,22 @@ describe('platform-specific preview structures', () => {
     expect(screen.getByText('#标签二')).toBeInTheDocument()
   })
 
-  it('renders the video script as spoken lines, not a dark renderer', () => {
-    const { container } = render(<VideoScriptPreview data={scriptContent} />)
+  it('renders the video script with a mono timecode column', () => {
+    const { container } = render(
+      <VideoScriptPreview data={{ duration_seconds: 60, lines: ['开场口播。', '核心卖点。'] }} />,
+    )
     expect(container.querySelector('[data-testid="video-script-preview"]')).not.toBeNull()
     expect(screen.getByText('开场口播。')).toBeInTheDocument()
-    expect(screen.getByText(/60/)).toBeInTheDocument()
+    expect(screen.getByText(/00:00/)).toBeInTheDocument()
+    expect(screen.getByText(/00:30/)).toBeInTheDocument()
   })
 
   it('three platforms expose distinct structures, not one text re-skinned', () => {
-    const { container: wechat } = render(<WeChatPreview data={wechatContent} />)
-    const { container: xhs } = render(<XiaohongshuPreview data={xhsContent} />)
-    const { container: script } = render(<VideoScriptPreview data={scriptContent} />)
+    const { container: wechat } = render(<WeChatPreview data={{ content: '标题\n正文' }} />)
+    const { container: xhs } = render(<XiaohongshuPreview data={{ content: '标题\n正文 #标签' }} />)
+    const { container: script } = render(
+      <VideoScriptPreview data={{ duration_seconds: 60, lines: ['一', '二'] }} />,
+    )
     expect(wechat.querySelector('[data-testid="wechat-paragraphs"]')).not.toBeNull()
     expect(xhs.querySelector('[data-testid="xiaohongshu-tags"]')).not.toBeNull()
     expect(script.querySelector('[data-testid="video-script-lines"]')).not.toBeNull()

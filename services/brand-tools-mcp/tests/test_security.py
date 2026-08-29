@@ -56,6 +56,30 @@ def test_trusted_scope_rejects_cross_task_and_cross_actor_arguments() -> None:
         scope.authorize("workspace-1", "actor-2", "task-1")
 
 
+def test_deployed_app_installs_the_service_auth_middleware(monkeypatch) -> None:
+    """The production ASGI app must carry ServiceAuthMiddleware (review P1)."""
+
+    import sys
+
+    monkeypatch.setenv("BRAND_MCP_DATABASE_URL", "postgresql://brand_tools@localhost:5432/brandflow")
+    monkeypatch.setenv("BRAND_MCP_SERVICE_TOKEN", "service-secret")
+
+    saved = {name: module for name, module in sys.modules.items() if name.startswith("brand_tools_mcp")}
+    try:
+        for module in list(saved):
+            del sys.modules[module]
+
+        import brand_tools_mcp.server as server_module
+
+        assert isinstance(server_module.app, server_module.ServiceAuthMiddleware), (
+            "server.app must wrap the MCP transport with ServiceAuthMiddleware; "
+            "otherwise no TrustedCallScope is ever bound in production"
+        )
+    finally:
+        # restore the original module identities so later tests keep class identity
+        sys.modules.update(saved)
+
+
 # ---------------------------------------------------------------------------
 # High-risk publishing stays fail closed (upgrade plan task 11)
 # ---------------------------------------------------------------------------

@@ -39,8 +39,8 @@ export async function listMaterials(): Promise<{ items: MaterialListItem[] }> {
     items: documents.items.map(document => ({
       document_id: document.document_id,
       document_name: document.document_name,
-      status: 'distilled',
-      excerpt_count: 0,
+      status: document.status as MaterialListItem['status'], // real server status passthrough
+      excerpt_count: 0, // excerpt count arrives with the per-document view
       created_at: document.created_at,
     })),
   }

@@ -1,13 +1,14 @@
 'use client'
 
 /**
- * Right-side platform preview panel (upgrade plan task 12).
+ * Right-side platform preview panel (plan task 12 + Phase 5 review fixes).
  *
  * Real data states only — never a dark technical renderer:
- * - no_master: ask the user to adopt the current draft first;
- * - generating: keep the previous version visible, non-blocking progress;
- * - failed: keep the previous version, offer retry;
- * - ready: channel tabs + the platform-specific preview.
+ * - no_master: adopt-first hint (gentle accent, review P2)
+ * - generating: keep the previous version visible, non-blocking progress
+ * - failed: keep the previous version, offer retry
+ * - error: an honest error state with the server message (never a fake
+ *   "adopted nothing" empty state — code review P2)
  */
 
 import { useState } from 'react'
@@ -24,9 +25,10 @@ export interface ChannelVariantState {
 }
 
 export interface PlatformVariantsDataState {
-  status: 'no_master' | 'generating' | 'failed' | 'ready'
+  status: 'no_master' | 'generating' | 'failed' | 'ready' | 'error'
   channels: Record<string, ChannelVariantState | undefined>
   failedChannels?: Record<string, { retryable: boolean } | undefined>
+  error?: { code: string; message: string }
 }
 
 interface PlatformPreviewProps {
@@ -49,12 +51,19 @@ export function PlatformPreview({ state, onGenerate, onRegenerate, onAdopt }: Pl
   const activeData = activeKey ? state.channels[activeKey] : undefined
 
   return (
+    // 612px = 85% of the 720px manuscript (plan L497); the rail clamps it
     <section
       data-testid="platform-preview-panel"
       className={styles.panel}
       style={{ maxWidth: '612px' }}
     >
       <h2 className={styles.panelTitle}>平台预览</h2>
+
+      {state.status === 'error' && (
+        <p className={styles.hint} data-testid="variant-error">
+          预览暂时打不开：{state.error?.message ?? '网络出了点问题'}。你的稿纸不受影响。
+        </p>
+      )}
 
       {state.status === 'no_master' && (
         <p className={styles.hint}>先采用当前稿（在稿纸里点「采用这版」），再回来生成平台版本。</p>
@@ -66,7 +75,7 @@ export function PlatformPreview({ state, onGenerate, onRegenerate, onAdopt }: Pl
         </button>
       )}
 
-      {state.status !== 'no_master' && availableTabs.length === 0 && (
+      {state.status !== 'no_master' && state.status !== 'error' && availableTabs.length === 0 && (
         <>
           <p className={styles.hint}>还没有生成平台版本。点下面的按钮，为公众号、小红书和口播各生成一版。</p>
           <button type="button" className={styles.retry} onClick={onGenerate}>
@@ -99,13 +108,15 @@ export function PlatformPreview({ state, onGenerate, onRegenerate, onAdopt }: Pl
           </div>
 
           {activeData && activeKey === 'wechat_website' && (
-            <WeChatPreview data={{ title: '公众号文章', paragraphs: splitParagraphs(activeData.content) }} />
+            <WeChatPreview data={{ content: activeData.content }} />
           )}
           {activeData && activeKey === 'xiaohongshu' && (
-            <XiaohongshuPreview data={{ title: '小红书笔记', body: activeData.content, tags: extractTags(activeData.content) }} />
+            <XiaohongshuPreview data={{ content: activeData.content }} />
           )}
           {activeData && activeKey === 'video_script_60s' && (
-            <VideoScriptPreview data={{ duration_seconds: 60, lines: activeData.content.split('\n').filter(Boolean) }} />
+            <VideoScriptPreview
+              data={{ duration_seconds: 60, lines: activeData.content.split('\n').filter(Boolean) }}
+            />
           )}
         </>
       )}
@@ -125,15 +136,6 @@ export function PlatformPreview({ state, onGenerate, onRegenerate, onAdopt }: Pl
         )}
     </section>
   )
-}
-
-function splitParagraphs(content: string): string[] {
-  return content.split('\n').filter(Boolean)
-}
-
-function extractTags(content: string): string[] {
-  const matches = content.match(/#[^\s#]+/g)
-  return (matches ?? []).map(tag => tag.slice(1))
 }
 
 function channelLabel(key: string): string {

@@ -17,9 +17,9 @@ import { useEffect, useState } from 'react'
 import styles from './consumer-editor.module.css'
 
 export const ASSIST_ACTIONS = [
-  { action: 'expand', label: '展开' },
-  { action: 'replace_example', label: '换例子' },
-  { action: 'shorten', label: '精简' },
+  { action: 'expand', label: '展开说说' },
+  { action: 'replace_example', label: '换个例子' },
+  { action: 'shorten', label: '短一点' },
 ] as const
 
 export type AssistAction = (typeof ASSIST_ACTIONS)[number]['action']

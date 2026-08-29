@@ -207,6 +207,9 @@ class EditorialAssistService:
         suggestion = await self._store.get_suggestion(principal.workspace_id, suggestion_id)
         if suggestion is None:
             raise NotFoundError(f"suggestion {suggestion_id} not found")
+        if suggestion.get("task_id") != task_id:
+            # in-workspace tenancy: a suggestion must belong to THIS project
+            raise NotFoundError(f"suggestion {suggestion_id} does not belong to project {task_id}")
         if suggestion.get("status") == "accepted":
             return {"idempotent": True, "suggestion_id": suggestion_id, "revision": base_revision}
 
@@ -232,15 +235,29 @@ class EditorialAssistService:
         if selection not in block_text:
             raise SelectionStale("选区与当前稿件不一致，请重新生成建议")
 
-        # atomic replace on the canonical server document
-        replaced_text = block_text.replace(selection, suggestion["suggested_text"], 1)
+        # ONE derivation for both surfaces (code review P1): find the
+        # selection's plain-text offset via the resolved block occurrence
+        # so block text and plain_text can never diverge.
+        block_plain_offset = draft["plain_text"].find(block_text)
+        if block_plain_offset >= 0:
+            occurrence_in_block = block_text.find(selection)
+            plain_start = block_plain_offset + occurrence_in_block
+        else:
+            plain_start = draft["plain_text"].find(selection)
+        if plain_start < 0:
+            raise SelectionStale("选区与当前稿件不一致，请重新生成建议")
+
+        suggested = suggestion["suggested_text"]
+        new_block_text = block_text[:occurrence_in_block] + suggested + block_text[occurrence_in_block + len(selection):] if block_plain_offset >= 0 else block_text.replace(selection, suggested, 1)
+        new_plain = (
+            draft["plain_text"][:plain_start] + suggested + draft["plain_text"][plain_start + len(selection):]
+        )
         new_document = {
             "blocks": [
-                {**b, "text": replaced_text} if b.get("block_id") == suggestion["block_id"] else b
+                {**b, "text": new_block_text} if b.get("block_id") == suggestion["block_id"] else b
                 for b in draft["document"].get("blocks", [])
             ]
         }
-        new_plain = draft["plain_text"].replace(selection, suggestion["suggested_text"], 1)
         try:
             saved = await self._store.save_draft(
                 principal.workspace_id,

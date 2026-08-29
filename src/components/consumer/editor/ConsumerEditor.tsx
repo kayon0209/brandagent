@@ -1,14 +1,17 @@
 'use client'
 
 /**
- * Consumer manuscript editor (upgrade plan task 10).
+ * Consumer manuscript editor (upgrade plan task 10 + Phase 5 review fixes).
  *
- * Wires the tiptap editor to the useConsumerDraft autosave state machine,
- * hosts the selection toolbar anchored to the real selection, and the
- * suggestion flow (propose -> popover -> atomic accept).
+ * - tiptap paragraphs map 1:1 to document blocks (no more single-b1 collapse);
+ * - the editor re-seeds from the server document whenever seedVersion bumps
+ *   (accepted suggestions and conflict recovery are never silently reverted);
+ * - the suggestion popover anchors to the real selection rect;
+ * - zoom is 75%—150% persisted in localStorage (plan L152) and only scales
+ *   the manuscript canvas; the status bar carries the word count.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -23,26 +26,78 @@ import { useConsumerDraft, type ConsumerDraftApi } from '@/hooks/useConsumerDraf
 import styles from './consumer-editor.module.css'
 
 const ACTION_LABELS: Record<AssistAction, string> = {
-  expand: '展开',
-  replace_example: '换例子',
-  shorten: '精简',
+  expand: '展开说说',
+  replace_example: '换个例子',
+  shorten: '短一点',
+}
+
+const ZOOM_MIN = 0.75
+const ZOOM_MAX = 1.5
+const ZOOM_STEP = 0.1
+const ZOOM_STORAGE_KEY = 'brandagent:zoom'
+const SEED_RADIUS = 120
+
+interface Block {
+  block_id: string
+  block_type: string
+  text: string
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function blocksToHtml(blocks: Block[]): string {
+  return (
+    blocks
+      .map(block => `<p>${escapeHtml(block.text ?? '')}</p>`)
+      .join('\n') || '<p></p>'
+  )
+}
+
+function editorToBlocks(editor: Editor): Block[] {
+  const blocks: Block[] = []
+  editor.state.doc.forEach((node, _, index) => {
+    if (node.isTextblock) {
+      blocks.push({ block_id: `b${index + 1}`, block_type: 'paragraph', text: node.textContent })
+    }
+  })
+  return blocks.length ? blocks : [{ block_id: 'b1', block_type: 'paragraph', text: '' }]
+}
+
+export interface ConsumerEditorHandle {
+  /** Adopt the CURRENT draft: flush pending edits first, then send the
+   * real revision (review P0: hardcoded baseRevision:0 broke the lifecycle). */
+  adoptCurrent(): Promise<void>
 }
 
 interface ConsumerEditorProps {
   projectId: string
   coreIdea: string
   api: ConsumerDraftApi
+  onAdopted?(): void
 }
 
-export function ConsumerEditor({ projectId, coreIdea, api }: ConsumerEditorProps) {
+export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorProps>(
+  function ConsumerEditor({ projectId, coreIdea, api, onAdopted }, ref) {
   const draft = useConsumerDraft(projectId, api)
-  const [zoom, setZoom] = useState(1)
+  const [zoom, setZoom] = useState(() => {
+    try {
+      const stored = window.localStorage.getItem(ZOOM_STORAGE_KEY)
+      const value = stored ? Number(stored) : 1
+      return Number.isFinite(value) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value)) : 1
+    } catch {
+      return 1
+    }
+  })
+  const [wordCount, setWordCount] = useState(0)
   const [toolbarHidden, setToolbarHidden] = useState(false)
   const [selectionInfo, setSelectionInfo] = useState<{ from: number; to: number; empty: boolean; text: string } | null>(null)
   const [suggesting, setSuggesting] = useState<AssistAction | null>(null)
   const [suggestion, setSuggestion] = useState<{ text: string; suggestionId: string } | null>(null)
   const [selectionRect, setSelectionRect] = useState<{ getBoundingClientRect(): DOMRect } | null>(null)
   const editorRef = useRef<Editor | null>(null)
+  const seededSeedRef = useRef(-1)
 
   const markDirtyRef = useRef(draft.markDirty)
   markDirtyRef.current = draft.markDirty
@@ -55,8 +110,9 @@ export function ConsumerEditor({ projectId, coreIdea, api }: ConsumerEditorProps
       ],
       content: '<p></p>',
       onUpdate: ({ editor: current }) => {
-        const text = current.getText()
-        markDirtyRef.current({ blocks: [{ block_id: 'b1', block_type: 'paragraph', text }] }, text)
+        const blocks = editorToBlocks(current)
+        markDirtyRef.current({ blocks }, current.getText())
+        setWordCount(current.getText().length)
       },
       onSelectionUpdate: ({ editor: current }) => {
         const { from, to, empty } = current.state.selection
@@ -84,16 +140,19 @@ export function ConsumerEditor({ projectId, coreIdea, api }: ConsumerEditorProps
     }
   }, [editor])
 
-  // seed the editor once the server draft arrives (first paint only)
+  // seed / re-seed the editor from the server document whenever a fresh
+  // load bumps seedVersion — accepted suggestions and recovered drafts
+  // overwrite the local buffer (review P1)
   useEffect(() => {
     const current = editorRef.current
-    if (draft.document && current && !current.isDestroyed && !current.state.doc.textContent) {
-      const first = (draft.document.blocks as Array<{ text?: string }>)[0]
-      if (first?.text) {
-        current.commands.setContent(`<p>${first.text}</p>`, { emitUpdate: false })
-      }
+    if (!draft.document || !current || draft.seedVersion === seededSeedRef.current) return
+    seededSeedRef.current = draft.seedVersion
+    const blocks = (draft.document.blocks ?? []) as Block[]
+    if (blocks.length) {
+      current.commands.setContent(blocksToHtml(blocks), { emitUpdate: false })
+      setWordCount(current.getText().length)
     }
-  }, [draft.document])
+  }, [draft.document, draft.seedVersion])
 
   // Escape hides the toolbar and dismisses any suggestion
   useEffect(() => {
@@ -108,12 +167,33 @@ export function ConsumerEditor({ projectId, coreIdea, api }: ConsumerEditorProps
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  // keep zoom in the plan range and persist it
+  const changeZoom = useCallback((next: number) => {
+    const clamped = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next)) * 100) / 100
+    setZoom(clamped)
+    try {
+      window.localStorage.setItem(ZOOM_STORAGE_KEY, String(clamped))
+    } catch {
+      /* storage may be unavailable */
+    }
+  }, [])
+
   const currentSelection = useMemo(
     () => ({
       selection: { from: selectionInfo?.from ?? 0, to: selectionInfo?.to ?? 0, empty: selectionInfo?.empty ?? true },
     }),
     [selectionInfo],
   )
+
+  const popoverPosition = useMemo(() => {
+    if (!selectionRect) return null
+    const rect = selectionRect.getBoundingClientRect()
+    // centered on the selection, clamped into the viewport (plan L505)
+    const halfWidth = SEED_RADIUS
+    const x = Math.min(Math.max(rect.left + rect.width / 2 - halfWidth, 12), window.innerWidth - SEED_RADIUS * 2 - 12)
+    const y = Math.max(rect.top - 8 - 220, 12)
+    return { x, y }
+  }, [selectionRect])
 
   const handleToolbarAction = useCallback(
     async (action: AssistAction) => {
@@ -147,19 +227,41 @@ export function ConsumerEditor({ projectId, coreIdea, api }: ConsumerEditorProps
         suggestionId: suggestion.suggestionId,
         baseRevision: draft.revision,
       })
+      // reload re-seeds the editor with the accepted text (seedVersion bump)
       await draft.reload()
     } catch {
-      /* conflict keeps the local draft; status shows recovery entry */
+      /* conflict keeps the local draft; status shows the recovery entry */
     } finally {
       setSuggestion(null)
       setSuggesting(null)
     }
   }, [api, draft, projectId, suggestion])
 
+  // adopt uses the REAL post-flush revision (review P0 fix)
+  useImperativeHandle(
+    ref,
+    () => ({
+      adoptCurrent: async () => {
+        await draft.flush()
+        const { brandFlowRequest } = await import('@/lib/api/brandflow')
+        await brandFlowRequest(`/api/v1/consumer/projects/${projectId}/draft/adopt`, {
+          method: 'POST',
+          body: JSON.stringify({ baseRevision: draft.revision }),
+        })
+        await draft.reload()
+        onAdopted?.()
+      },
+    }),
+    [draft, onAdopted, projectId],
+  )
+
   return (
     <div className={styles.shell}>
       <header data-testid="consumer-header" className={styles.header}>
-        <span className={styles.headerTitle}>{coreIdea}</span>
+        <span className={styles.headerTitle}>写作台</span>
+        <span className={styles.headerStatus}>
+          已关联素材 · 字数 {wordCount}
+        </span>
       </header>
 
       <div className={styles.main}>
@@ -177,12 +279,12 @@ export function ConsumerEditor({ projectId, coreIdea, api }: ConsumerEditorProps
         busy={suggesting !== null}
       />
 
-      {suggestion && selectionRect && (
+      {suggestion && popoverPosition && (
         <SuggestionPopover
           actionLabel={suggesting ? ACTION_LABELS[suggesting] : ''}
           suggestedText={suggestion.text}
           busy={false}
-          position={{ x: 80, y: 80 }}
+          position={popoverPosition}
           onAccept={() => void handleAccept()}
           onDismiss={() => {
             setSuggestion(null)
@@ -192,7 +294,14 @@ export function ConsumerEditor({ projectId, coreIdea, api }: ConsumerEditorProps
       )}
 
       <SaveStatus state={draft.status} onResolveConflict={() => void draft.resolveConflict()} />
-      <ZoomControl zoom={zoom} onZoomChange={setZoom} />
+      <ZoomControl
+        zoom={zoom}
+        minZoom={ZOOM_MIN}
+        maxZoom={ZOOM_MAX}
+        step={ZOOM_STEP}
+        onZoomChange={changeZoom}
+      />
     </div>
   )
 }
+)

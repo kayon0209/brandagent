@@ -26,6 +26,7 @@ from agent_api.repositories.postgres_tasks import PostgresTaskRepository
 from agent_api.repositories.postgres_workflow import PostgresWorkflowRepository
 from agent_api.workflow.checkpoint import postgres_checkpointer, verify_checkpoint_isolation
 from agent_api.workflow.consumer_graph import GraphCandidateGenerator
+from agent_api.application.platform_variants import ConsumerChannelGeneratorAdapter
 
 from .main import create_app
 from .security import ClerkJWTVerifier
@@ -80,6 +81,8 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
         parser=SimpleTextParser(),
         distiller=HeuristicDistiller(),
     )
+    # The provider must exist before every consumer service below wires it.
+    provider = ZhipuProvider(api_key=settings.require_glm_key(), model=settings.glm_model)
     consumer_project_store = PostgresConsumerProjectStore(database_url)
     consumer_projects = ConsumerProjectService(store=consumer_project_store)
     consumer_drafts = DraftService(store=consumer_project_store)
@@ -123,7 +126,6 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             self.usage_ledger = consumer_usage
 
     consumer_apps = ConsumerApps()
-    provider = ZhipuProvider(api_key=settings.require_glm_key(), model=settings.glm_model)
     mcp_client = RealMCPClient(
         mcp_url,
         workflow_repository,

@@ -8,7 +8,13 @@
  *                    \-> error    (network failed; local text kept, sessionStorage backup)
  *
  * Saves are debounced 800ms; "已保存" is only shown after the SERVER
- * confirms the new revision.
+ * confirms the new revision. Review fixes (Phase 5):
+ * - flush only clears the pending payload it actually saved (edits that
+ *   arrive mid-save stay armed and re-flush);
+ * - load() clears any pending payload and bumps seedVersion so the editor
+ *   re-seeds from the fresh server document (accepted suggestions and
+ *   conflict recovery are no longer reverted by a stale local buffer);
+ * - expose the live revision so adopt passes the real baseRevision.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -39,6 +45,7 @@ export function useConsumerDraft(projectId: string, api: ConsumerDraftApi) {
   const [document, setDocument] = useState<{ blocks: unknown[] } | null>(null)
   const [plainText, setPlainText] = useState('')
   const [localPlainText, setLocalPlainText] = useState('')
+  const [seedVersion, setSeedVersion] = useState(0)
 
   const revisionRef = useRef(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -48,11 +55,14 @@ export function useConsumerDraft(projectId: string, api: ConsumerDraftApi) {
   const load = useCallback(async () => {
     const draft = await api.getDraft(projectId)
     revisionRef.current = draft.revision
+    // any not-yet-saved local payload is superseded by the fresh server draft
+    pendingRef.current = null
     setRevision(draft.revision)
     setDocument(draft.document)
     setPlainText(draft.plain_text)
     setLocalPlainText(draft.plain_text)
     setStatus('saved')
+    setSeedVersion(value => value + 1)
     try {
       window.sessionStorage.removeItem(BACKUP_KEY + projectId)
     } catch {
@@ -83,10 +93,21 @@ export function useConsumerDraft(projectId: string, api: ConsumerDraftApi) {
       })
       revisionRef.current = result.revision
       setRevision(result.revision)
-      setPlainText(pending.plainText)
-      setDocument(pending.document)
-      pendingRef.current = null
-      setStatus('saved')
+      // only clear the payload we actually saved; edits that arrived while
+      // this request was in flight remain armed (review P1 lost-update fix)
+      if (pendingRef.current === pending) {
+        pendingRef.current = null
+        setPlainText(pending.plainText)
+        setDocument(pending.document)
+        setStatus('saved')
+      } else {
+        // newer edits exist: keep them dirty and re-arm the debounce
+        setStatus('dirty')
+        if (timerRef.current) clearTimeout(timerRef.current)
+        timerRef.current = setTimeout(() => {
+          void flush()
+        }, DEBOUNCE_MS)
+      }
       try {
         window.sessionStorage.removeItem(BACKUP_KEY + projectId)
       } catch {
@@ -123,7 +144,7 @@ export function useConsumerDraft(projectId: string, api: ConsumerDraftApi) {
   }, [load])
 
   useEffect(() => {
-    // flush before unload: sendBeacon is unreliable, so fire the fetch now
+    // flush before unload with keepalive so the last keystrokes survive
     const handler = () => {
       if (pendingRef.current && !flushingRef.current) {
         void flush()
@@ -142,6 +163,7 @@ export function useConsumerDraft(projectId: string, api: ConsumerDraftApi) {
     document,
     plainText,
     localPlainText,
+    seedVersion,
     markDirty,
     flush,
     resolveConflict,

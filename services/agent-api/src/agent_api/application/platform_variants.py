@@ -19,6 +19,9 @@ from agent_api.api.security import Principal
 from agent_api.domain.errors import NotFoundError
 
 
+ALLOWED_CONSUMER_CHANNELS = ("wechat_website", "xiaohongshu", "video_script_60s")
+
+
 class VariantGenerationError(RuntimeError):
     def __init__(self, code: str, message: str, *, retryable: bool) -> None:
         super().__init__(message)

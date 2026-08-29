@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from agent_api.api.security import Principal
-from agent_api.domain.errors import NotFoundError
+from agent_api.domain.errors import ConflictError, NotFoundError
 
 
 class ConsumerProjectReader(Protocol):
@@ -94,6 +94,9 @@ class DraftGenerationService:
         version = await self._store.get_version(principal.workspace_id, content_version_id)
         if version is None:
             raise NotFoundError(f"version {content_version_id} not found in this workspace")
+        if version.get("task_id") != task_id:
+            # in-workspace tenancy: a candidate must belong to THIS project
+            raise NotFoundError(f"version {content_version_id} does not belong to project {task_id}")
         try:
             return await self._store.save_draft(
                 principal.workspace_id,
@@ -102,5 +105,7 @@ class DraftGenerationService:
                 version.get("content", ""),
                 base_revision,
             )
-        except Exception:
+        except ConflictError:
             return None
+        # any non-conflict error (e.g. DB outage) must surface, not masquerade
+        # as a stale revision 409 (code review P2)

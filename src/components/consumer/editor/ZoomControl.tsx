@@ -2,25 +2,30 @@
 
 import styles from './consumer-editor.module.css'
 
-const MIN_ZOOM = 0.6
-const MAX_ZOOM = 1.6
-const STEP = 0.1
-
 interface ZoomControlProps {
   zoom: number
+  minZoom?: number
+  maxZoom?: number
+  step?: number
   onZoomChange(zoom: number): void
 }
 
-export function ZoomControl({ zoom, onZoomChange }: ZoomControlProps) {
-  const round = (value: number) => Math.round(value * 10) / 10
+export function ZoomControl({
+  zoom,
+  minZoom = 0.75,
+  maxZoom = 1.5,
+  step = 0.1,
+  onZoomChange,
+}: ZoomControlProps) {
+  const round = (value: number) => Math.round(value * 100) / 100
   return (
     <div className={styles.zoomControl} data-testid="zoom-control">
       <button
         type="button"
         aria-label="缩小"
         className={styles.zoomButton}
-        disabled={round(zoom - STEP) < MIN_ZOOM}
-        onClick={() => onZoomChange(round(zoom - STEP))}
+        disabled={round(zoom - step) < minZoom}
+        onClick={() => onZoomChange(round(zoom - step))}
       >
         −
       </button>
@@ -31,8 +36,8 @@ export function ZoomControl({ zoom, onZoomChange }: ZoomControlProps) {
         type="button"
         aria-label="放大"
         className={styles.zoomButton}
-        disabled={round(zoom + STEP) > MAX_ZOOM}
-        onClick={() => onZoomChange(round(zoom + STEP))}
+        disabled={round(zoom + step) > maxZoom}
+        onClick={() => onZoomChange(round(zoom + step))}
       >
         +
       </button>

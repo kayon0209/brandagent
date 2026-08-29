@@ -80,6 +80,7 @@
   font-size: 14px;
   line-height: 1.6;
   color: var(--ink, #27241f);
+  font-family: var(--serif, "Iowan Old Style", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", STSong, SimSun, serif);
 }
 
 .tags {

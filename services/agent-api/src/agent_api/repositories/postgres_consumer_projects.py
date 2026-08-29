@@ -178,6 +178,14 @@ class PostgresConsumerProjectStore:
     async def ensure_draft(self, workspace_id: str, task_id: str) -> dict:
         async with self._pool.connection() as connection:
             await self._scope(connection, workspace_id)
+            # ownership guard (security review P2): a consumer_projects row must
+            # exist for THIS workspace before a draft can materialize
+            cursor = await connection.execute(
+                "SELECT 1 FROM consumer_projects WHERE workspace_id=%s AND task_id=%s",
+                (workspace_id, task_id),
+            )
+            if await cursor.fetchone() is None:
+                raise NotFoundError(f"project {task_id} not found in this workspace")
             await connection.execute(
                 """INSERT INTO consumer_drafts (task_id, workspace_id, revision, document, plain_text)
                    VALUES (%s, %s, 0, %s::jsonb, '')

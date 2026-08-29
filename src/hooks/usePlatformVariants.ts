@@ -1,24 +1,23 @@
 'use client'
 
 /**
- * Platform variants state hook (upgrade plan task 12).
- *
- * Loads the preview (never approval-gated), triggers generation and
- * per-channel regeneration, and keeps the previous version visible while
- * generating or after a failure.
+ * Platform variants state hook (task 12 + Phase 5 review fix):
+ * network/server failures surface an honest error state — never a fake
+ * "no master" empty state — and error codes travel with the state.
  */
 
 import { useCallback, useEffect, useState } from 'react'
 
-import { brandFlowRequest } from '@/lib/api/brandflow'
+import { brandFlowRequest, BrandFlowApiError } from '@/lib/api/brandflow'
 import type { ChannelVariantState } from '@/components/consumer/preview/PlatformPreview'
 
-export type VariantsStatus = 'no_master' | 'generating' | 'failed' | 'ready'
+export type VariantsStatus = 'no_master' | 'generating' | 'failed' | 'ready' | 'error'
 
 export interface VariantsState {
   status: VariantsStatus
   channels: Record<string, ChannelVariantState | undefined>
   failedChannels: Record<string, { retryable: boolean } | undefined>
+  error?: { code: string; message: string }
 }
 
 interface GenerateResult {
@@ -44,9 +43,19 @@ export function usePlatformVariants(projectId: string) {
         channels: data.channels ?? {},
         failedChannels: {},
       })
-    } catch {
-      setState({ status: 'no_master', channels: {}, failedChannels: {} })
+    } catch (error) {
+      // honest error state; a transport failure is NOT "no master"
+      setState({
+        status: 'error',
+        channels: previousChannels(state),
+        failedChannels: {},
+        error: {
+          code: error instanceof BrandFlowApiError ? error.code : 'NETWORK_ERROR',
+          message: error instanceof Error ? error.message : '网络出了点问题',
+        },
+      })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
   useEffect(() => {
@@ -72,9 +81,18 @@ export function usePlatformVariants(projectId: string) {
         failedChannels,
       }))
       await load()
-    } catch {
-      setState(previous => ({ ...previous, status: 'failed' }))
+    } catch (error) {
+      setState({
+        status: 'failed',
+        channels: previousChannels(state),
+        failedChannels: {},
+        error: {
+          code: error instanceof BrandFlowApiError ? error.code : 'NETWORK_ERROR',
+          message: error instanceof Error ? error.message : '生成失败，上一版仍可查看',
+        },
+      })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load, projectId])
 
   const regenerate = useCallback(
@@ -90,12 +108,25 @@ export function usePlatformVariants(projectId: string) {
           { method: 'POST' },
         )
         await load()
-      } catch {
-        setState(previous => ({ ...previous, status: 'failed' }))
+      } catch (error) {
+        setState({
+          status: 'failed',
+          channels: previousChannels(state),
+          failedChannels: {},
+          error: {
+            code: error instanceof BrandFlowApiError ? error.code : 'NETWORK_ERROR',
+            message: error instanceof Error ? error.message : '重新生成失败，上一版仍可查看',
+          },
+        })
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [generate, load, projectId],
   )
 
   return { state, generate, regenerate, reload: load }
+}
+
+function previousChannels(state: VariantsState): Record<string, ChannelVariantState | undefined> {
+  return state.channels
 }

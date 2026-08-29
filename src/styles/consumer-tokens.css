@@ -1,14 +1,23 @@
-/* Shared consumer design tokens (upgrade plan task 10).
-   Baseline: _sandbox/consumer-ui-concept/index-v4.html */
+/* Shared consumer design tokens (plan §8.2).
+   Baseline: _sandbox/consumer-ui-concept/index-v4.html — ported verbatim. */
 
 :root {
+  --canvas: #e9e5dc;
   --paper: #fffdf8;
   --paper-warm: #f5f1e8;
-  --paper-edge: rgba(39, 36, 31, 0.08);
+  --sand: #e9e0cf;
+  --sand-deep: #d7c8ae;
+  --brown: #6f5d49;
   --ink: #27241f;
   --ink-soft: #514b43;
+  --muted: #8a8278;
+  --line: #ddd6ca;
+  --line-dark: #beb4a6;
   --accent: #ad5641;
   --accent-soft: #f3e5df;
-  --safe: #4f7a4f;
+  --green: #657764;
   --danger: #a33d2e;
+  --serif: "Iowan Old Style", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", STSong, SimSun, serif;
+  --sans: "Aptos", "Avenir Next", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
 }

@@ -121,6 +121,9 @@ class PostgresConsumerVariantStore:
                     f"brandagent:variant:{task_id}:{channel}:{master_snapshot_hash}:{prompt_version}:{next_number}",
                 )
             )
+            # concurrent requests derive the same deterministic id: DO NOTHING
+            # then re-SELECT turns the race into an idempotent replay instead
+            # of a unique-violation 500 (code review P1).
             cursor = await connection.execute(
                 """INSERT INTO content_versions
                        (content_version_id, workspace_id, task_id, content_type, channel,
@@ -131,6 +134,7 @@ class PostgresConsumerVariantStore:
                    VALUES (%s, %s, %s, 'channel_draft', %s, %s, %s, %s::jsonb,
                            'passed', 'not_required', %s, 'model', 'consumer-variant',
                            %s, 'consumer platform variant', %s)
+                   ON CONFLICT (content_version_id) DO NOTHING
                    RETURNING content_version_id, task_id, workspace_id, content_type, channel,
                              version_number, content, master_content_version_id,
                              immutable_hash, prompt_version""",
@@ -148,7 +152,19 @@ class PostgresConsumerVariantStore:
                 ),
             )
             row = await cursor.fetchone()
-            return {**row, "idempotent": False}
+            if row is not None:
+                return {**row, "idempotent": False}
+            # lost the race: the winner inserted the same deterministic id
+            cursor = await connection.execute(
+                """SELECT content_version_id, task_id, workspace_id, content_type, channel,
+                          version_number, content, master_content_version_id,
+                          immutable_hash, prompt_version
+                   FROM content_versions
+                   WHERE workspace_id=%s AND content_version_id=%s""",
+                (workspace_id, version_id),
+            )
+            winner = await cursor.fetchone()
+            return {**winner, "idempotent": True}
 
     # ------------------------------------------------------------------
     # events ride the consumer project store

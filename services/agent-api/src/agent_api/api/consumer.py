@@ -288,11 +288,15 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
             raise HTTPException(status_code=422, detail="baseRevision (int) and document (object) are required")
         try:
             await apps.drafts.get_or_create_draft(actor, task_id)  # ensure the draft exists (404 if project is foreign)
+            # plain_text is derived SERVER-side from the canonical document —
+            # a buggy client can never desync the two (code review P2)
+            from agent_api.application.drafts import plain_text_of
+
             draft = await apps.drafts.autosave(
                 actor,
                 task_id,
                 document,
-                str(body.get("plainText", "")),
+                plain_text_of(document),
                 expected_revision=base_revision,
             )
         except NotFoundError:
@@ -508,11 +512,22 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
 
     @router.post("/{task_id}/variants/{channel}/regenerate")
     async def variants_regenerate(task_id: str, channel: str, actor: Principal = Depends(principal)):
-        from agent_api.application.platform_variants import VariantGenerationError
+        from uuid import uuid4
+
+        from agent_api.application.platform_variants import (
+            ALLOWED_CONSUMER_CHANNELS,
+            VariantGenerationError,
+        )
+        from agent_api.application.usage import ledgered_call
         from agent_api.domain.errors import ApplicationError, NotFoundError
 
+        if channel not in ALLOWED_CONSUMER_CHANNELS:
+            raise HTTPException(status_code=404, detail=f"不支持的渠道：{channel}")
+
+        request_id = f"regen-{uuid4().hex}"
         try:
-            return {"success": True, "data": await apps.variants.regenerate(actor, task_id, channel)}
+            async with ledgered_call(apps.usage_ledger, actor, request_id=request_id, operation="variants", estimated_tokens=1200):
+                return {"success": True, "data": await apps.variants.regenerate(actor, task_id, channel)}
         except NotFoundError:
             raise HTTPException(status_code=404, detail="先采用当前稿，再生成平台版本") from None
         except VariantGenerationError as error:
@@ -521,6 +536,11 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
                 content={"success": False, "error": {"code": error.code, "message": str(error), "retryable": error.retryable}},
             )
         except ApplicationError as error:
+            if error.code == "QUOTA_EXCEEDED":
+                return JSONResponse(
+                    status_code=409,
+                    content={"success": False, "error": {"code": "QUOTA_EXCEEDED", "message": str(error)}},
+                )
             raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
 
     @router.post("/{task_id}/export/prepare")
