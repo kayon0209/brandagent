@@ -41,3 +41,37 @@ test('manuscript editor autosaves and recovers from revision conflicts', async (
   // a stale save keeps the local text and shows the recovery entry
   await page.evaluate(() => window.dispatchEvent(new Event('beforeunload')))
 })
+
+test('platform preview renders three structures and never asks for approval', async ({ page }) => {
+  await page.route('**/api/v1/consumer/projects/*/draft', route =>
+    route.fulfill({ json: { success: true, data: draft } }),
+  )
+  await page.route('**/api/v1/consumer/projects/*/variants/preview', route =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          requires_approval: false,
+          master_content_version_id: 'mv-1',
+          channels: {
+            wechat_website: { content: '公众号第一段。\n公众号第二段。', content_version_id: 'cv-1', master_content_version_id: 'mv-1' },
+            xiaohongshu: { content: '笔记正文一句话。 #标签一 #标签二', content_version_id: 'cv-2', master_content_version_id: 'mv-1' },
+            video_script_60s: { content: '开场口播。\n核心卖点。', content_version_id: 'cv-3', master_content_version_id: 'mv-1' },
+          },
+        },
+      },
+    }),
+  )
+
+  await page.goto(`/app/write/${draft.task_id}#核心观点`)
+  await expect(page.getByText('平台预览')).toBeVisible()
+  // three independent structures, not one text re-skinned
+  await expect(page.getByTestId('wechat-paragraphs')).toBeVisible()
+  await page.getByRole('tab', { name: '小红书' }).click()
+  await expect(page.getByTestId('xiaohongshu-tags')).toBeVisible()
+  await page.getByRole('tab', { name: '口播' }).click()
+  await expect(page.getByTestId('video-script-lines')).toBeVisible()
+  // honest empty review, no fake all-passed
+  await expect(page.getByText('发布前再看一眼')).toBeVisible()
+  await expect(page.getByText(/暂未发现需要你确认的地方/)).toBeVisible()
+})
