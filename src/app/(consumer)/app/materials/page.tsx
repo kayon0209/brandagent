@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { useConsumerMaterials } from '@/hooks/useConsumerMaterials'
 import { MaterialCard } from '@/components/consumer/materials/MaterialCard'
 import { MaterialSourceDetail } from '@/components/consumer/materials/MaterialSourceDetail'
+import styles from '@/components/consumer/materials/consumer-materials.module.css'
 
 export default function MaterialsPage() {
   const { loading, error, materials, excerpts, refresh, loadExcerpts } = useConsumerMaterials()
@@ -23,7 +24,7 @@ export default function MaterialsPage() {
   }
 
   return (
-    <div className="consumer-materials-page">
+    <div className={styles.page}>
       <h1>素材</h1>
 
       {error && (
@@ -41,7 +42,7 @@ export default function MaterialsPage() {
         <p>还没有素材。从一篇笔记、一段录音稿或一个链接开始。</p>
       )}
 
-      <ul className="consumer-materials-list">
+      <ul className={styles.documentList}>
         {materials.map(material => (
           <li key={material.document_id}>
             <button type="button" onClick={() => void openDocument(material.document_id)}>

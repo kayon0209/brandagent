@@ -9,6 +9,7 @@
 
 import type { ConsumerMaterialExcerpt, MaterialLinkState } from '@/types/consumer.types'
 import { MaterialCard } from './MaterialCard'
+import styles from './consumer-materials.module.css'
 
 interface MaterialDrawerProps {
   materials: ConsumerMaterialExcerpt[]
@@ -34,10 +35,10 @@ export function MaterialDrawer({
   linkStates = {},
 }: MaterialDrawerProps) {
   return (
-    <aside className="consumer-material-drawer" data-open={open}>
+    <aside className={styles.drawer} data-open={open}>
       <button
         type="button"
-        className="consumer-material-drawer-toggle"
+        className={styles.toggle}
         aria-expanded={open}
         onClick={onToggle}
       >
@@ -45,11 +46,11 @@ export function MaterialDrawer({
       </button>
 
       {open && (
-        <div className="consumer-material-drawer-body" aria-label="素材抽屉内容区">
-          <h3 className="consumer-material-drawer-title">素材</h3>
+        <div className={styles.body} aria-label="素材抽屉内容区">
+          <h3 className={styles.title}>素材</h3>
 
           {error && !loading && (
-            <div className="consumer-material-state" role="alert">
+            <div className={styles.state} role="alert">
               <p>处理失败：{error.message}</p>
               <button type="button" onClick={() => onRetry?.()}>
                 重试
@@ -58,13 +59,13 @@ export function MaterialDrawer({
           )}
 
           {!error && loading && (
-            <div className="consumer-material-state">
+            <div className={styles.state}>
               <p>正在处理你的素材…</p>
             </div>
           )}
 
           {!error && !loading && materials.length === 0 && (
-            <div className="consumer-material-state">
+            <div className={styles.state}>
               <p>还没有素材。从一篇笔记、一段录音稿或一个链接开始。</p>
               <button type="button" onClick={() => onImport?.()}>
                 导入素材

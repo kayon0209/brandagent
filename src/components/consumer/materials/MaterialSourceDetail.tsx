@@ -8,6 +8,7 @@
  */
 
 import type { ConsumerMaterialExcerpt } from '@/types/consumer.types'
+import styles from './consumer-materials.module.css'
 
 interface MaterialSourceDetailProps {
   excerpt: ConsumerMaterialExcerpt
@@ -15,10 +16,10 @@ interface MaterialSourceDetailProps {
 
 export function MaterialSourceDetail({ excerpt }: MaterialSourceDetailProps) {
   return (
-    <div className="consumer-material-source-detail">
+    <div className={styles.sourceDetail}>
       <h4>来源</h4>
       <blockquote>{excerpt.excerpt_text}</blockquote>
-      <p className="consumer-material-provenance">
+      <p className={styles.provenance}>
         溯源编号已验证：{excerpt.provenance_hash.slice(0, 8)}…
       </p>
     </div>

@@ -10,6 +10,7 @@
 import { useState } from 'react'
 
 import type { ConsumerMaterialExcerpt, MaterialLinkState } from '@/types/consumer.types'
+import styles from './consumer-materials.module.css'
 
 interface MaterialCardProps {
   excerpt: ConsumerMaterialExcerpt
@@ -28,21 +29,20 @@ export function MaterialCard({ excerpt, onLink, linkState }: MaterialCardProps) 
   const [sourceOpen, setSourceOpen] = useState(false)
 
   return (
-    <article className="consumer-material-card" data-excerpt-id={excerpt.excerpt_id}>
-      <p className="consumer-material-summary">{excerpt.summary}</p>
+    <article className={styles.card} data-excerpt-id={excerpt.excerpt_id}>
+      <p className={styles.summary}>{excerpt.summary}</p>
 
       {excerpt.tags.length > 0 && (
-        <ul className="consumer-material-tags">
+        <ul className={styles.tags}>
           {excerpt.tags.map(tag => (
             <li key={tag}>#{tag}</li>
           ))}
         </ul>
       )}
 
-      <div className="consumer-material-actions">
+      <div className={styles.actions}>
         <button
           type="button"
-          className="consumer-material-source-toggle"
           aria-expanded={sourceOpen}
           onClick={() => setSourceOpen(open => !open)}
         >
@@ -52,7 +52,6 @@ export function MaterialCard({ excerpt, onLink, linkState }: MaterialCardProps) 
         {onLink && (
           <button
             type="button"
-            className="consumer-material-link"
             disabled={linkState === 'linked' || linkState === 'linking'}
             onClick={() => onLink(excerpt.excerpt_id)}
           >
@@ -62,7 +61,7 @@ export function MaterialCard({ excerpt, onLink, linkState }: MaterialCardProps) 
       </div>
 
       {sourceOpen && (
-        <div className="consumer-material-source">
+        <div className={styles.source}>
           <blockquote>{excerpt.excerpt_text}</blockquote>
         </div>
       )}
