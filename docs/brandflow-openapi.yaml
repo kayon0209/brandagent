@@ -1630,6 +1630,130 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/projects/{task_id}/variants/preview:
+    get:
+      summary: Preview Platform Variants
+      description: Safe C-end preview for the default channels; requires NO approval. Empty before generation; no master snapshot means the UI asks the user to adopt the draft first.
+      operationId: variants_preview_api_v1_consumer_projects__task_id__variants_preview_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '200':
+          description: Preview data (never requires approval)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Project not found in this workspace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/projects/{task_id}/variants/generate:
+    post:
+      summary: Generate Platform Variants
+      description: Generate channel variants bound to the adopted master snapshot (wechat_website, xiaohongshu, video_script_60s). Idempotent per master hash + channel + prompt version; failures keep the previous version and stay retryable; unsupported factual claims reject the output.
+      operationId: variants_generate_api_v1_consumer_projects__task_id__variants_generate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '200':
+          description: Per-channel ready/failed statuses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: No adopted master snapshot (adopt the draft first)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '502':
+          description: Generation unavailable; previous versions kept
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/projects/{task_id}/variants/{channel}/regenerate:
+    post:
+      summary: Regenerate One Channel Variant
+      description: Adds a NEW channel version and never mutates the master; replaying the same regenerate request hits the same result.
+      operationId: variants_regenerate_api_v1_consumer_projects__task_id__variants__channel__regenerate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: channel
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - wechat_website
+          - xiaohongshu
+          - video_script_60s
+          title: Channel
+      responses:
+        '200':
+          description: Regenerated version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: No adopted master snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/projects/{task_id}/export/prepare:
+    post:
+      summary: Prepare Export Snapshot
+      description: Pins the current adopted master snapshot for export. Publishing itself stays fail-closed and still requires the MCP-side persisted high-risk authorization.
+      operationId: variants_prepare_export_api_v1_consumer_projects__task_id__export_prepare_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '200':
+          description: Snapshot pinned; published=false; requires_approval_to_publish=true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: No adopted master snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
 components:
   schemas:
     BriefInput:

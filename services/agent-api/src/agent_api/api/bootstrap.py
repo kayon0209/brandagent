@@ -94,6 +94,16 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
     suggestion_store = PostgresSuggestionStore(database_url, draft_store=consumer_project_store)
     consumer_assist = EditorialAssistService(store=suggestion_store, provider=provider)
 
+    from agent_api.application.platform_variants import PlatformVariantService
+    from agent_api.repositories.postgres_consumer_variants import PostgresConsumerVariantStore
+
+    variant_store = PostgresConsumerVariantStore(database_url, project_store=consumer_project_store)
+    consumer_variants = PlatformVariantService(
+        store=variant_store,
+        generator=ConsumerChannelGeneratorAdapter(provider=provider),
+        channels=("wechat_website", "xiaohongshu", "video_script_60s"),
+    )
+
     class ConsumerApps:
         """ConsumerProjectsApp protocol bundle wired into create_app."""
 
@@ -102,6 +112,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             self.drafts = consumer_drafts
             self.generation = consumer_generation
             self.assist = consumer_assist
+            self.variants = consumer_variants
 
     consumer_apps = ConsumerApps()
     provider = ZhipuProvider(api_key=settings.require_glm_key(), model=settings.glm_model)
@@ -129,6 +140,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             await material_store.open()
             await consumer_project_store.open()
             await suggestion_store.open()
+            await variant_store.open()
             stack.push_async_callback(task_repository.close)
             stack.push_async_callback(workflow_repository.close)
             stack.push_async_callback(channel_store.close)
@@ -137,6 +149,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             stack.push_async_callback(material_store.close)
             stack.push_async_callback(consumer_project_store.close)
             stack.push_async_callback(suggestion_store.close)
+            stack.push_async_callback(variant_store.close)
             await mcp_client.discover()
             saver = await stack.enter_async_context(postgres_checkpointer(checkpoint_database_url))
             runtime.delegate = TaskWorkflowService(

@@ -132,11 +132,19 @@ class ConsumerProjectsApp(Protocol):
     drafts: ConsumerDrafts
     generation: ConsumerGeneration
     assist: ConsumerAssist
+    variants: ConsumerVariants
 
 
 class ConsumerAssist(Protocol):
     async def propose(self, principal: Principal, task_id: str, *, action: str, selected_text: str, block_id: str, base_revision: int) -> dict | None: ...
     async def accept(self, principal: Principal, task_id: str, suggestion_id: str, *, base_revision: int) -> dict: ...
+
+
+class ConsumerVariants(Protocol):
+    async def preview(self, principal: Principal, task_id: str) -> dict: ...
+    async def generate_variants(self, principal: Principal, task_id: str) -> dict: ...
+    async def regenerate(self, principal: Principal, task_id: str, channel: str) -> dict: ...
+    async def prepare_export(self, principal: Principal, task_id: str) -> dict: ...
 
 
 class ConsumerProjects(Protocol):
@@ -419,5 +427,65 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
         except ApplicationError as error:
             raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
         return {"success": True, "data": result}
+
+    # ------------------------------------------------------------------
+    # platform variants + pre-publish review (plan task 11)
+    # ------------------------------------------------------------------
+
+    @router.get("/{task_id}/variants/preview")
+    async def variants_preview(task_id: str, actor: Principal = Depends(principal)):
+        from agent_api.domain.errors import ApplicationError, NotFoundError
+
+        try:
+            return {"success": True, "data": await apps.variants.preview(actor, task_id)}
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="Project not found") from None
+        except ApplicationError as error:
+            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+
+    @router.post("/{task_id}/variants/generate")
+    async def variants_generate(task_id: str, actor: Principal = Depends(principal)):
+        from agent_api.application.platform_variants import VariantGenerationError
+        from agent_api.domain.errors import ApplicationError, NotFoundError
+
+        try:
+            return {"success": True, "data": await apps.variants.generate_variants(actor, task_id)}
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="先采用当前稿，再生成平台版本") from None
+        except VariantGenerationError as error:
+            return JSONResponse(
+                status_code=502,
+                content={"success": False, "error": {"code": error.code, "message": str(error), "retryable": error.retryable}},
+            )
+        except ApplicationError as error:
+            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+
+    @router.post("/{task_id}/variants/{channel}/regenerate")
+    async def variants_regenerate(task_id: str, channel: str, actor: Principal = Depends(principal)):
+        from agent_api.application.platform_variants import VariantGenerationError
+        from agent_api.domain.errors import ApplicationError, NotFoundError
+
+        try:
+            return {"success": True, "data": await apps.variants.regenerate(actor, task_id, channel)}
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="先采用当前稿，再生成平台版本") from None
+        except VariantGenerationError as error:
+            return JSONResponse(
+                status_code=502,
+                content={"success": False, "error": {"code": error.code, "message": str(error), "retryable": error.retryable}},
+            )
+        except ApplicationError as error:
+            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+
+    @router.post("/{task_id}/export/prepare")
+    async def variants_prepare_export(task_id: str, actor: Principal = Depends(principal)):
+        from agent_api.domain.errors import ApplicationError, NotFoundError
+
+        try:
+            return {"success": True, "data": await apps.variants.prepare_export(actor, task_id)}
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="先采用当前稿，再导出") from None
+        except ApplicationError as error:
+            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
 
     return router

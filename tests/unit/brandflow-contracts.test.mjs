@@ -299,3 +299,34 @@ test('OpenAPI documents the anchored editorial suggestion endpoints', async () =
     'accept must document the stale-selection 409',
   )
 })
+
+test('OpenAPI documents the consumer platform variant endpoints', async () => {
+  const contract = yaml.load(await read('docs/brandflow-openapi.yaml'))
+  const paths = contract.paths
+  for (const path of [
+    '/api/v1/consumer/projects/{task_id}/variants/preview',
+    '/api/v1/consumer/projects/{task_id}/variants/generate',
+    '/api/v1/consumer/projects/{task_id}/variants/{channel}/regenerate',
+    '/api/v1/consumer/projects/{task_id}/export/prepare',
+  ]) {
+    assert.ok(paths[path], `variant path ${path} is missing from the OpenAPI contract`)
+  }
+  const preview = paths['/api/v1/consumer/projects/{task_id}/variants/preview'].get
+  const previewResponses = JSON.stringify(preview.responses)
+  assert.ok(
+    !previewResponses.includes('403'),
+    'plain preview must not require approval (no 403 documented)',
+  )
+  const regen = paths['/api/v1/consumer/projects/{task_id}/variants/{channel}/regenerate'].post
+  const channelEnum = regen.parameters.find(parameter => parameter.name === 'channel').schema.enum
+  assert.deepEqual(
+    channelEnum,
+    ['wechat_website', 'xiaohongshu', 'video_script_60s'],
+    'consumer default channels must be pinned in the contract',
+  )
+  const exportPrepare = paths['/api/v1/consumer/projects/{task_id}/export/prepare'].post
+  assert.ok(
+    exportPrepare.description.includes('fail-closed'),
+    'prepare export must document that publishing stays fail-closed',
+  )
+})

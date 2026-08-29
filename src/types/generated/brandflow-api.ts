@@ -797,6 +797,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/consumer/projects/{task_id}/variants/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Platform Variants
+         * @description Safe C-end preview for the default channels; requires NO approval. Empty before generation; no master snapshot means the UI asks the user to adopt the draft first.
+         */
+        get: operations["variants_preview_api_v1_consumer_projects__task_id__variants_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consumer/projects/{task_id}/variants/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Platform Variants
+         * @description Generate channel variants bound to the adopted master snapshot (wechat_website, xiaohongshu, video_script_60s). Idempotent per master hash + channel + prompt version; failures keep the previous version and stay retryable; unsupported factual claims reject the output.
+         */
+        post: operations["variants_generate_api_v1_consumer_projects__task_id__variants_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consumer/projects/{task_id}/variants/{channel}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate One Channel Variant
+         * @description Adds a NEW channel version and never mutates the master; replaying the same regenerate request hits the same result.
+         */
+        post: operations["variants_regenerate_api_v1_consumer_projects__task_id__variants__channel__regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consumer/projects/{task_id}/export/prepare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prepare Export Snapshot
+         * @description Pins the current adopted master snapshot for export. Publishing itself stays fail-closed and still requires the MCP-side persisted high-risk authorization.
+         */
+        post: operations["variants_prepare_export_api_v1_consumer_projects__task_id__export_prepare_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2785,6 +2865,140 @@ export interface operations {
             };
             /** @description Selection stale; the draft is untouched */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+        };
+    };
+    variants_preview_api_v1_consumer_projects__task_id__variants_preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preview data (never requires approval) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+            /** @description Project not found in this workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+        };
+    };
+    variants_generate_api_v1_consumer_projects__task_id__variants_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Per-channel ready/failed statuses */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+            /** @description No adopted master snapshot (adopt the draft first) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+            /** @description Generation unavailable; previous versions kept */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+        };
+    };
+    variants_regenerate_api_v1_consumer_projects__task_id__variants__channel__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                channel: "wechat_website" | "xiaohongshu" | "video_script_60s";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Regenerated version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+            /** @description No adopted master snapshot */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+        };
+    };
+    variants_prepare_export_api_v1_consumer_projects__task_id__export_prepare_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Snapshot pinned; published=false; requires_approval_to_publish=true */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+            /** @description No adopted master snapshot */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
