@@ -1,15 +1,18 @@
 'use client'
 
 /**
- * Write page (consumption plan tasks 9-10 + Phase 5 review fixes):
+ * Write page (plan tasks 9-10 + Phase 5 review fixes):
  * - "采用这版" adopts through the editor handle so the REAL post-flush
  *   revision is used (review P0: hardcoded baseRevision:0 broke adopt);
- * - the right rail follows the warm baseline with a soft left divider.
+ * - the right rail follows the warm baseline with a soft left divider;
+ * - params are read via useParams (Next 14 has no promise-params unwrapping).
  */
 
-import { use, useRef } from 'react'
+import { useParams } from 'next/navigation'
+import { useRef } from 'react'
 
-import { ConsumerEditor, type ConsumerEditorHandle } from '@/components/consumer/editor/ConsumerEditor'
+import { ConsumerEditorClient } from '@/components/consumer/editor/ConsumerEditorClient'
+import type { ConsumerEditorHandle } from '@/components/consumer/editor/ConsumerEditor'
 import { PlatformPreview } from '@/components/consumer/preview/PlatformPreview'
 import { PrePublishReview } from '@/components/consumer/preview/PrePublishReview'
 import { PrimaryActionBar } from '@/components/consumer/preview/PrimaryActionBar'
@@ -31,8 +34,9 @@ const api: ConsumerDraftApi = {
   acceptSuggestion: acceptConsumerSuggestion as unknown as ConsumerDraftApi['acceptSuggestion'],
 }
 
-export default function ProjectWritePage({ params }: { params: Promise<{ projectId: string }> }) {
-  const { projectId } = use(params)
+export default function ProjectWritePage() {
+  const routeParams = useParams<{ projectId: string }>()
+  const projectId = routeParams.projectId
   const editorRef = useRef<ConsumerEditorHandle>(null)
   const variants = usePlatformVariants(projectId)
   // core idea arrives from the project payload; MVP reads it from URL hash
@@ -46,8 +50,8 @@ export default function ProjectWritePage({ params }: { params: Promise<{ project
 
   return (
     <div className={styles.writeLayout} data-testid="write-layout">
-      <ConsumerEditor
-        ref={editorRef}
+      <ConsumerEditorClient
+        handleRef={editorRef}
         projectId={projectId}
         coreIdea={coreIdea}
         api={api}

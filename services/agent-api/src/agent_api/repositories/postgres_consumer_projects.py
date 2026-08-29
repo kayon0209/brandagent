@@ -31,6 +31,23 @@ class PostgresConsumerProjectStore:
     async def _scope(self, connection, workspace_id: str) -> None:
         await connection.execute("SELECT set_config('app.workspace_id',%s,true)", (workspace_id,))
 
+    async def _ensure_workspace(self, connection, workspace_id: str) -> None:
+        """Idempotent workspace row so first-write consumers never hit the FK.
+
+        Live-stack audit finding: a brand-new user's first consumer write
+        (create project / import material) crashed with a 500 because the
+        stable dev-auth workspace had no `workspaces` row yet. The B-end
+        bootstraps on entry; C-end surfaces write first, so the store
+        guarantees the row itself (ON CONFLICT DO NOTHING).
+        """
+
+        await connection.execute(
+            """INSERT INTO workspaces (workspace_id, name, slug, created_by)
+               VALUES (%s, '个人工作区', %s, 'consumer')
+               ON CONFLICT (workspace_id) DO NOTHING""",
+            (workspace_id, f"ws-{workspace_id[:12]}"),
+        )
+
     # ------------------------------------------------------------------
     # Projects
     # ------------------------------------------------------------------
@@ -39,6 +56,7 @@ class PostgresConsumerProjectStore:
         task_id = str(uuid4())
         async with self._pool.connection() as connection, connection.transaction():
             await self._scope(connection, workspace_id)
+            await self._ensure_workspace(connection, workspace_id)
             # One transaction: content_task + content_brief + consumer_project + consumer_draft.
             await connection.execute(
                 """INSERT INTO content_tasks
@@ -186,6 +204,7 @@ class PostgresConsumerProjectStore:
             )
             if await cursor.fetchone() is None:
                 raise NotFoundError(f"project {task_id} not found in this workspace")
+            await self._ensure_workspace(connection, workspace_id)
             await connection.execute(
                 """INSERT INTO consumer_drafts (task_id, workspace_id, revision, document, plain_text)
                    VALUES (%s, %s, 0, %s::jsonb, '')

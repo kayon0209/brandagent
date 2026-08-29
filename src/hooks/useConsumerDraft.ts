@@ -71,7 +71,10 @@ export function useConsumerDraft(projectId: string, api: ConsumerDraftApi) {
   }, [api, projectId])
 
   useEffect(() => {
-    void load()
+    load().catch(() => {
+      // 401/network on boot is surfaced as state, never an unhandled rejection
+      // (audit fix: the error page leaked two unhandled promise rejections)
+    })
   }, [load])
 
   const flush = useCallback(async () => {

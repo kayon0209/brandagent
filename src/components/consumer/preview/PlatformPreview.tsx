@@ -61,7 +61,7 @@ export function PlatformPreview({ state, onGenerate, onRegenerate, onAdopt }: Pl
 
       {state.status === 'error' && (
         <p className={styles.hint} data-testid="variant-error">
-          预览暂时打不开：{state.error?.message ?? '网络出了点问题'}。你的稿纸不受影响。
+          预览暂时打不开：{state.error?.message?.replace(/。+$/, '') ?? '网络出了点问题'}。你的稿纸不受影响。
         </p>
       )}
 

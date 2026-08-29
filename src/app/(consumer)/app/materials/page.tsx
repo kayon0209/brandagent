@@ -38,7 +38,9 @@ export default function MaterialsPage() {
 
       {loading && <p>正在处理你的素材…</p>}
 
-      {!loading && materials.length === 0 && (
+      {/* the honest empty state only renders when loading is done AND there
+          is no failure — never stack both (audit finding) */}
+      {!loading && !error && materials.length === 0 && (
         <p>还没有素材。从一篇笔记、一段录音稿或一个链接开始。</p>
       )}
 

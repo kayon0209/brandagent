@@ -34,6 +34,12 @@ class PostgresUsageLedgerStore:
         async with self._pool.connection() as connection:
             await self._scope(connection, workspace_id)
             await connection.execute(
+                """INSERT INTO workspaces (workspace_id, name, slug, created_by)
+                   VALUES (%s, '个人工作区', %s, 'consumer')
+                   ON CONFLICT (workspace_id) DO NOTHING""",
+                (workspace_id, f"ws-{workspace_id[:12]}"),
+            )
+            await connection.execute(
                 """INSERT INTO creator_profiles (workspace_id, user_id)
                    VALUES (%s, %s)
                    ON CONFLICT (workspace_id, user_id) DO NOTHING""",

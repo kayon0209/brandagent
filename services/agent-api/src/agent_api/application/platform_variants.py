@@ -86,14 +86,25 @@ class ConsumerChannelGeneratorAdapter:
     async def generate(self, *, channel: str, master_content: str, core_idea: str) -> dict:
         import json as _json
 
-        result = await self._provider.generate(
-            system=_SYSTEM_PROMPT,
-            prompt=_json.dumps(
-                {"channel": channel, "master_content": master_content, "core_idea": core_idea},
-                ensure_ascii=False,
-            ),
-            prompt_version=self._PROMPT_VERSION,
-        )
+        from agent_api.providers.base import ProviderExecutionError
+
+        try:
+            result = await self._provider.generate(
+                system=_SYSTEM_PROMPT,
+                prompt=_json.dumps(
+                    {"channel": channel, "master_content": master_content, "core_idea": core_idea},
+                    ensure_ascii=False,
+                ),
+                prompt_version=self._PROMPT_VERSION,
+            )
+        except ProviderExecutionError as error:
+            # never leak provider exceptions past the variant boundary
+            # (live-stack audit: an unwrapped rejection surfaced as a 500)
+            raise VariantGenerationError(
+                error.code if error.code in {"MODEL_CALL_FAILED", "MODEL_TIMEOUT"} else "VARIANT_PROVIDER_FAILED",
+                f"{channel} 版本生成暂时不可用",
+                retryable=error.retryable,
+            ) from error
         try:
             payload = _json.loads(result.content)
             content = str(payload["content"])

@@ -41,6 +41,17 @@ class PostgresMaterialStore:
     async def _scope(self, connection, workspace_id: str) -> None:
         await connection.execute("SELECT set_config('app.workspace_id',%s,true)", (workspace_id,))
 
+    async def _ensure_workspace(self, connection, workspace_id: str) -> None:
+        """Idempotent workspace row: the C-end's first import can happen
+        before any bootstrap call (live-stack audit FK fix)."""
+
+        await connection.execute(
+            """INSERT INTO workspaces (workspace_id, name, slug, created_by)
+               VALUES (%s, '个人工作区', %s, 'consumer')
+               ON CONFLICT (workspace_id) DO NOTHING""",
+            (workspace_id, f"ws-{workspace_id[:12]}"),
+        )
+
     # ------------------------------------------------------------------
     # Documents
     # ------------------------------------------------------------------
@@ -61,6 +72,7 @@ class PostgresMaterialStore:
     async def insert_document(self, workspace_id: str, material: ParsedMaterial, checksum: str, request_id: str) -> dict:
         async with self._pool.connection() as connection:
             await self._scope(connection, workspace_id)
+            await self._ensure_workspace(connection, workspace_id)
             cursor = await connection.execute(
                 """INSERT INTO source_documents
                        (workspace_id, document_name, document_type, version,
@@ -241,6 +253,7 @@ class PostgresMaterialStore:
         task_id = self._material_task_id(workspace_id)
         async with self._pool.connection() as connection:
             await self._scope(connection, workspace_id)
+            await self._ensure_workspace(connection, workspace_id)
             # Material events are not attached to a real content task; the
             # task_events FK requires a row, so ensure the synthetic task
             # exists (idempotent) before inserting the event.
