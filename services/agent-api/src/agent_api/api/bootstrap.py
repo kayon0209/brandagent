@@ -88,6 +88,11 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
         generator=GraphCandidateGenerator(provider=provider),
         projects=consumer_projects,
     )
+    from agent_api.repositories.postgres_suggestions import PostgresSuggestionStore
+    from agent_api.application.editorial_assist import EditorialAssistService
+
+    suggestion_store = PostgresSuggestionStore(database_url, draft_store=consumer_project_store)
+    consumer_assist = EditorialAssistService(store=suggestion_store, provider=provider)
 
     class ConsumerApps:
         """ConsumerProjectsApp protocol bundle wired into create_app."""
@@ -96,6 +101,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             self.projects = consumer_projects
             self.drafts = consumer_drafts
             self.generation = consumer_generation
+            self.assist = consumer_assist
 
     consumer_apps = ConsumerApps()
     provider = ZhipuProvider(api_key=settings.require_glm_key(), model=settings.glm_model)
@@ -122,6 +128,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             await knowledge_repository.open()
             await material_store.open()
             await consumer_project_store.open()
+            await suggestion_store.open()
             stack.push_async_callback(task_repository.close)
             stack.push_async_callback(workflow_repository.close)
             stack.push_async_callback(channel_store.close)
@@ -129,6 +136,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             stack.push_async_callback(knowledge_repository.close)
             stack.push_async_callback(material_store.close)
             stack.push_async_callback(consumer_project_store.close)
+            stack.push_async_callback(suggestion_store.close)
             await mcp_client.discover()
             saver = await stack.enter_async_context(postgres_checkpointer(checkpoint_database_url))
             runtime.delegate = TaskWorkflowService(

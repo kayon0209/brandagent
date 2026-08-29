@@ -1512,6 +1512,124 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/projects/{task_id}/suggestions:
+    post:
+      summary: Propose Selection Suggestion
+      description: Propose an anchored rewrite (expand/replace_example/shorten) over the user's current selection; the model only sees the selection, its context, and linked excerpts. Refuses untraceable facts with 422 SUGGESTION_REFUSED.
+      operationId: propose_suggestion_api_v1_consumer_projects__task_id__suggestions_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - action
+              - selectedText
+              - blockId
+              - baseRevision
+              properties:
+                action:
+                  type: string
+                  enum:
+                  - expand
+                  - replace_example
+                  - shorten
+                  title: Action
+                selectedText:
+                  type: string
+                  title: Selected Text
+                blockId:
+                  type: string
+                  title: Block Id
+                baseRevision:
+                  type: integer
+                  title: Base Revision
+      responses:
+        '200':
+          description: Suggestion proposed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '409':
+          description: Selection stale; reselect and retry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation error or untraceable fact refused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '502':
+          description: Assist provider unavailable; the draft is unchanged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/projects/{task_id}/suggestions/{suggestion_id}/accept:
+    post:
+      summary: Accept Selection Suggestion
+      description: Atomic accept; verifies revision, block, offsets and selection hash against the canonical server document, replaces the exact range, bumps the draft revision, and records a user-action event (not an enterprise approval). Idempotent replays return the accepted outcome.
+      operationId: accept_suggestion_api_v1_consumer_projects__task_id__suggestions__suggestion_id__accept_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: suggestion_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Suggestion Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - baseRevision
+              properties:
+                baseRevision:
+                  type: integer
+                  title: Base Revision
+      responses:
+        '200':
+          description: Applied (new revision returned)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '409':
+          description: Selection stale; the draft is untouched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Suggestion or draft not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
 components:
   schemas:
     BriefInput:

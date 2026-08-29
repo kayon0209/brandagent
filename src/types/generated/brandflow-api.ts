@@ -757,6 +757,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/consumer/projects/{task_id}/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Propose Selection Suggestion
+         * @description Propose an anchored rewrite (expand/replace_example/shorten) over the user's current selection; the model only sees the selection, its context, and linked excerpts. Refuses untraceable facts with 422 SUGGESTION_REFUSED.
+         */
+        post: operations["propose_suggestion_api_v1_consumer_projects__task_id__suggestions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consumer/projects/{task_id}/suggestions/{suggestion_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Selection Suggestion
+         * @description Atomic accept; verifies revision, block, offsets and selection hash against the canonical server document, replaces the exact range, bumps the draft revision, and records a user-action event (not an enterprise approval). Idempotent replays return the accepted outcome.
+         */
+        post: operations["accept_suggestion_api_v1_consumer_projects__task_id__suggestions__suggestion_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2632,6 +2672,119 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+        };
+    };
+    propose_suggestion_api_v1_consumer_projects__task_id__suggestions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Action
+                     * @enum {string}
+                     */
+                    action: "expand" | "replace_example" | "shorten";
+                    /** Selected Text */
+                    selectedText: string;
+                    /** Block Id */
+                    blockId: string;
+                    /** Base Revision */
+                    baseRevision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Suggestion proposed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+            /** @description Selection stale; reselect and retry */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+            /** @description Validation error or untraceable fact refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Assist provider unavailable; the draft is unchanged */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+        };
+    };
+    accept_suggestion_api_v1_consumer_projects__task_id__suggestions__suggestion_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                suggestion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Base Revision */
+                    baseRevision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Applied (new revision returned) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+            /** @description Suggestion or draft not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+            /** @description Selection stale; the draft is untouched */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

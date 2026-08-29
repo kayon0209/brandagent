@@ -274,3 +274,28 @@ test('OpenAPI documents the consumer project and draft endpoints', async () => {
     'adopt must document the revision conflict response',
   )
 })
+
+test('OpenAPI documents the anchored editorial suggestion endpoints', async () => {
+  const contract = yaml.load(await read('docs/brandflow-openapi.yaml'))
+  const paths = contract.paths
+  const proposePath = '/api/v1/consumer/projects/{task_id}/suggestions'
+  const acceptPath = '/api/v1/consumer/projects/{task_id}/suggestions/{suggestion_id}/accept'
+  assert.ok(paths[proposePath], 'suggestion propose path is missing')
+  assert.ok(paths[acceptPath], 'suggestion accept path is missing')
+  const propose = paths[proposePath].post
+  const actionSchema = propose.requestBody.content['application/json'].schema.properties.action
+  assert.deepEqual(
+    actionSchema.enum,
+    ['expand', 'replace_example', 'shorten'],
+    'propose must pin the three supported actions',
+  )
+  assert.ok(
+    JSON.stringify(propose.responses).includes('409'),
+    'propose must document the stale-selection 409',
+  )
+  const accept = paths[acceptPath].post
+  assert.ok(
+    JSON.stringify(accept.responses).includes('409'),
+    'accept must document the stale-selection 409',
+  )
+})

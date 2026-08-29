@@ -131,6 +131,12 @@ class ConsumerProjectsApp(Protocol):
     projects: ConsumerProjects
     drafts: ConsumerDrafts
     generation: ConsumerGeneration
+    assist: ConsumerAssist
+
+
+class ConsumerAssist(Protocol):
+    async def propose(self, principal: Principal, task_id: str, *, action: str, selected_text: str, block_id: str, base_revision: int) -> dict | None: ...
+    async def accept(self, principal: Principal, task_id: str, suggestion_id: str, *, base_revision: int) -> dict: ...
 
 
 class ConsumerProjects(Protocol):
@@ -337,5 +343,81 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
                 content={"success": False, "error": {"code": "REVISION_CONFLICT", "message": "稿件在别处有更新，候选稿未应用"}},
             )
         return {"success": True, "data": {"revision": draft["revision"], "task_id": draft["task_id"]}}
+
+    @router.post("/{task_id}/suggestions")
+    async def propose_suggestion(task_id: str, body: dict, actor: Principal = Depends(principal)):
+        from agent_api.application.editorial_assist import ActionNotSupported, SelectionStale
+        from agent_api.domain.errors import ApplicationError, NotFoundError
+
+        action = str(body.get("action", ""))
+        selected_text = body.get("selectedText")
+        block_id = str(body.get("blockId", ""))
+        base_revision = body.get("baseRevision")
+        if not isinstance(selected_text, str) or not block_id or not isinstance(base_revision, int):
+            raise HTTPException(status_code=422, detail="selectedText, blockId and baseRevision (int) are required")
+        try:
+            suggestion = await apps.assist.propose(
+                actor,
+                task_id,
+                action=action,
+                selected_text=selected_text,
+                block_id=block_id,
+                base_revision=base_revision,
+            )
+        except ActionNotSupported:
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": f"不支持的改写动作：{action}"}},
+            )
+        except SelectionStale:
+            return JSONResponse(
+                status_code=409,
+                content={"success": False, "error": {"code": "SELECTION_STALE", "message": "选区已过期，请重新选择"}},
+            )
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="Draft not found") from None
+        except RuntimeError as error:
+            return JSONResponse(
+                status_code=502,
+                content={"success": False, "error": {"code": "ASSIST_UNAVAILABLE", "message": "AI 助手暂时不可用，稿件未做任何改动"}},
+            )
+        except ApplicationError as error:
+            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+        if suggestion is None:
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error": {"code": "SUGGESTION_REFUSED", "message": "建议包含无法溯源的新事实，已拒绝生成"}},
+            )
+        payload = {
+            "suggestion_id": suggestion["suggestion_id"],
+            "action": suggestion["action"],
+            "suggested_text": suggestion.get("suggested_text", suggestion.get("proposal_text", "")),
+            "block_id": suggestion["block_id"],
+            "base_revision": suggestion["base_revision"],
+            "selected_text_hash": suggestion["selected_text_hash"],
+            "status": suggestion["status"],
+        }
+        return {"success": True, "data": payload}
+
+    @router.post("/{task_id}/suggestions/{suggestion_id}/accept")
+    async def accept_suggestion(task_id: str, suggestion_id: str, body: dict, actor: Principal = Depends(principal)):
+        from agent_api.application.editorial_assist import SelectionStale
+        from agent_api.domain.errors import ApplicationError, NotFoundError
+
+        base_revision = body.get("baseRevision")
+        if not isinstance(base_revision, int):
+            raise HTTPException(status_code=422, detail="baseRevision (int) is required")
+        try:
+            result = await apps.assist.accept(actor, task_id, suggestion_id, base_revision=base_revision)
+        except SelectionStale:
+            return JSONResponse(
+                status_code=409,
+                content={"success": False, "error": {"code": "SELECTION_STALE", "message": "选区已过期，稿件未修改"}},
+            )
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="Suggestion or draft not found") from None
+        except ApplicationError as error:
+            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+        return {"success": True, "data": result}
 
     return router
