@@ -67,3 +67,42 @@ test('channel approval, cross-channel final gate, version comparison and export 
     expect([200, 403, 409, 422]).toContain(response.status())
   }
 })
+
+const materialDocument = {
+  document_id: '00000000-0000-0000-0000-0000000000d1',
+  document_name: '第一份素材',
+  status: 'active',
+  checksum: 'a'.repeat(12),
+  created_at: '2026-08-29T00:00:00Z',
+}
+const materialExcerpt = {
+  excerpt_id: '00000000-0000-0000-0000-0000000000e1',
+  excerpt_type: 'quote',
+  summary: '一句可读的摘要',
+  excerpt_text: '适合引用的原文',
+  tags: ['素材'],
+  status: 'ready',
+  provenance_hash: 'b'.repeat(64),
+  document_id: materialDocument.document_id,
+  chunk_id: '00000000-0000-0000-0000-0000000000c1',
+  created_by_type: 'model',
+}
+
+async function mockMaterialsApi(page: Page) {
+  await page.route('**/api/v1/consumer/materials', (route) =>
+    route.fulfill({ json: { success: true, data: { items: [materialDocument] } } })
+  )
+  await page.route(`**/api/v1/consumer/materials/${materialDocument.document_id}/excerpts`, (route) =>
+    route.fulfill({ json: { success: true, data: { items: [materialExcerpt] } } })
+  )
+}
+
+test('material drawer shows summary first and reveals source traceability on demand', async ({ page }) => {
+  await mockMaterialsApi(page)
+  await page.goto('/app/materials')
+  await page.getByText('第一份素材').click()
+  await expect(page.getByText('一句可读的摘要')).toBeVisible()
+  await expect(page.getByText('适合引用的原文')).toBeHidden()
+  await page.getByRole('button', { name: '来源' }).click()
+  await expect(page.getByText('适合引用的原文')).toBeVisible()
+})
