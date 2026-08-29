@@ -1115,6 +1115,403 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/projects:
+    get:
+      summary: List Consumer Projects
+      description: List personal consumer projects (title, core idea, linked excerpts, active snapshot).
+      operationId: list_projects_api_v1_consumer_projects_get
+      security:
+      - HTTPBearer: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    post:
+      summary: Create Consumer Project
+      description: Create a project (content task + brief + consumer project + empty draft) in one transaction.
+      operationId: create_project_api_v1_consumer_projects_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - title
+              - core_idea
+              properties:
+                title:
+                  type: string
+                  title: Title
+                core_idea:
+                  type: string
+                  title: Core Idea
+                writing_intent:
+                  type: string
+                  title: Writing Intent
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/consumer/projects/{task_id}:
+    get:
+      summary: Get Consumer Project
+      description: Fetch one consumer project; cross-workspace ids resolve to 404.
+      operationId: get_project_api_v1_consumer_projects__task_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    patch:
+      summary: Update Consumer Project
+      description: Independently update title, core idea, or writing intent.
+      operationId: update_project_api_v1_consumer_projects__task_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  title: Title
+                core_idea:
+                  type: string
+                  title: Core Idea
+                writing_intent:
+                  type: string
+                  title: Writing Intent
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/consumer/projects/{task_id}/draft:
+    get:
+      summary: Get Draft
+      description: Get or lazily create the live draft (revision, document, plain text).
+      operationId: get_draft_api_v1_consumer_projects__task_id__draft_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    put:
+      summary: Autosave Draft
+      description: Revision compare-and-swap autosave; a moved server revision returns 409 REVISION_CONFLICT and the server draft is never overwritten.
+      operationId: save_draft_api_v1_consumer_projects__task_id__draft_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - document
+              - baseRevision
+              properties:
+                document:
+                  type: object
+                  title: Document
+                plainText:
+                  type: string
+                  title: Plain Text
+                baseRevision:
+                  type: integer
+                  title: Base Revision
+      responses:
+        '200':
+          description: Saved (new revision returned)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '409':
+          description: Revision conflict; reload before retrying
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/consumer/projects/{task_id}/draft/adopt:
+    post:
+      summary: Adopt Draft Snapshot
+      description: Immutable master_draft snapshot of the draft at the given revision; idempotent per revision, 409 on stale revision.
+      operationId: adopt_draft_api_v1_consumer_projects__task_id__draft_adopt_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - baseRevision
+              properties:
+                baseRevision:
+                  type: integer
+                  title: Base Revision
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '409':
+          description: Revision conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/projects/{task_id}/draft/generate:
+    post:
+      summary: Generate Draft Candidate
+      description: Run the draft generation graph (core idea + linked excerpts + base revision) and persist a master_revised candidate; the live draft is never overwritten automatically.
+      operationId: generate_draft_api_v1_consumer_projects__task_id__draft_generate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '200':
+          description: Candidate ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '502':
+          description: Provider failure; the draft is unchanged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/projects/{task_id}/draft/apply-candidate:
+    post:
+      summary: Apply Draft Candidate
+      description: Second compare-and-swap; applies the candidate only if the draft revision has not moved since generation.
+      operationId: apply_candidate_api_v1_consumer_projects__task_id__draft_apply_candidate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - contentVersionId
+              - baseRevision
+              properties:
+                contentVersionId:
+                  type: string
+                  title: Content Version Id
+                baseRevision:
+                  type: integer
+                  title: Base Revision
+      responses:
+        '200':
+          description: Applied (new revision returned)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '409':
+          description: Revision moved; candidate parked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Candidate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/projects/{task_id}/materials/{excerpt_id}:
+    put:
+      summary: Link Material Excerpt
+      description: Link a workspace material excerpt to the project (idempotent).
+      operationId: link_material_api_v1_consumer_projects__task_id__materials__excerpt_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: excerpt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Excerpt Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    delete:
+      summary: Unlink Material Excerpt
+      description: Remove a material excerpt from the project.
+      operationId: unlink_material_api_v1_consumer_projects__task_id__materials__excerpt_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: excerpt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Excerpt Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
 components:
   schemas:
     BriefInput:

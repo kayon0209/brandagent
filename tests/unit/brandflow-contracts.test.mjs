@@ -247,3 +247,30 @@ test('OpenAPI documents the consumer material endpoints with idempotency headers
     'generated types must include the consumer materials route',
   )
 })
+
+test('OpenAPI documents the consumer project and draft endpoints', async () => {
+  const contract = yaml.load(await read('docs/brandflow-openapi.yaml'))
+  const paths = contract.paths
+  for (const path of [
+    '/api/v1/consumer/projects',
+    '/api/v1/consumer/projects/{task_id}',
+    '/api/v1/consumer/projects/{task_id}/draft',
+    '/api/v1/consumer/projects/{task_id}/draft/adopt',
+    '/api/v1/consumer/projects/{task_id}/draft/generate',
+    '/api/v1/consumer/projects/{task_id}/draft/apply-candidate',
+    '/api/v1/consumer/projects/{task_id}/materials/{excerpt_id}',
+  ]) {
+    assert.ok(paths[path], `consumer project path ${path} is missing from the OpenAPI contract`)
+  }
+  const draftPut = paths['/api/v1/consumer/projects/{task_id}/draft'].put
+  assert.ok(draftPut, 'draft PUT operation must exist')
+  assert.ok(
+    JSON.stringify(draftPut.responses).includes('409'),
+    'draft PUT must document the REVISION_CONFLICT 409 response',
+  )
+  const adopt = paths['/api/v1/consumer/projects/{task_id}/draft/adopt'].post
+  assert.ok(
+    JSON.stringify(adopt.responses).includes('409'),
+    'adopt must document the revision conflict response',
+  )
+})

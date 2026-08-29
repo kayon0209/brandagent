@@ -50,7 +50,7 @@ def create_principal_dependency(verifier: TokenVerifier):
     return principal
 
 
-def create_app(*, tasks: TaskApplication, verifier: TokenVerifier, knowledge, materials=None) -> FastAPI:
+def create_app(*, tasks: TaskApplication, verifier: TokenVerifier, knowledge, materials=None, consumer_apps=None) -> FastAPI:
     app = FastAPI(title="BrandFlow Agent API", version="0.1.0")
     principal = create_principal_dependency(verifier)
 
@@ -250,6 +250,11 @@ def create_app(*, tasks: TaskApplication, verifier: TokenVerifier, knowledge, ma
         from .consumer import create_materials_router
 
         app.include_router(create_materials_router(materials, principal=principal))
+
+    if consumer_apps is not None:
+        from .consumer import create_projects_router
+
+        app.include_router(create_projects_router(consumer_apps, principal=principal))
 
     @app.exception_handler(HTTPException)
     async def http_error(_request, error: HTTPException):

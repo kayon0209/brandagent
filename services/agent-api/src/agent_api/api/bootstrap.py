@@ -7,6 +7,9 @@ from fastapi import FastAPI
 
 from agent_api.application.tasks import TaskWorkflowService
 from agent_api.application.materials import HeuristicDistiller, MaterialService, SimpleTextParser
+from agent_api.application.consumer_projects import ConsumerProjectService
+from agent_api.application.drafts import DraftService
+from agent_api.application.draft_generation import DraftGenerationService
 from agent_api.config import Settings
 from agent_api.providers.zhipu import ZhipuProvider
 from agent_api.mcp.client import RealMCPClient
@@ -14,6 +17,7 @@ from agent_api.mcp.context import MCPContextGateway
 from agent_api.mcp.channels import MCPChannelValidator
 from agent_api.application.channels import ChannelWorkflowService
 from agent_api.repositories.postgres_channels import PostgresChannelStore
+from agent_api.repositories.postgres_consumer_projects import PostgresConsumerProjectStore
 from agent_api.repositories.postgres_evaluation import PostgresEvaluationStore
 from agent_api.evaluation.metrics import EvaluationService
 from agent_api.repositories.postgres_knowledge import PostgresKnowledgeRepository
@@ -21,6 +25,7 @@ from agent_api.repositories.postgres_materials import PostgresMaterialStore
 from agent_api.repositories.postgres_tasks import PostgresTaskRepository
 from agent_api.repositories.postgres_workflow import PostgresWorkflowRepository
 from agent_api.workflow.checkpoint import postgres_checkpointer, verify_checkpoint_isolation
+from agent_api.workflow.consumer_graph import GraphCandidateGenerator
 
 from .main import create_app
 from .security import ClerkJWTVerifier
@@ -75,6 +80,24 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
         parser=SimpleTextParser(),
         distiller=HeuristicDistiller(),
     )
+    consumer_project_store = PostgresConsumerProjectStore(database_url)
+    consumer_projects = ConsumerProjectService(store=consumer_project_store)
+    consumer_drafts = DraftService(store=consumer_project_store)
+    consumer_generation = DraftGenerationService(
+        store=consumer_project_store,
+        generator=GraphCandidateGenerator(provider=provider),
+        projects=consumer_projects,
+    )
+
+    class ConsumerApps:
+        """ConsumerProjectsApp protocol bundle wired into create_app."""
+
+        def __init__(self) -> None:
+            self.projects = consumer_projects
+            self.drafts = consumer_drafts
+            self.generation = consumer_generation
+
+    consumer_apps = ConsumerApps()
     provider = ZhipuProvider(api_key=settings.require_glm_key(), model=settings.glm_model)
     mcp_client = RealMCPClient(
         mcp_url,
@@ -98,12 +121,14 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             await evaluation_store.open()
             await knowledge_repository.open()
             await material_store.open()
+            await consumer_project_store.open()
             stack.push_async_callback(task_repository.close)
             stack.push_async_callback(workflow_repository.close)
             stack.push_async_callback(channel_store.close)
             stack.push_async_callback(evaluation_store.close)
             stack.push_async_callback(knowledge_repository.close)
             stack.push_async_callback(material_store.close)
+            stack.push_async_callback(consumer_project_store.close)
             await mcp_client.discover()
             saver = await stack.enter_async_context(postgres_checkpointer(checkpoint_database_url))
             runtime.delegate = TaskWorkflowService(
@@ -127,6 +152,12 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             finally:
                 runtime.delegate = None
 
-    app = create_app(tasks=runtime, verifier=verifier, knowledge=knowledge_repository, materials=material_service)
+    app = create_app(
+        tasks=runtime,
+        verifier=verifier,
+        knowledge=knowledge_repository,
+        materials=material_service,
+        consumer_apps=consumer_apps,
+    )
     app.router.lifespan_context = lifespan
     return app
