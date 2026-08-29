@@ -13,6 +13,7 @@
     "test:unit": "jest --runInBand",
     "test:all": "npm run test:contracts && npm run test:unit",
     "test:db": "node --test tests/unit/brandflow-migration-docker.test.mjs",
+    "test:db:consumer": "node --test tests/unit/consumer-migration-docker.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:list": "playwright test --list",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\""
