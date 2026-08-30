@@ -35,16 +35,7 @@ export function MaterialDrawer({
   linkStates = {},
 }: MaterialDrawerProps) {
   return (
-    <aside className={styles.drawer} data-open={open}>
-      <button
-        type="button"
-        className={styles.toggle}
-        aria-expanded={open}
-        onClick={onToggle}
-      >
-        {open ? '收起素材抽屉' : '展开素材抽屉'}
-      </button>
-
+    <aside className={styles.drawer} data-open={open} aria-hidden={!open} data-testid="material-drawer">
       {open && (
         <div className={styles.body} aria-label="素材抽屉内容区">
           <h3 className={styles.title}>素材</h3>

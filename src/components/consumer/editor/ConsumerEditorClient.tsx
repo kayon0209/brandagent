@@ -9,7 +9,7 @@
 
 import dynamic from 'next/dynamic'
 
-import type { ConsumerEditorHandle } from './ConsumerEditor'
+import type { ConsumerEditorHandle, EditorStatusPayload } from './ConsumerEditor'
 import type { ConsumerDraftApi } from '@/hooks/useConsumerDraft'
 
 const Inner = dynamic(
@@ -23,6 +23,7 @@ export function ConsumerEditorClient(props: {
   api: ConsumerDraftApi
   handleRef: React.Ref<ConsumerEditorHandle>
   onAdopted?: () => void
+  onStatus?: (status: EditorStatusPayload) => void
 }) {
   const { handleRef, ...rest } = props
   return <Inner {...rest} ref={handleRef} />

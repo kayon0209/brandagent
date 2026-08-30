@@ -18,10 +18,8 @@ import Placeholder from '@tiptap/extension-placeholder'
 
 import { CoreIdeaBlock } from './CoreIdeaBlock'
 import { ManuscriptCanvas } from './ManuscriptCanvas'
-import { SaveStatus } from './SaveStatus'
 import { SelectionToolbar, type AssistAction } from './SelectionToolbar'
 import { SuggestionPopover } from './SuggestionPopover'
-import { ZoomControl } from './ZoomControl'
 import { useConsumerDraft, type ConsumerDraftApi } from '@/hooks/useConsumerDraft'
 import styles from './consumer-editor.module.css'
 
@@ -97,15 +95,26 @@ export interface ConsumerEditorHandle {
   reloadDraft(): Promise<void>
 }
 
+/** Live statusbar payload: the page owns the v4 statusbar chrome, the
+ * editor owns the state behind it (save machine, word count, zoom). */
+export interface EditorStatusPayload {
+  saveState: 'loading' | 'saved' | 'dirty' | 'saving' | 'conflict' | 'error'
+  wordCount: number
+  zoom: number
+  resolveConflict(): void
+  changeZoom(zoom: number): void
+}
+
 interface ConsumerEditorProps {
   projectId: string
   coreIdea: string
   api: ConsumerDraftApi
   onAdopted?(): void
+  onStatus?(status: EditorStatusPayload): void
 }
 
 export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorProps>(
-  function ConsumerEditor({ projectId, coreIdea, api, onAdopted }, ref) {
+  function ConsumerEditor({ projectId, coreIdea, api, onAdopted, onStatus }, ref) {
   const draft = useConsumerDraft(projectId, api)
   const [zoom, setZoom] = useState(() => {
     try {
@@ -204,6 +213,19 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
     }
   }, [])
 
+  // push the live statusbar payload to the page whenever any of it moves
+  const resolveConflictRef = useRef(() => {})
+  resolveConflictRef.current = () => void draft.resolveConflict()
+  useEffect(() => {
+    onStatus?.({
+      saveState: draft.status,
+      wordCount,
+      zoom,
+      resolveConflict: () => resolveConflictRef.current(),
+      changeZoom,
+    })
+  }, [onStatus, draft.status, wordCount, zoom, changeZoom])
+
   const currentSelection = useMemo(
     () => ({
       selection: { from: selectionInfo?.from ?? 0, to: selectionInfo?.to ?? 0, empty: selectionInfo?.empty ?? true },
@@ -293,14 +315,7 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
   )
 
   return (
-    <div className={styles.shell}>
-      <header data-testid="consumer-header" className={styles.header}>
-        <span className={styles.headerTitle}>写作台</span>
-        <span className={styles.headerStatus}>
-          已关联素材 · 字数 {wordCount}
-        </span>
-      </header>
-
+    <div className={styles.editorColumn} data-testid="consumer-editor">
       <div className={styles.main}>
         <div className={styles.manuscriptColumn}>
           <CoreIdeaBlock coreIdea={coreIdea} />
@@ -329,15 +344,6 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
           }}
         />
       )}
-
-      <SaveStatus state={draft.status} onResolveConflict={() => void draft.resolveConflict()} />
-      <ZoomControl
-        zoom={zoom}
-        minZoom={ZOOM_MIN}
-        maxZoom={ZOOM_MAX}
-        step={ZOOM_STEP}
-        onZoomChange={changeZoom}
-      />
     </div>
   )
 }

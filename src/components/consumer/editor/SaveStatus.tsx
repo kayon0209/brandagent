@@ -1,5 +1,10 @@
 'use client'
 
+/**
+ * Statusbar save segment (v4 baseline .status-copy): the save dot and
+ * copy live INSIDE the bottom statusbar, not a floating card.
+ */
+
 import styles from './consumer-editor.module.css'
 
 export type SaveState = 'loading' | 'saved' | 'dirty' | 'saving' | 'conflict' | 'error'
@@ -20,20 +25,21 @@ interface SaveStatusProps {
 
 export function SaveStatus({ state, onResolveConflict }: SaveStatusProps) {
   return (
-    <div className={styles.saveStatus} data-testid="save-status" data-state={state}>
+    <span className={styles.statusCopy} data-testid="save-status" data-state={state}>
       <span
-        className={
-          state === 'conflict' || state === 'error' ? styles.saveStatusIconConflict : styles.saveStatusIconSaved
-        }
+        aria-hidden
+        className={`${styles.saveDot} ${
+          state === 'conflict' || state === 'error' ? styles.saveDotConflict : styles.saveDotSaved
+        }`}
       >
         ●
       </span>
-      <span>{LABELS[state]}</span>
+      <span className={styles.saveText}>{LABELS[state]}</span>
       {state === 'conflict' && (
         <button type="button" className={styles.resolveButton} onClick={onResolveConflict}>
           查看最新稿
         </button>
       )}
-    </div>
+    </span>
   )
 }
