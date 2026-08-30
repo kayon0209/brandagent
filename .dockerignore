@@ -1,17 +1,20 @@
-# Keep the Docker context lean: the image only builds the Next.js app,
-# so Python services, the pnpm store, and every local dependency tree
-# are excluded (this was a 1.3GB context before; it must stay small).
+# Keep the Docker context lean, but Python service images COPY from
+# services/*/src, so the source trees must stay in the context — only
+# the heavy artifacts are excluded (this was a regression: a blanket
+# `services` exclusion broke `docker compose up --build`).
 .pnpm-store
 node_modules
 **/node_modules
 .git
 .next
-services
 _sandbox
 tests
-docs
+docs/migrations
 **/.venv
 **/.pytest_cache
 **/__pycache__
+**/*.egg-info
+**/dist
+**/build
 .env*
 *.log
