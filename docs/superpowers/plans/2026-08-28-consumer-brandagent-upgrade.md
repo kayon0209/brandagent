@@ -99,6 +99,7 @@
 - 自动发布到微信公众号、小红书或视频平台。
 - 社交媒体排期、评论运营、数据回流和增长分析。
 - 全量 GraphRAG、自动关系扩展或复杂知识图谱。
+- 主编辑链路中的自治多 Agent；深度调研只在 Phase 5 完成后按 Phase 6 候选能力单独评估。
 - 多人实时协作和评论线程。
 - 为每次按键创建不可变 content_version。
 - 把所有素材内容标记成“已验证事实”。
@@ -1427,6 +1428,65 @@ git commit -m "test: verify consumer primary journeys"
 
 ---
 
+## Phase 6（候选）— 深度调研与受限多 Agent 取证
+
+定位：这是当前 Consumer Upgrade 完成后的独立增量能力，不属于 Phase 0—5 的默认交付范围。Phase 5 只提供配额、评测、素材追溯和完整用户旅程基线；是否进入 Phase 6，必须由用户再次明确批准。
+
+### 用户价值与界面边界
+
+- 用户从项目或素材库主动点击「深度调研」，输入一个明确的问题、目标读者和可选范围。
+- 发起前展示预计耗时与额度区间；运行中显示已完成方向、可取消状态和已消耗额度，不展示 Agent 思维链。
+- 结果以候选素材卡片返回：摘要、可引用摘录、来源、访问时间、适用角度和风险提示。
+- 调研结果默认不进入稿件。用户选择「加入素材」后，才转换为可追溯的 `material_excerpt` 并关联当前项目。
+- 深度调研不自动修改核心观点、母稿或平台版本，不触发发布。
+
+### 受限编排架构
+
+~~~text
+DeepResearchRun
+  -> ResearchPlanner（拆分 2-4 个相互独立的取证方向）
+    -> EvidenceScout x N（并行、无递归委派、最小上下文）
+  -> CitationValidationService（来源可访问性、摘录匹配、去重）
+  -> ResearchSynthesisService（聚类、冲突并列、缺口提示）
+  -> CandidateMaterialSet（等待用户选择加入素材）
+~~~
+
+约束：
+
+- 最大 worker 数 4，委派深度 1，每个方向最多重试 2 次；禁止 Agent 自行增加预算或创建下一层 Agent。
+- 网页内容一律视为不可信数据，不能作为系统指令；外部页面中的 Prompt Injection 不得改变工具权限、研究范围或输出策略。
+- 私有素材只按用户授权和最小必要原则传给 worker；不得把整个 workspace 作为默认上下文。
+- 调研编排与日常稿纸 API 隔离。编辑、自动保存、选区改写和平台预览继续走低延迟单工作流。
+- 优先复用 FastAPI、现有模型调用日志、usage ledger 和 SSE/事件能力；没有负载证据前不引入 Celery、独立向量库或新的常驻基础设施。
+
+### 立项前对照实验
+
+必须用同一组研究问题、同一来源政策和可比预算测试三组：
+
+1. `S0`：单模型一次性研究。
+2. `S1`：单工作流提示链（规划 → 检索 → 引用校验 → 汇总）。
+3. `S2`：受限多 Agent（规划器 + 2-4 个 EvidenceScout + 引用校验）。
+
+评测至少覆盖：
+
+- 引用有效率与摘录原文匹配率。
+- 可引用材料覆盖率、重复率和相互矛盾材料的呈现完整度。
+- unsupported claim rate 与无来源结论数。
+- 完成时延、Token/金额成本、取消成功率和部分结果恢复率。
+- 用户加入素材率、实际引用率，以及调研结果对最终稿的净贡献。
+
+只有 `S2` 相对 `S1` 在可引用材料覆盖或复杂问题完成度上产生显著、可复现的收益，同时满足产品确定的成本与时延上限，才进入产品化；否则保留 `S1`，不建设多 Agent 运行时。
+
+### Phase 6 Gate
+
+- Phase 5 Gate 已通过，并有稳定的单工作流 research baseline。
+- 用户单独批准 additive migration、外部搜索服务、模型预算和上线范围。
+- 引用校验、Prompt Injection、SSRF、租户隔离、取消与配额测试全部通过。
+- `S2` 对照实验结果可复现；评测数据集有版本与 hash，成本报告包含失败和重试消耗。
+- 独立 code/security/design review 无 P0/P1；未通过时不得在产品中宣传或开放「深度调研」。
+
+---
+
 ## 11. 推荐实施顺序与产品切片
 
 | 顺序 | 可演示结果 | 后端完成 | 前端完成 | 不可跳过门禁 |
@@ -1438,6 +1498,7 @@ git commit -m "test: verify consumer primary journeys"
 | 4 | 选区工具真正跟随文字 | suggestion/anchor | floating toolbar | stale-selection |
 | 5 | 三平台真实预览 | variant/lineage/review | preview/check bubble | preview != publish |
 | 6 | 可试用、可计费、可回滚 | ledger/eval/events | 完整旅程 | full gate |
+| 7（候选） | 可追溯的异步深度调研 | bounded research orchestration | 调研进度与候选素材卡片 | multi-agent 必须胜过单工作流基线 |
 
 每个切片都同时交付 UI、API、服务和测试，禁止先做完所有页面再补假接口，也禁止先扩建后端半年却没有可验证用户旅程。
 
@@ -1524,3 +1585,5 @@ git commit -m "test: verify consumer primary journeys"
 第一步只执行 Phase 0，不碰数据库和新界面。原因不是保守，而是当前 package/lock、认证、OpenAPI 与项目身份都存在真实漂移；在这些基础上直接开发，会把后续每个界面问题放大成联调问题。
 
 Phase 0 完成后，按“身份 → 素材 → 稿纸 → 选区建议 → 平台预览 → 配额评测”的顺序逐阶段推进。不要先做 landing page、价格页或更多视觉方案；当前最稀缺的不是页面数量，而是一个前后端闭环、可恢复、可信且不暴露 B 端复杂性的核心写作旅程。
+
+Phase 5 完成并通过门禁后，才讨论 Phase 6 深度调研。先运行单工作流与受限多 Agent 的对照实验，再决定是否产品化；“更多 Token 消耗”只能作为可预期成本，不能代替用户价值和质量收益证明。
