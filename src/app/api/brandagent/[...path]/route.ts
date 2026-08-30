@@ -66,7 +66,14 @@ async function proxy(request: NextRequest, context: RouteContext) {
 
   let upstream: Response
   try {
-    upstream = await fetch(target, { method: request.method, headers, body })
+    // no hang: a stuck upstream must surface as GATEWAY_UNAVAILABLE in
+    // bounded time, never an infinite "生成中" (runtime audit finding)
+    upstream = await fetch(target, {
+      method: request.method,
+      headers,
+      body,
+      signal: AbortSignal.timeout(90_000),
+    })
   } catch {
     return NextResponse.json(
       { success: false, error: { code: 'GATEWAY_UNAVAILABLE', message: '写作服务暂时不可用，请稍后重试。' } },

@@ -354,8 +354,19 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
                     content={"success": False, "error": {"code": "QUOTA_EXCEEDED", "message": str(error)}},
                 )
             raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
-        except RuntimeError as error:
-            raise HTTPException(status_code=502, detail=str(error)) from error
+        except RuntimeError:
+            # the C-end must never see raw provider/stack text: return
+            # spoken guidance client-side; the server log keeps the cause
+            return JSONResponse(
+                status_code=502,
+                content={
+                    "success": False,
+                    "error": {
+                        "code": "DRAFT_GENERATION_UNAVAILABLE",
+                        "message": "初稿生成暂时不可用，你的稿纸没有任何改动。请稍后再试。",
+                    },
+                },
+            )
         return {"success": True, "data": result}
 
     @router.post("/{task_id}/draft/apply-candidate")
@@ -435,7 +446,7 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
                     content={"success": False, "error": {"code": "QUOTA_EXCEEDED", "message": str(error)}},
                 )
             raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
-        except RuntimeError as error:
+        except RuntimeError:
             return JSONResponse(
                 status_code=502,
                 content={"success": False, "error": {"code": "ASSIST_UNAVAILABLE", "message": "AI 助手暂时不可用，稿件未做任何改动"}},

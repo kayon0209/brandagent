@@ -302,14 +302,26 @@ describe('ConsumerEditor', () => {
     expect(coreIdea.compareDocumentPosition(prose) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('shows the zoom badge only on the canvas, not the header', async () => {
-    renderEditor()
-    const canvas = await screen.findByTestId('manuscript-canvas')
-    const header = await screen.findByTestId('consumer-header')
-    fireEvent.click(screen.getByRole('button', { name: /放大/ }))
-    expect(canvas.style.zoom).toBe('1.1')
+  it('exposes zoom through the status callback (the statusbar owns the controls)', async () => {
+    const onStatus = jest.fn()
+    const api = makeApi()
+    render(
+      <ConsumerEditor projectId="task-1" coreIdea="核心观点" api={api} onStatus={onStatus} />,
+    )
+    await screen.findByTestId('manuscript-canvas')
+    // the canvas keeps the 720px paper contract; zoom travels in the payload
+    const canvas = screen.getByTestId('manuscript-canvas')
     expect(canvas.style.maxWidth).toBe('720px')
-    expect(header.style.zoom).toBeFalsy()
+    await waitFor(() => expect(onStatus).toHaveBeenCalled())
+    const payload = onStatus.mock.calls.at(-1)[0]
+    expect(payload.zoom).toBeGreaterThanOrEqual(0.75)
+    expect(payload.zoom).toBeLessThanOrEqual(1.5)
+    expect(typeof payload.changeZoom).toBe('function')
+    payload.changeZoom(1.2)
+    await waitFor(() => {
+      const updated = onStatus.mock.calls.at(-1)[0]
+      expect(updated.zoom).toBe(1.2)
+    })
   })
 
   it('hides the selection toolbar on Escape', async () => {

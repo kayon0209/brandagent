@@ -42,12 +42,16 @@ function excerptFixture(id: string, over: Partial<ConsumerMaterialExcerpt> = {})
 }
 
 describe('MaterialDrawer', () => {
-  it('renders collapsed by default and only shows a summary bar', () => {
+  it('renders collapsed by default: hidden from accessibility, no body content', () => {
     render(
       <MaterialDrawer materials={[]} open={false} onToggle={jest.fn()} loading={false} error={null} />
     )
-    expect(screen.queryByText('素材抽屉内容区')).toBeNull()
-    expect(screen.getByRole('button', { name: '展开素材抽屉' })).toBeInTheDocument()
+    const drawer = screen.getByTestId('material-drawer')
+    expect(drawer).toHaveAttribute('aria-hidden', 'true')
+    expect(drawer).toHaveAttribute('data-open', 'false')
+    expect(screen.queryByText(/还没有素材/)).toBeNull()
+    // the v4 entry point is the topbar materials button (owned by the write
+    // page), not a toggle inside the drawer itself
   })
 
   it('shows actionable empty state with an import entry when open and empty', () => {
