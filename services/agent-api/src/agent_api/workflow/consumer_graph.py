@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
+from pydantic import BaseModel, Field
 
 from agent_api.providers.base import LLMProvider, ProviderExecutionError
 
@@ -28,6 +29,23 @@ SYSTEM_PROMPT = (
 )
 
 MIN_CANDIDATE_CHARS = 20
+
+
+class ConsumerGraphState(BaseModel):
+    """Typed state schema: langgraph >= 1.2.10 rejects bare dict schemas
+    (`unhashable type: 'dict'`), which is exactly how the first-draft route
+    500'd in the production container (runtime audit finding)."""
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    core_idea: str = ""
+    intent: str = ""
+    excerpts: list[dict[str, Any]] = Field(default_factory=list)
+    base_revision: int = 0
+    raw_text: str = ""
+    candidate: Any = None
+    error: Any = None
+    usage: Any = None
 
 
 class GeneratedDraft:
@@ -59,16 +77,7 @@ def build_consumer_graph(*, provider: LLMProvider, core_idea: str, intent: str, 
     ownership explicit and the graph trivially inspectable in tests.
     """
 
-    state_schema = {
-        "core_idea": str,
-        "intent": str,
-        "excerpts": list,
-        "base_revision": int,
-        "raw_text": str,
-        "candidate": Any,
-        "error": Any,
-        "usage": Any,
-    }
+    state_schema = ConsumerGraphState
 
     async def collect(state: dict) -> dict:
         return {
@@ -101,10 +110,10 @@ def build_consumer_graph(*, provider: LLMProvider, core_idea: str, intent: str, 
         except ProviderExecutionError as error:
             return {"raw_text": "", "error": {"code": "PROVIDER_FAILED", "message": str(error), "retryable": error.retryable}}
 
-    async def review(state: dict) -> dict:
+    async def review(state: ConsumerGraphState) -> dict:
         blocks = [
             {"block_id": f"b{index + 1}", "block_type": "paragraph", "text": paragraph}
-            for index, paragraph in enumerate(state["raw_text"].split("\n"))
+            for index, paragraph in enumerate(state.raw_text.split("\n"))
             if paragraph.strip()
         ]
         plain_text = "\n".join(block["text"] for block in blocks)
@@ -141,16 +150,12 @@ class GraphCandidateGenerator:
             base_revision=base_revision,
         )
         result = await graph.ainvoke(
-            {
-                "core_idea": core_idea,
-                "intent": intent,
-                "excerpts": excerpts,
-                "base_revision": base_revision,
-                "raw_text": "",
-                "candidate": None,
-                "error": None,
-                "usage": None,
-            }
+            ConsumerGraphState(
+                core_idea=core_idea,
+                intent=intent,
+                excerpts=excerpts,
+                base_revision=base_revision,
+            ).model_dump()
         )
         if result.get("error"):
             error = result["error"]
