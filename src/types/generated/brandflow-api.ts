@@ -2833,6 +2833,16 @@ export interface operations {
                     selectedText: string;
                     /** Block Id */
                     blockId: string;
+                    /**
+                     * Start Offset
+                     * @description Selection start offset within the block text (inclusive).
+                     */
+                    startOffset?: number;
+                    /**
+                     * End Offset
+                     * @description Selection end offset within the block text (inclusive).
+                     */
+                    endOffset?: number;
                     /** Base Revision */
                     baseRevision: number;
                 };

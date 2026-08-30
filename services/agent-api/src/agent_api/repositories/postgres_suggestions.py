@@ -66,14 +66,23 @@ class PostgresSuggestionStore:
     async def insert_suggestion(self, suggestion: dict) -> dict:
         workspace_id = suggestion["workspace_id"]
         task_id = suggestion["task_id"]
-        # offsets are derived from the canonical plain text on the server side
-        draft = await self._drafts.get_draft(workspace_id, task_id)
-        if draft is None:
-            raise NotFoundError(f"draft for project {task_id} not found")
-        selected = suggestion["selected_text"]
-        start = draft["plain_text"].find(selected)
-        start_offset = start if start >= 0 else _NULL_OFFSET
-        end_offset = (start + len(selected) - 1) if start >= 0 else _NULL_OFFSET
+        # the client's block-local offsets are authoritative; derive from
+        # the canonical block text only when they are absent (legacy)
+        start_offset = suggestion.get("start_offset")
+        end_offset = suggestion.get("end_offset")
+        if not isinstance(start_offset, int) or not isinstance(end_offset, int):
+            draft = await self._drafts.get_draft(workspace_id, task_id)
+            if draft is None:
+                raise NotFoundError(f"draft for project {task_id} not found")
+            block = next(
+                (b for b in draft["document"].get("blocks", []) if b.get("block_id") == suggestion["block_id"]),
+                None,
+            )
+            if block is None:
+                raise NotFoundError(f"block {suggestion['block_id']} not found in the draft")
+            start = block.get("text", "").find(suggestion["selected_text"])
+            start_offset = start if start >= 0 else _NULL_OFFSET
+            end_offset = (start + len(suggestion["selected_text"]) - 1) if start >= 0 else _NULL_OFFSET
 
         async with self._pool.connection() as connection:
             await self._scope(connection, workspace_id)
@@ -101,7 +110,7 @@ class PostgresSuggestionStore:
             )
             row = await cursor.fetchone()
         row = dict(row)
-        row["selected_text"] = selected
+        row["selected_text"] = suggestion["selected_text"]
         row["suggested_text"] = suggestion["suggested_text"]
         row["prompt_version"] = suggestion.get("prompt_version", "")
         return row

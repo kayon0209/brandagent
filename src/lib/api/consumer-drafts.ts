@@ -36,6 +36,8 @@ export async function proposeConsumerSuggestion(input: {
   action: string
   selectedText: string
   blockId: string
+  startOffset: number
+  endOffset: number
   baseRevision: number
 }): Promise<{ suggestion_id: string; suggested_text: string }> {
   return brandFlowRequest<{ suggestion_id: string; suggested_text: string }>(
@@ -46,6 +48,8 @@ export async function proposeConsumerSuggestion(input: {
         action: input.action,
         selectedText: input.selectedText,
         blockId: input.blockId,
+        startOffset: input.startOffset,
+        endOffset: input.endOffset,
         baseRevision: input.baseRevision,
       }),
     },
@@ -62,6 +66,39 @@ export async function acceptConsumerSuggestion(input: {
     {
       method: 'POST',
       body: JSON.stringify({ baseRevision: input.baseRevision }),
+    },
+  )
+}
+
+export interface DraftCandidate {
+  content_version_id: string
+  task_id: string
+  content: string
+}
+
+export async function generateDraftCandidate(
+  projectId: string,
+  idempotencyKey: string,
+): Promise<{ candidate: DraftCandidate; base_revision: number }> {
+  return brandFlowRequest<{ candidate: DraftCandidate; base_revision: number }>(
+    `/api/v1/consumer/projects/${projectId}/draft/generate`,
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
+export async function applyDraftCandidate(
+  projectId: string,
+  contentVersionId: string,
+  baseRevision: number,
+): Promise<{ revision: number; task_id: string }> {
+  return brandFlowRequest<{ revision: number; task_id: string }>(
+    `/api/v1/consumer/projects/${projectId}/draft/apply-candidate`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ contentVersionId, baseRevision }),
     },
   )
 }

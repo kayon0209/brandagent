@@ -18,6 +18,7 @@ from agent_api.application.editorial_assist import (
     SelectionStale,
 )
 from agent_api.domain.errors import ConflictError, NotFoundError
+from agent_api.providers.base import ModelCallResult
 
 
 def principal_for(workspace_id: str) -> Principal:
@@ -96,25 +97,30 @@ class MemorySuggestionStore:
 
 
 class RecordingProvider:
-    """Stub LLM provider that records prompts and returns a fixed rewrite."""
+    """Stub LLM provider that records prompts and returns a fixed rewrite.
+
+    Returns the REAL ModelCallResult contract (not a dict) so this suite
+    locks the production provider interface and cannot mask dict/dataclass
+    drift again.
+    """
 
     def __init__(self, content: str = "改写后的句子。") -> None:
         self.content = content
         self.calls: list[dict] = []
 
-    async def generate(self, *, system: str, prompt: str, prompt_version: str) -> dict:
+    async def generate(self, *, system: str, prompt: str, prompt_version: str) -> ModelCallResult:
         self.calls.append({"system": system, "prompt": prompt, "prompt_version": prompt_version})
-        return {
-            "content": self.content,
-            "provider": "stub",
-            "model": "stub",
-            "prompt_version": prompt_version,
-            "latency_ms": 10,
-            "input_tokens": 10,
-            "output_tokens": 10,
-            "usage_source": "none",
-            "retry_count": 0,
-        }
+        return ModelCallResult(
+            content=self.content,
+            provider="stub",
+            model="stub",
+            prompt_version=prompt_version,
+            latency_ms=10,
+            input_tokens=10,
+            output_tokens=10,
+            usage_source="none",
+            retry_count=0,
+        )
 
 
 class FailingProvider:
@@ -128,6 +134,23 @@ TARGET = "这里有一个需要改写的句子，它有点啰嗦。"
 
 def make_service(provider, *, text: str = BASE_TEXT) -> tuple[EditorialAssistService, MemorySuggestionStore]:
     store = MemorySuggestionStore(text)
+    service = EditorialAssistService(store=store, provider=provider)
+    return service, store
+
+
+def make_multiblock_service(provider) -> tuple[EditorialAssistService, MemorySuggestionStore]:
+    """Two blocks sharing the SAME sentence: the old plain_text.find
+    anchor always resolved to the first block — this fixture locks the
+    block-local offset contract against that regression."""
+
+    store = MemorySuggestionStore("占位")
+    store.document = {
+        "blocks": [
+            {"block_id": "b1", "block_type": "paragraph", "text": f"开头。{TARGET}"},
+            {"block_id": "b2", "block_type": "paragraph", "text": f"第二段开头。{TARGET}"},
+        ]
+    }
+    store.plain_text = "\n".join(b["text"] for b in store.document["blocks"])
     service = EditorialAssistService(store=store, provider=provider)
     return service, store
 
@@ -298,6 +321,59 @@ async def test_prompt_excludes_unlinked_materials_and_whole_workspace() -> None:
     # only the project's linked excerpt may appear, never other materials
     assert "素材摘录" in prompt
     assert "整个素材库" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_offsets_anchor_the_second_block_when_sentence_repeats() -> None:
+    """The SAME sentence exists in b1 and b2; selecting the b2 occurrence
+    must anchor to b2 (block-local offsets), not to the first match."""
+
+    service, store = make_multiblock_service(RecordingProvider())
+    b2_text = store.document["blocks"][1]["text"]
+    start = b2_text.find(TARGET)
+    suggestion = await service.propose(
+        principal_for("ws-1"),
+        "task-1",
+        action="shorten",
+        selected_text=TARGET,
+        block_id="b2",
+        base_revision=3,
+        start_offset=start,
+        end_offset=start + len(TARGET) - 1,
+    )
+    assert suggestion["block_id"] == "b2"
+
+    result = await service.accept(
+        principal_for("ws-1"),
+        "task-1",
+        suggestion["suggestion_id"],
+        base_revision=3,
+    )
+    blocks = result["document"]["blocks"]
+    assert TARGET not in blocks[1]["text"], "the b2 occurrence must be replaced"
+    assert TARGET in blocks[0]["text"], "the b1 occurrence must survive untouched"
+
+
+@pytest.mark.asyncio
+async def test_wrong_offsets_are_rejected_as_stale() -> None:
+    """Client offsets that disagree with the server block text can never
+    propose — the recomputed slice must equal the selected text."""
+
+    service, _ = make_multiblock_service(RecordingProvider())
+    b2_text = "第二段开头。" + TARGET
+    start = b2_text.find(TARGET)
+    with pytest.raises(SelectionStale):
+        await service.propose(
+            principal_for("ws-1"),
+            "task-1",
+            action="shorten",
+            selected_text=TARGET,
+            block_id="b2",
+            base_revision=3,
+            # offsets pointing at the WRONG span inside b2
+            start_offset=0,
+            end_offset=len(TARGET) - 1,
+        )
 
 
 # ---------------------------------------------------------------------------

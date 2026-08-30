@@ -65,10 +65,36 @@ function editorToBlocks(editor: Editor): Block[] {
   return blocks.length ? blocks : [{ block_id: 'b1', block_type: 'paragraph', text: '' }]
 }
 
+/** Resolve the selection to its real block id and character offsets
+ * inside that block's text (the plan's block anchor contract:
+ * blockId + block-local offsets + text hash — never plain_text.find). */
+function resolveSelectionAnchor(
+  editor: Editor,
+  from: number,
+  to: number,
+): { blockId: string; startOffset: number; endOffset: number } | null {
+  let resolved: { blockId: string; startOffset: number; endOffset: number } | null = null
+  editor.state.doc.forEach((node, pos, index) => {
+    if (resolved || !node.isTextblock) return
+    const blockEnd = pos + node.nodeSize
+    if (from >= pos && from <= blockEnd && to <= blockEnd) {
+      resolved = {
+        blockId: `b${index + 1}`,
+        startOffset: from - pos - 1,
+        endOffset: to - pos - 2,
+      }
+    }
+  })
+  return resolved
+}
+
 export interface ConsumerEditorHandle {
   /** Adopt the CURRENT draft: flush pending edits first, then send the
    * real revision (review P0: hardcoded baseRevision:0 broke the lifecycle). */
   adoptCurrent(): Promise<void>
+  /** Re-seed the editor from the server draft (used after a first-draft
+   * candidate is applied outside the editor, e.g. the empty-state button). */
+  reloadDraft(): Promise<void>
 }
 
 interface ConsumerEditorProps {
@@ -198,13 +224,19 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
   const handleToolbarAction = useCallback(
     async (action: AssistAction) => {
       if (!selectionInfo || selectionInfo.empty || !selectionInfo.text) return
+      const editor = editorRef.current
+      if (!editor) return
+      const anchor = resolveSelectionAnchor(editor, selectionInfo.from, selectionInfo.to)
+      if (!anchor) return
       setSuggesting(action)
       try {
         const result = (await api.proposeSuggestion({
           projectId,
           action,
           selectedText: selectionInfo.text,
-          blockId: 'b1',
+          blockId: anchor.blockId,
+          startOffset: anchor.startOffset,
+          endOffset: anchor.endOffset,
           baseRevision: draft.revision,
         })) as { suggestion_id?: string; suggested_text?: string }
         if (!result?.suggested_text) {
@@ -237,7 +269,9 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
     }
   }, [api, draft, projectId, suggestion])
 
-  // adopt uses the REAL post-flush revision (review P0 fix)
+  // adopt uses the REAL post-flush revision (review P0 fix): draft.revision
+  // is React state captured when this closure was built — after flush() it
+  // is stale. latestRevision() reads the ref the flush actually updated.
   useImperativeHandle(
     ref,
     () => ({
@@ -246,10 +280,13 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
         const { brandFlowRequest } = await import('@/lib/api/brandflow')
         await brandFlowRequest(`/api/v1/consumer/projects/${projectId}/draft/adopt`, {
           method: 'POST',
-          body: JSON.stringify({ baseRevision: draft.revision }),
+          body: JSON.stringify({ baseRevision: draft.latestRevision() }),
         })
         await draft.reload()
         onAdopted?.()
+      },
+      reloadDraft: async () => {
+        await draft.reload()
       },
     }),
     [draft, onAdopted, projectId],

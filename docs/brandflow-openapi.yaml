@@ -1579,6 +1579,14 @@ paths:
                 blockId:
                   type: string
                   title: Block Id
+                startOffset:
+                  type: integer
+                  title: Start Offset
+                  description: Selection start offset within the block text (inclusive).
+                endOffset:
+                  type: integer
+                  title: End Offset
+                  description: Selection end offset within the block text (inclusive).
                 baseRevision:
                   type: integer
                   title: Base Revision
