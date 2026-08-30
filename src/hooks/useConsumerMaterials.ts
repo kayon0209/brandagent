@@ -32,6 +32,7 @@ export interface ConsumerMaterialsState {
   importText: (text: string, name: string) => Promise<MaterialImportResult>
   linkToProject: (projectId: string, excerptId: string) => Promise<void>
   loadExcerpts: (documentId: string) => Promise<void>
+  loadAllExcerpts: () => Promise<void>
 }
 
 function newIdempotencyKey(): string {
@@ -73,6 +74,27 @@ export function useConsumerMaterials(): ConsumerMaterialsState {
     }
   }, [])
 
+  const loadAllExcerpts = useCallback(async () => {
+    /** Aggregate the workspace's ready excerpts for the write-page drawer
+     * (the per-document loader overwrites, so it cannot fill a drawer). */
+    try {
+      setError(null)
+      const documents = await listMaterials()
+      const collected: ConsumerMaterialExcerpt[] = []
+      for (const document of documents.items) {
+        try {
+          const response = await getMaterialExcerpts(document.document_id)
+          collected.push(...response.items)
+        } catch {
+          /* a document still processing contributes no excerpts yet */
+        }
+      }
+      setExcerpts(collected)
+    } catch (caught) {
+      setError(caught as BrandFlowApiError)
+    }
+  }, [])
+
   const importText = useCallback(async (text: string, name: string) => {
     const result = await importMaterialText(text, name, newIdempotencyKey())
     await refresh()
@@ -101,5 +123,6 @@ export function useConsumerMaterials(): ConsumerMaterialsState {
     importText,
     linkToProject,
     loadExcerpts,
+    loadAllExcerpts,
   }
 }

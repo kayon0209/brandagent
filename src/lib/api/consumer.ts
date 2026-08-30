@@ -85,4 +85,16 @@ export async function linkMaterialToProject(
   )
 }
 
+export async function getConsumerProject(
+  projectId: string,
+): Promise<{
+  task_id: string
+  title: string
+  core_idea: string
+  writing_intent: string
+  active_master_version_id: string | null
+}> {
+  return brandFlowRequest(`/api/v1/consumer/projects/${projectId}`)
+}
+
 export { BrandFlowApiError }

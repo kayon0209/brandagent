@@ -3,7 +3,9 @@
 /**
  * Consumer materials page (upgrade plan task 7): /app/materials.
  *
- * Full material management page. <!-- The write page embeds only the drawer. -->
+ * Full material management: import (paste text) + read + trace to source.
+ * The write page embeds only the drawer; this page owns the import flow
+ * (audit finding: import/link existed in the hook but no page called it).
  */
 
 import { useState } from 'react'
@@ -14,13 +16,41 @@ import { MaterialSourceDetail } from '@/components/consumer/materials/MaterialSo
 import styles from '@/components/consumer/materials/consumer-materials.module.css'
 
 export default function MaterialsPage() {
-  const { loading, error, materials, excerpts, refresh, loadExcerpts } = useConsumerMaterials()
+  const { loading, error, materials, excerpts, refresh, loadExcerpts, importText } = useConsumerMaterials()
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null)
   const [selectedExcerpt, setSelectedExcerpt] = useState<string | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importTextValue, setImportTextValue] = useState('')
+  const [importName, setImportName] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importMessage, setImportMessage] = useState<string | null>(null)
 
   async function openDocument(documentId: string) {
     setSelectedDocument(documentId)
     await loadExcerpts(documentId)
+  }
+
+  async function submitImport() {
+    if (!importTextValue.trim()) return
+    setImporting(true)
+    setImportMessage(null)
+    try {
+      const result = await importText(importTextValue, importName.trim() || '未命名素材')
+      setImportTextValue('')
+      setImportName('')
+      setImportOpen(false)
+      setImportMessage(
+        result.status === 'duplicate'
+          ? '这段内容之前导入过，没有重复入库。'
+          : result.status === 'distilled'
+            ? '素材已导入，可引用片段已就绪。'
+            : '素材已导入，正在整理可引用片段。',
+      )
+    } catch (importError) {
+      setImportMessage(importError instanceof Error ? importError.message : '导入失败，请重试。')
+    } finally {
+      setImporting(false)
+    }
   }
 
   return (
@@ -41,7 +71,46 @@ export default function MaterialsPage() {
       {/* the honest empty state only renders when loading is done AND there
           is no failure — never stack both (audit finding) */}
       {!loading && !error && materials.length === 0 && (
-        <p>还没有素材。从一篇笔记、一段录音稿或一个链接开始。</p>
+        <p>还没有素材。粘贴一段文字开始第一次导入。</p>
+      )}
+
+      <button type="button" className="consumer-primary-button" onClick={() => setImportOpen(previous => !previous)}>
+        {importOpen ? '收起导入' : '导入素材'}
+      </button>
+      {importMessage && <p role="status">{importMessage}</p>}
+
+      {importOpen && (
+        <section className={styles.state}>
+          <label htmlFor="import-name" className="consumer-field-label">
+            素材名称
+          </label>
+          <input
+            id="import-name"
+            className="consumer-text-input"
+            value={importName}
+            onChange={event => setImportName(event.target.value)}
+            placeholder="例如：播客第 3 期录音稿"
+          />
+          <label htmlFor="import-text" className="consumer-field-label">
+            素材内容
+          </label>
+          <textarea
+            id="import-text"
+            className="consumer-text-input"
+            rows={6}
+            value={importTextValue}
+            onChange={event => setImportTextValue(event.target.value)}
+            placeholder="粘贴笔记、文章或对话记录…"
+          />
+          <button
+            type="button"
+            className="consumer-primary-button"
+            disabled={importing || !importTextValue.trim()}
+            onClick={() => void submitImport()}
+          >
+            {importing ? '正在导入…' : '导入这段内容'}
+          </button>
+        </section>
       )}
 
       <ul className={styles.documentList}>

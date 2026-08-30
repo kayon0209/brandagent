@@ -17,6 +17,7 @@ export interface VariantsState {
   status: VariantsStatus
   channels: Record<string, ChannelVariantState | undefined>
   failedChannels: Record<string, { retryable: boolean } | undefined>
+  reviewBubbles: { kind: 'needs_fix' | 'blocking' | 'hint'; text: string }[]
   error?: { code: string; message: string }
 }
 
@@ -29,6 +30,7 @@ export function usePlatformVariants(projectId: string) {
     status: 'no_master',
     channels: {},
     failedChannels: {},
+    reviewBubbles: [],
   })
 
   const load = useCallback(async () => {
@@ -37,23 +39,26 @@ export function usePlatformVariants(projectId: string) {
         requires_approval: boolean
         master_content_version_id: string | null
         channels: Record<string, ChannelVariantState>
+        review?: { bubbles: { kind: 'needs_fix' | 'blocking' | 'hint'; text: string }[] }
       }>(`/api/v1/consumer/projects/${projectId}/variants/preview`)
       setState({
         status: data.master_content_version_id ? 'ready' : 'no_master',
         channels: data.channels ?? {},
         failedChannels: {},
+        reviewBubbles: data.review?.bubbles ?? [],
       })
     } catch (error) {
       // honest error state; a transport failure is NOT "no master"
-      setState({
+      setState(previous => ({
         status: 'error',
-        channels: previousChannels(state),
+        channels: previous.channels,
         failedChannels: {},
+        reviewBubbles: previous.reviewBubbles,
         error: {
           code: error instanceof BrandFlowApiError ? error.code : 'NETWORK_ERROR',
           message: error instanceof Error ? error.message : '网络出了点问题',
         },
-      })
+      }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
@@ -79,18 +84,20 @@ export function usePlatformVariants(projectId: string) {
         status: 'ready',
         channels: previous.channels, // previous versions stay visible
         failedChannels,
+        reviewBubbles: previous.reviewBubbles,
       }))
       await load()
     } catch (error) {
-      setState({
+      setState(previous => ({
         status: 'failed',
-        channels: previousChannels(state),
+        channels: previous.channels,
         failedChannels: {},
+        reviewBubbles: previous.reviewBubbles,
         error: {
           code: error instanceof BrandFlowApiError ? error.code : 'NETWORK_ERROR',
           message: error instanceof Error ? error.message : '生成失败，上一版仍可查看',
         },
-      })
+      }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load, projectId])
@@ -109,15 +116,16 @@ export function usePlatformVariants(projectId: string) {
         )
         await load()
       } catch (error) {
-        setState({
+        setState(previous => ({
           status: 'failed',
-          channels: previousChannels(state),
+          channels: previous.channels,
           failedChannels: {},
+          reviewBubbles: previous.reviewBubbles,
           error: {
             code: error instanceof BrandFlowApiError ? error.code : 'NETWORK_ERROR',
             message: error instanceof Error ? error.message : '重新生成失败，上一版仍可查看',
           },
-        })
+        }))
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,8 +133,4 @@ export function usePlatformVariants(projectId: string) {
   )
 
   return { state, generate, regenerate, reload: load }
-}
-
-function previousChannels(state: VariantsState): Record<string, ChannelVariantState | undefined> {
-  return state.channels
 }

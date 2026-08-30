@@ -52,19 +52,18 @@ export default function ConsumerHomePage() {
     if (!title.trim() || !coreIdea.trim()) return
     setCreating(true)
     try {
-      await brandFlowRequest('/api/v1/consumer/projects', {
+      const created = await brandFlowRequest<{ task_id: string }>('/api/v1/consumer/projects', {
         method: 'POST',
         body: JSON.stringify({ title, core_idea: coreIdea, writing_intent: '' }),
       })
       setTitle('')
       setCoreIdea('')
-      await load()
+      window.location.assign(`/app/write/${created.task_id}`)
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : '创建失败，请重试。')
-    } finally {
       setCreating(false)
     }
-  }, [coreIdea, load, title])
+  }, [coreIdea, title])
 
   return (
     <div className={styles.page}>
@@ -120,7 +119,7 @@ export default function ConsumerHomePage() {
             <ul className={styles.documentList}>
               {projects.map(project => (
                 <li key={project.task_id}>
-                  <a href={`/app/write/${project.task_id}#${encodeURIComponent(project.core_idea)}`}>
+                  <a href={`/app/write/${project.task_id}`}>
                     {project.title}
                     <span className="consumer-project-idea">{project.core_idea}</span>
                   </a>
