@@ -1,14 +1,18 @@
-FROM node:20-alpine AS dependencies
+FROM node:22-alpine AS dependencies
 WORKDIR /app
-RUN corepack enable
-COPY package.json pnpm-lock.yaml ./
+RUN npm install --global pnpm@11.22.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
-RUN corepack enable
+RUN npm install --global pnpm@11.22.0
 ARG NEXT_PUBLIC_BRANDFLOW_API_URL
-ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+# Format-valid placeholder (decodes to "docker-build-placeholder.clerk.example$"):
+# Clerk validates key STRUCTURE at build time but never contacts the API
+# during static prerender, so the image builds reproducibly without secrets.
+# Real deployments pass their public key via --build-arg.
+ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZG9ja2VyLWJ1aWxkLXBsYWNlaG9sZGVyLmNsZXJrLmV4YW1wbGUk
 ARG BRANDFLOW_AGENT_INTERNAL_URL=http://agent-api:8000
 ENV NEXT_PUBLIC_BRANDFLOW_API_URL=$NEXT_PUBLIC_BRANDFLOW_API_URL
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
@@ -17,7 +21,7 @@ COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 RUN pnpm build
 
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/.next ./.next

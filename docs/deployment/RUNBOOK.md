@@ -29,6 +29,18 @@ docker compose up --build -d
 docker compose ps
 ```
 
+### Web image build arguments
+
+`docker build -f Dockerfile .` works without secrets: `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` defaults to a format-valid placeholder so static prerendering succeeds. Production must pass the real public key (it is safe to embed — it is a public identifier, not a secret):
+
+```powershell
+docker build -f Dockerfile `
+  --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_xxx `
+  --build-arg NEXT_PUBLIC_BRANDFLOW_API_URL=https://your-web-host .
+```
+
+A placeholder-key image can build and start, but Clerk sign-in will fail until the real key is provided; treat it as a build/CI artifact only.
+
 Readiness gates:
 
 - MCP: `GET http://127.0.0.1:8100/health`

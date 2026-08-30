@@ -1,7 +1,16 @@
+# Keep the Docker context lean: the image only builds the Next.js app,
+# so Python services, the pnpm store, and every local dependency tree
+# are excluded (this was a 1.3GB context before; it must stay small).
+.pnpm-store
+node_modules
+**/node_modules
 .git
 .next
-node_modules
-services/agent-api/.venv
+services
+_sandbox
+tests
+docs
+**/.venv
 **/.pytest_cache
 **/__pycache__
 .env*
