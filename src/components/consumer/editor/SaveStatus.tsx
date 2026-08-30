@@ -2,9 +2,10 @@
 
 import styles from './consumer-editor.module.css'
 
-export type SaveState = 'saved' | 'dirty' | 'saving' | 'conflict' | 'error'
+export type SaveState = 'loading' | 'saved' | 'dirty' | 'saving' | 'conflict' | 'error'
 
 const LABELS: Record<SaveState, string> = {
+  loading: '正在载入稿件…',
   saved: '已保存',
   dirty: '未保存',
   saving: '正在保存…',
@@ -27,7 +28,7 @@ export function SaveStatus({ state, onResolveConflict }: SaveStatusProps) {
       >
         ●
       </span>
-      <span>{state === 'saving' ? '正在保存…' : state === 'dirty' ? '未保存' : LABELS[state]}</span>
+      <span>{LABELS[state]}</span>
       {state === 'conflict' && (
         <button type="button" className={styles.resolveButton} onClick={onResolveConflict}>
           查看最新稿

@@ -7,19 +7,21 @@
  *                    \-> conflict (server revision moved; local text kept)
  *                    \-> error    (network failed; local text kept, sessionStorage backup)
  *
- * Saves are debounced 800ms; "已保存" is only shown after the SERVER
- * confirms the new revision. Review fixes (Phase 5):
- * - flush only clears the pending payload it actually saved (edits that
- *   arrive mid-save stay armed and re-flush);
- * - load() clears any pending payload and bumps seedVersion so the editor
- *   re-seeds from the fresh server document (accepted suggestions and
- *   conflict recovery are no longer reverted by a stale local buffer);
- * - expose the live revision so adopt passes the real baseRevision.
+ * Review fixes for the audit findings:
+ * - flush() SERIALIZES saves: a call while a save is in flight chains
+ *   after it (the previous code silently dropped the caller's payload);
+ * - adopt reads the live revision via latestRevision() — the React state
+ *   closure inside adoptCurrent always saw a stale revision and 409'd;
+ * - the sessionStorage backup is now READ BACK on load when it is newer
+ *   than the server draft (it used to be written and deleted, never read);
+ * - load() failure surfaces as status 'error' instead of silent 'saved';
+ * - beforeunload sends a keepalive fetch (the previous plain async fetch
+ *   was cancelled on page exit despite claiming otherwise).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-export type DraftSaveState = 'saved' | 'dirty' | 'saving' | 'conflict' | 'error'
+export type DraftSaveState = 'loading' | 'saved' | 'dirty' | 'saving' | 'conflict' | 'error'
 
 export interface ConsumerDraftApi {
   getDraft(projectId: string): Promise<{
@@ -39,8 +41,40 @@ export interface ConsumerDraftApi {
 const DEBOUNCE_MS = 800
 const BACKUP_KEY = 'brandagent:draft-backup:'
 
+interface BackupEntry {
+  plainText: string
+  document: { blocks: unknown[] }
+  savedAt: number
+}
+
+function readBackup(projectId: string): BackupEntry | null {
+  try {
+    const raw = window.sessionStorage.getItem(BACKUP_KEY + projectId)
+    return raw ? (JSON.parse(raw) as BackupEntry) : null
+  } catch {
+    return null
+  }
+}
+
+function writeBackup(projectId: string, payload: { document: { blocks: unknown[] }; plainText: string }) {
+  try {
+    const entry: BackupEntry = { ...payload, savedAt: Date.now() }
+    window.sessionStorage.setItem(BACKUP_KEY + projectId, JSON.stringify(entry))
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
+function clearBackup(projectId: string) {
+  try {
+    window.sessionStorage.removeItem(BACKUP_KEY + projectId)
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
 export function useConsumerDraft(projectId: string, api: ConsumerDraftApi) {
-  const [status, setStatus] = useState<DraftSaveState>('saved')
+  const [status, setStatus] = useState<DraftSaveState>('loading')
   const [revision, setRevision] = useState(0)
   const [document, setDocument] = useState<{ blocks: unknown[] } | null>(null)
   const [plainText, setPlainText] = useState('')
@@ -50,83 +84,81 @@ export function useConsumerDraft(projectId: string, api: ConsumerDraftApi) {
   const revisionRef = useRef(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingRef = useRef<{ document: { blocks: unknown[] }; plainText: string } | null>(null)
-  const flushingRef = useRef(false)
+  const flushChainRef = useRef<Promise<unknown>>(Promise.resolve())
 
   const load = useCallback(async () => {
     const draft = await api.getDraft(projectId)
     revisionRef.current = draft.revision
-    // any not-yet-saved local payload is superseded by the fresh server draft
-    pendingRef.current = null
     setRevision(draft.revision)
-    setDocument(draft.document)
-    setPlainText(draft.plain_text)
-    setLocalPlainText(draft.plain_text)
-    setStatus('saved')
-    setSeedVersion(value => value + 1)
-    try {
-      window.sessionStorage.removeItem(BACKUP_KEY + projectId)
-    } catch {
-      /* storage may be unavailable */
+    // a backup newer than the last flush beats the server copy: the user
+    // typed past a failed save, and that text must not be silently lost
+    const backup = readBackup(projectId)
+    if (backup && backup.plainText !== draft.plain_text) {
+      pendingRef.current = { document: backup.document, plainText: backup.plainText }
+      setDocument(backup.document)
+      setPlainText(draft.plain_text)
+      setLocalPlainText(backup.plainText)
+      setStatus('dirty')
+    } else {
+      pendingRef.current = null
+      setDocument(draft.document)
+      setPlainText(draft.plain_text)
+      setLocalPlainText(draft.plain_text)
+      setStatus('saved')
     }
+    setSeedVersion(value => value + 1)
   }, [api, projectId])
 
   useEffect(() => {
     load().catch(() => {
-      // 401/network on boot is surfaced as state, never an unhandled rejection
-      // (audit fix: the error page leaked two unhandled promise rejections)
+      setStatus('error')
     })
   }, [load])
 
   const flush = useCallback(async () => {
-    if (flushingRef.current) return
-    const pending = pendingRef.current
-    if (!pending) return
-    flushingRef.current = true
-    setStatus('saving')
-    try {
-      window.sessionStorage.setItem(BACKUP_KEY + projectId, pending.plainText)
-    } catch {
-      /* storage may be unavailable */
-    }
-    try {
-      const result = await api.saveDraft(projectId, {
-        document: pending.document,
-        plainText: pending.plainText,
-        baseRevision: revisionRef.current,
-      })
-      revisionRef.current = result.revision
-      setRevision(result.revision)
-      // only clear the payload we actually saved; edits that arrived while
-      // this request was in flight remain armed (review P1 lost-update fix)
-      if (pendingRef.current === pending) {
-        pendingRef.current = null
-        setPlainText(pending.plainText)
-        setDocument(pending.document)
-        setStatus('saved')
-      } else {
-        // newer edits exist: keep them dirty and re-arm the debounce
-        setStatus('dirty')
-        if (timerRef.current) clearTimeout(timerRef.current)
-        timerRef.current = setTimeout(() => {
-          void flush()
-        }, DEBOUNCE_MS)
-      }
+    // serialize: a flush during an in-flight save chains after it instead
+    // of returning early and dropping the caller's payload (audit P1)
+    const run = flushChainRef.current.then(async () => {
+      const pending = pendingRef.current
+      if (!pending) return
+      setStatus('saving')
+      writeBackup(projectId, pending)
       try {
-        window.sessionStorage.removeItem(BACKUP_KEY + projectId)
-      } catch {
-        /* storage may be unavailable */
+        const result = await api.saveDraft(projectId, {
+          document: pending.document,
+          plainText: pending.plainText,
+          baseRevision: revisionRef.current,
+        })
+        revisionRef.current = result.revision
+        setRevision(result.revision)
+        // only clear the payload we actually saved; edits that arrived while
+        // this request was in flight remain armed (lost-update fix)
+        if (pendingRef.current === pending) {
+          pendingRef.current = null
+          setPlainText(pending.plainText)
+          setDocument(pending.document)
+          setStatus('saved')
+          clearBackup(projectId)
+        } else {
+          // newer edits exist: keep them dirty and re-arm the debounce
+          setStatus('dirty')
+          if (timerRef.current) clearTimeout(timerRef.current)
+          timerRef.current = setTimeout(() => {
+            void flush()
+          }, DEBOUNCE_MS)
+        }
+      } catch (error) {
+        const code = (error as { code?: string })?.code
+        if (code === 'REVISION_CONFLICT') {
+          setStatus('conflict')
+        } else {
+          setStatus('error')
+        }
+        // local draft is intentionally kept; pendingRef stays armed for retry
       }
-    } catch (error) {
-      const code = (error as { code?: string })?.code
-      if (code === 'REVISION_CONFLICT') {
-        setStatus('conflict')
-      } else {
-        setStatus('error')
-      }
-      // local draft is intentionally kept; pendingRef stays armed for retry
-    } finally {
-      flushingRef.current = false
-    }
+    })
+    flushChainRef.current = run.catch(() => {})
+    await run
   }, [api, projectId])
 
   const markDirty = useCallback(
@@ -146,11 +178,34 @@ export function useConsumerDraft(projectId: string, api: ConsumerDraftApi) {
     await load()
   }, [load])
 
+  const latestRevision = useCallback(() => revisionRef.current, [])
+
+  const saveKeepalive = useCallback(() => {
+    // beforeunload cannot await: fire-and-forget keepalive so the last
+    // keystrokes reach the server even as the tab closes
+    const pending = pendingRef.current
+    if (!pending) return
+    try {
+      void fetch(`/api/brandagent/api/v1/consumer/projects/${projectId}/draft`, {
+        method: 'PUT',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          document: pending.document,
+          plainText: pending.plainText,
+          baseRevision: revisionRef.current,
+        }),
+      })
+      pendingRef.current = null
+    } catch {
+      /* keepalive failures surface via the backup on next load */
+    }
+  }, [projectId])
+
   useEffect(() => {
-    // flush before unload with keepalive so the last keystrokes survive
     const handler = () => {
-      if (pendingRef.current && !flushingRef.current) {
-        void flush()
+      if (pendingRef.current) {
+        saveKeepalive()
       }
     }
     window.addEventListener('beforeunload', handler)
@@ -158,7 +213,7 @@ export function useConsumerDraft(projectId: string, api: ConsumerDraftApi) {
       window.removeEventListener('beforeunload', handler)
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [flush])
+  }, [saveKeepalive])
 
   return {
     status,
@@ -171,5 +226,7 @@ export function useConsumerDraft(projectId: string, api: ConsumerDraftApi) {
     flush,
     resolveConflict,
     reload: load,
+    latestRevision,
+    saveKeepalive,
   }
 }

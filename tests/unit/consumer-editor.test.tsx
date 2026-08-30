@@ -210,7 +210,11 @@ describe('useConsumerDraft', () => {
       plain_text: '服务器最新稿',
     })
     await act(async () => { await result.current.resolveConflict() })
-    expect(result.current.status).toBe('saved')
+    // recovery keeps the user's newer local text as dirty (audit fix: the
+    // old code deleted the backup on load and lost unsaved typing); the
+    // server revision is tracked so the next save can compare-and-swap
+    expect(result.current.status).toBe('dirty')
+    expect(result.current.localPlainText).toBe('本地继续编辑')
     expect(result.current.revision).toBe(7)
   })
 
@@ -224,6 +228,45 @@ describe('useConsumerDraft', () => {
     await act(async () => { await result.current.flush() })
     expect(result.current.status).toBe('error')
     expect(result.current.localPlainText).toBe('断网时编辑的内容')
+  })
+
+  it('serializes concurrent flushes instead of dropping the second payload', async () => {
+    const api = makeApi()
+    let resolveFirst: (value: { revision: number }) => void
+    api.saveDraft.mockImplementationOnce(
+      () => new Promise(resolve => { resolveFirst = resolve }),
+    )
+    const { result } = renderHook(() => useConsumerDraft('task-1', api))
+    await act(async () => { await Promise.resolve() })
+
+    act(() => { result.current.markDirty({ blocks: [] }, '第一版') })
+    // drive flush #1 directly: it stays in flight because resolveFirst is pending
+    let firstFlush: Promise<void>
+    act(() => { firstFlush = result.current.flush() })
+    // drain microtasks so saveDraft is actually reached
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(api.saveDraft).toHaveBeenCalledTimes(1)
+    // flush #2 must chain after the in-flight save, not drop the payload
+    let secondFlush: Promise<void>
+    act(() => {
+      result.current.markDirty({ blocks: [] }, '第二版')
+      secondFlush = result.current.flush()
+    })
+    await act(async () => { resolveFirst!({ revision: 4 }) })
+    await act(async () => { await firstFlush! })
+    await act(async () => { await secondFlush! })
+    expect(api.saveDraft).toHaveBeenCalledTimes(2)
+    expect(api.saveDraft).toHaveBeenLastCalledWith('task-1', expect.objectContaining({ plainText: '第二版' }))
+    expect(result.current.status).toBe('saved')
+  })
+
+  it('shows error (not silent saved) when the initial load fails', async () => {
+    const api = makeApi()
+    api.getDraft.mockRejectedValue(new TypeError('fetch failed'))
+    const { result } = renderHook(() => useConsumerDraft('task-1', api))
+    await act(async () => { await Promise.resolve() })
+    await act(async () => { await Promise.resolve() })
+    expect(result.current.status).toBe('error')
   })
 })
 
