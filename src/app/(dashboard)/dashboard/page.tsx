@@ -115,6 +115,9 @@ function RecentArticleCard({ article }: { article: Article }) {
 
 // ── Server Component 主体 ─────────────────────────────────────────
 
+// 数据来自 Supabase 按请求查询，不做 build 时预渲染（离线构建会失败）
+export const dynamic = 'force-dynamic'
+
 export default async function DashboardPage() {
   const userId = 'anonymous'
   const firstName = '创作者'

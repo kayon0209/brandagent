@@ -5,6 +5,9 @@
 import { NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/api/supabase-server'
 
+// 按请求查询配额，不做 build 时预渲染（离线构建会失败）
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   const userId = 'anonymous'
 
