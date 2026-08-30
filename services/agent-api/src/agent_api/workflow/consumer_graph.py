@@ -67,6 +67,7 @@ def build_consumer_graph(*, provider: LLMProvider, core_idea: str, intent: str, 
         "raw_text": str,
         "candidate": Any,
         "error": Any,
+        "usage": Any,
     }
 
     async def collect(state: dict) -> dict:
@@ -88,7 +89,15 @@ def build_consumer_graph(*, provider: LLMProvider, core_idea: str, intent: str, 
     async def generate(state: dict) -> dict:
         try:
             result = await provider.generate(system=SYSTEM_PROMPT, prompt=_user_prompt(), prompt_version=PROMPT_VERSION)
-            return {"raw_text": result.content, "error": None}
+            return {
+                "raw_text": result.content,
+                "error": None,
+                "usage": {
+                    "input_tokens": result.input_tokens,
+                    "output_tokens": result.output_tokens,
+                    "model": result.model,
+                },
+            }
         except ProviderExecutionError as error:
             return {"raw_text": "", "error": {"code": "PROVIDER_FAILED", "message": str(error), "retryable": error.retryable}}
 
@@ -123,7 +132,7 @@ class GraphCandidateGenerator:
     def __init__(self, *, provider: LLMProvider) -> None:
         self._provider = provider
 
-    async def generate(self, *, core_idea: str, intent: str, excerpts: list[dict], base_revision: int) -> dict:
+    async def generate(self, *, core_idea: str, intent: str, excerpts: list[dict], base_revision: int, usage_out: dict | None = None) -> dict:
         graph = build_consumer_graph(
             provider=self._provider,
             core_idea=core_idea,
@@ -140,6 +149,7 @@ class GraphCandidateGenerator:
                 "raw_text": "",
                 "candidate": None,
                 "error": None,
+                "usage": None,
             }
         )
         if result.get("error"):
@@ -148,4 +158,6 @@ class GraphCandidateGenerator:
         candidate = result["candidate"]
         if candidate is None:
             raise RuntimeError("candidate generation failed: no candidate produced")
+        if usage_out is not None and isinstance(result.get("usage"), dict):
+            usage_out.update(result["usage"])
         return candidate

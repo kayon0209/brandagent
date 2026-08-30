@@ -19,6 +19,7 @@ from typing import Protocol
 
 from agent_api.api.security import Principal
 from agent_api.domain.errors import ConflictError, NotFoundError
+from agent_api.providers.base import ModelCallResult
 
 
 ACTIONS = ("expand", "replace_example", "shorten")
@@ -62,7 +63,7 @@ class SuggestionStore(Protocol):
 
 
 class AssistProvider(Protocol):
-    async def generate(self, *, system: str, prompt: str, prompt_version: str) -> dict: ...
+    async def generate(self, *, system: str, prompt: str, prompt_version: str) -> ModelCallResult: ...
 
 
 def selection_hash(text: str) -> str:
@@ -117,6 +118,9 @@ class EditorialAssistService:
         selected_text: str,
         block_id: str,
         base_revision: int,
+        start_offset: int | None = None,
+        end_offset: int | None = None,
+        usage_out: dict | None = None,
     ) -> dict | None:
         if action not in ACTIONS:
             raise ActionNotSupported(action)
@@ -127,7 +131,13 @@ class EditorialAssistService:
         block_text = self._block_text(draft["document"], block_id)
         if block_text is None:
             raise NotFoundError(f"block {block_id} not found in the draft")
-        if selected_text not in block_text:
+        # anchor verification: client offsets are authoritative when sent;
+        # the server recomputes the slice and compares, never plain_text.find
+        if start_offset is not None and end_offset is not None:
+            expected = block_text[start_offset : end_offset + 1]
+            if expected != selected_text:
+                raise SelectionStale("选区与当前稿件不一致，请重新选择")
+        elif selected_text not in block_text:
             raise SelectionStale("选区与当前稿件不一致，请重新选择")
 
         excerpts = await self._linked_excerpts(principal, task_id)
@@ -146,7 +156,15 @@ class EditorialAssistService:
             prompt=prompt,
             prompt_version=f"editorial-assist:{action}:v1",
         )
-        suggested_text = str(result.get("content", "")).strip()
+        if usage_out is not None:
+            usage_out.update(
+                {
+                    "input_tokens": result.input_tokens,
+                    "output_tokens": result.output_tokens,
+                    "model": result.model,
+                }
+            )
+        suggested_text = result.content.strip()
         if not suggested_text:
             return None
 
@@ -166,6 +184,8 @@ class EditorialAssistService:
                 "selected_text_hash": selection_hash(selected_text),
                 "suggested_text": suggested_text,
                 "block_id": block_id,
+                "start_offset": start_offset,
+                "end_offset": end_offset,
                 "base_revision": base_revision,
                 "supporting_excerpt_ids": [e.get("excerpt_id") for e in excerpts],
                 "prompt_version": f"editorial-assist:{action}:v1",
@@ -177,22 +197,20 @@ class EditorialAssistService:
     # accept
     # ------------------------------------------------------------------
 
-    def _canonical_selection(self, suggestion: dict, draft: dict) -> str | None:
+    def _canonical_selection(self, suggestion: dict, draft: dict, block_text: str) -> str | None:
         """Resolve the selection against the CURRENT server document.
 
-        Offset-first (persisted suggestions store offsets + hash only);
-        fall back to the raw selected text for stores that keep it.
+        Block-local offsets are authoritative (the client computed them
+        against this very block); the raw selected text is only a legacy
+        fallback for stores that did not persist offsets.
         """
 
-        plain_text = draft["plain_text"]
         start = suggestion.get("start_offset")
         end = suggestion.get("end_offset")
-        if isinstance(start, int) and isinstance(end, int) and start >= 0 and end >= start:
-            if end >= len(plain_text):
-                return None
-            return plain_text[start : end + 1]
+        if isinstance(start, int) and isinstance(end, int) and 0 <= start <= end < len(block_text):
+            return block_text[start : end + 1]
         selected = suggestion.get("selected_text")
-        if selected and selected in plain_text:
+        if selected and selected in block_text:
             return selected
         return None
 
@@ -225,39 +243,36 @@ class EditorialAssistService:
         if block is None:
             raise SelectionStale("选区所在段落已不存在")
 
-        # canonical selection: offsets first, raw text fallback
-        selection = self._canonical_selection(suggestion, draft)
+        # canonical selection: block-local offsets first, raw text fallback
+        block_text = block.get("text", "")
+        selection = self._canonical_selection(suggestion, draft, block_text)
         if selection is None:
             raise SelectionStale("选区与当前稿件不一致，请重新生成建议")
         if selection_hash(selection) != suggestion["selected_text_hash"]:
             raise SelectionStale("选区校验失败")
-        block_text = block.get("text", "")
         if selection not in block_text:
             raise SelectionStale("选区与当前稿件不一致，请重新生成建议")
 
-        # ONE derivation for both surfaces (code review P1): find the
-        # selection's plain-text offset via the resolved block occurrence
-        # so block text and plain_text can never diverge.
-        block_plain_offset = draft["plain_text"].find(block_text)
-        if block_plain_offset >= 0:
-            occurrence_in_block = block_text.find(selection)
-            plain_start = block_plain_offset + occurrence_in_block
+        # replace within the block at the verified anchor (block-local
+        # offset when present; first text occurrence otherwise), then
+        # rebuild plain text from the same block text so the two surfaces
+        # can never diverge.
+        offset = suggestion.get("start_offset")
+        if isinstance(offset, int) and block_text[offset : suggestion.get("end_offset", offset) + 1] == selection:
+            occurrence_in_block = offset
         else:
-            plain_start = draft["plain_text"].find(selection)
-        if plain_start < 0:
-            raise SelectionStale("选区与当前稿件不一致，请重新生成建议")
-
-        suggested = suggestion["suggested_text"]
-        new_block_text = block_text[:occurrence_in_block] + suggested + block_text[occurrence_in_block + len(selection):] if block_plain_offset >= 0 else block_text.replace(selection, suggested, 1)
-        new_plain = (
-            draft["plain_text"][:plain_start] + suggested + draft["plain_text"][plain_start + len(selection):]
+            occurrence_in_block = block_text.find(selection)
+            if occurrence_in_block < 0:
+                raise SelectionStale("选区与当前稿件不一致，请重新生成建议")
+        new_block_text = (
+            block_text[:occurrence_in_block] + suggestion["suggested_text"] + block_text[occurrence_in_block + len(selection):]
         )
-        new_document = {
-            "blocks": [
-                {**b, "text": new_block_text} if b.get("block_id") == suggestion["block_id"] else b
-                for b in draft["document"].get("blocks", [])
-            ]
-        }
+        new_blocks = [
+            {**b, "text": new_block_text} if b.get("block_id") == suggestion["block_id"] else b
+            for b in draft["document"].get("blocks", [])
+        ]
+        new_plain = "\n".join(b.get("text", "") for b in new_blocks)
+        new_document = {"blocks": new_blocks}
         try:
             saved = await self._store.save_draft(
                 principal.workspace_id,

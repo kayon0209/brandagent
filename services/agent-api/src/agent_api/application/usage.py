@@ -182,7 +182,8 @@ async def ledgered_call(
 
     - QuotaExceeded propagates and the guarded call never runs;
     - success settles with the reservation estimate unless the caller
-      replaced `outcome["usage"]`;
+      wrote real provider tokens into `outcome` (services do this via
+      their usage_out parameter);
     - any exception refunds the reservation.
     """
 
@@ -192,7 +193,7 @@ async def ledgered_call(
         operation=operation,
         estimated_tokens=estimated_tokens,
     )
-    outcome: dict = {"input_tokens": None, "output_tokens": None}
+    outcome: dict = {"input_tokens": None, "output_tokens": None, "model": None}
     try:
         yield outcome
     except Exception:
@@ -204,5 +205,5 @@ async def ledgered_call(
         operation=operation,
         input_tokens=outcome.get("input_tokens"),
         output_tokens=outcome.get("output_tokens"),
-        model=None,
+        model=outcome.get("model"),
     )

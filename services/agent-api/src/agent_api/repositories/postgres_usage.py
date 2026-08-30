@@ -94,18 +94,23 @@ class PostgresUsageLedgerStore:
                     """INSERT INTO usage_ledger
                            (workspace_id, request_id, user_id, operation, state,
                             estimated_cost)
-                    SELECT %s, %s, %s, %s, 'reserved', %s
-                    WHERE %s + COALESCE((
-                        SELECT SUM(
-                            CASE
-                              WHEN state='settled' THEN COALESCE(input_tokens,0)+COALESCE(output_tokens,0)
-                              WHEN state='reserved' THEN CEIL(COALESCE(estimated_cost,0)*1000000)
-                              WHEN state='refunded' THEN 0
-                            END)
-                        FROM usage_ledger
-                        WHERE workspace_id=%s AND state IN ('settled','reserved')
-                    ), 0) <= %s
-                    RETURNING workspace_id, request_id, user_id, operation,
+                       SELECT %s, %s, %s, %s, 'reserved', %s
+                       WHERE %s + COALESCE((
+                           SELECT SUM(
+                               CASE
+                                 WHEN state='settled' THEN
+                                     CASE
+                                       WHEN input_tokens IS NOT NULL OR output_tokens IS NOT NULL
+                                         THEN COALESCE(input_tokens,0)+COALESCE(output_tokens,0)
+                                       ELSE CEIL(COALESCE(estimated_cost,0)*1000000)
+                                     END
+                                 WHEN state='reserved' THEN CEIL(COALESCE(estimated_cost,0)*1000000)
+                                 WHEN state='refunded' THEN 0
+                               END)
+                           FROM usage_ledger
+                           WHERE workspace_id=%s AND state IN ('settled','reserved')
+                       ), 0) <= %s
+                      RETURNING workspace_id, request_id, user_id, operation,
                               model, input_tokens, output_tokens, estimated_cost,
                               state""",
                     (
@@ -178,7 +183,12 @@ class PostgresUsageLedgerStore:
             cursor = await connection.execute(
                 """SELECT COALESCE(SUM(
                        CASE
-                         WHEN state='settled' THEN COALESCE(input_tokens,0)+COALESCE(output_tokens,0)
+                         WHEN state='settled' THEN
+                             CASE
+                               WHEN input_tokens IS NOT NULL OR output_tokens IS NOT NULL
+                                 THEN COALESCE(input_tokens,0)+COALESCE(output_tokens,0)
+                               ELSE CEIL(COALESCE(estimated_cost,0)*1000000)
+                             END
                          WHEN state='reserved' THEN CEIL(COALESCE(estimated_cost,0) * 1000000)
                          ELSE 0
                        END),0) AS total
@@ -199,7 +209,12 @@ class PostgresUsageLedgerStore:
             if await cursor.fetchone() is None:
                 return None
             cursor = await connection.execute(
-                """SELECT COALESCE(SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)),0) AS used
+                """SELECT COALESCE(SUM(
+                       CASE
+                         WHEN input_tokens IS NOT NULL OR output_tokens IS NOT NULL
+                           THEN COALESCE(input_tokens,0)+COALESCE(output_tokens,0)
+                         ELSE CEIL(COALESCE(estimated_cost,0)*1000000)
+                       END),0) AS used
                    FROM usage_ledger
                    WHERE workspace_id=%s AND state='settled'""",
                 (workspace_id,),
