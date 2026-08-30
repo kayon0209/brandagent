@@ -24,3 +24,4 @@ tsconfig.tsbuildinfo
 
 # 实验区（Prompt 测试、临时脚本）——不进生产
 _sandbox/
+test-results/
