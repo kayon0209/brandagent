@@ -36,13 +36,14 @@ class GenerationFailed(VariantGenerationError):
 
 
 class VariantChannelGenerator(Protocol):
-    async def generate(self, *, channel: str, master_content: str, core_idea: str) -> dict: ...
+    async def generate(self, *, channel: str, master_content: str, core_idea: str, usage_out: dict | None = None) -> dict: ...
 
 
 class ConsumerVariantStore(Protocol):
     async def get_project(self, workspace_id: str, task_id: str) -> dict | None: ...
     async def active_master(self, workspace_id: str, task_id: str) -> dict | None: ...
     async def current_variant(self, workspace_id: str, task_id: str, channel: str) -> dict | None: ...
+    async def latest_reviews(self, workspace_id: str, task_id: str, content_version_id: str) -> list[dict]: ...
     async def save_variant(self, **payload) -> dict: ...
     async def append_event(self, event: dict) -> None: ...
 
@@ -83,7 +84,7 @@ class ConsumerChannelGeneratorAdapter:
     def __init__(self, *, provider) -> None:
         self._provider = provider
 
-    async def generate(self, *, channel: str, master_content: str, core_idea: str) -> dict:
+    async def generate(self, *, channel: str, master_content: str, core_idea: str, usage_out: dict | None = None) -> dict:
         import json as _json
 
         from agent_api.providers.base import ProviderExecutionError
@@ -105,6 +106,10 @@ class ConsumerChannelGeneratorAdapter:
                 f"{channel} 版本生成暂时不可用",
                 retryable=error.retryable,
             ) from error
+        if usage_out is not None:
+            usage_out["input_tokens"] = (usage_out.get("input_tokens") or 0) + (result.input_tokens or 0)
+            usage_out["output_tokens"] = (usage_out.get("output_tokens") or 0) + (result.output_tokens or 0)
+            usage_out["model"] = result.model
         try:
             payload = _json.loads(result.content)
             content = str(payload["content"])
@@ -168,17 +173,28 @@ class PlatformVariantService:
     # public interface
     # ------------------------------------------------------------------
 
-    async def generate_variants(self, principal: Principal, task_id: str) -> dict:
+    async def _core_idea(self, principal: Principal, task_id: str) -> str:
+        """The project's core idea is product truth: platform variants must
+        preserve it (audit finding: it was hardcoded to an empty string)."""
+
+        project = await self._store.get_project(principal.workspace_id, task_id)
+        if project is None:
+            raise NotFoundError(f"project {task_id} not found in this workspace")
+        return str(project.get("core_idea") or "")
+
+    async def generate_variants(self, principal: Principal, task_id: str, *, usage_out: dict | None = None) -> dict:
         """Generate variants for the default consumer channels in one call."""
 
         master = await self._master(principal, task_id)
+        core_idea = await self._core_idea(principal, task_id)
         channels: dict[str, dict] = {}
         for channel in self._channels:
             try:
                 result = await self._generator.generate(
                     channel=channel,
                     master_content=master["content"],
-                    core_idea="",
+                    core_idea=core_idea,
+                    usage_out=usage_out,
                 )
                 saved = await self._save(principal, task_id, master, channel, result)
                 channels[channel] = {
@@ -211,7 +227,7 @@ class PlatformVariantService:
                 )
         return {"channels": channels, "master_content_version_id": master["content_version_id"]}
 
-    async def regenerate(self, principal: Principal, task_id: str, channel: str) -> dict:
+    async def regenerate(self, principal: Principal, task_id: str, channel: str, *, usage_out: dict | None = None) -> dict:
         """Regenerate one channel: adds a NEW version, never mutates the master.
 
         Idempotency is request-replay scoped: the same master hash + channel
@@ -219,8 +235,9 @@ class PlatformVariantService:
         """
 
         master = await self._master(principal, task_id)
+        core_idea = await self._core_idea(principal, task_id)
         try:
-            result = await self._generator.generate(channel=channel, master_content=master["content"], core_idea="")
+            result = await self._generator.generate(channel=channel, master_content=master["content"], core_idea=core_idea, usage_out=usage_out)
         except VariantGenerationError:
             raise
         saved = await self._save(principal, task_id, master, channel, result, prompt_version=_REGEN_PROMPT_VERSION)
@@ -235,7 +252,11 @@ class PlatformVariantService:
         return {**saved, "status": "ready", "channel": channel}
 
     async def preview(self, principal: Principal, task_id: str) -> dict:
-        """Safe preview: no approval, always available for THIS workspace's project."""
+        """Safe preview: no approval, always available for THIS workspace's project.
+
+        Includes the spoken-language pre-publish review bubbles mapped from
+        the adopted master's deterministic review rows (the UI previously
+        hard-wired an empty list, so real warnings could never appear)."""
 
         if await self._store.get_project(principal.workspace_id, task_id) is None:
             raise NotFoundError(f"project {task_id} not found in this workspace")
@@ -249,10 +270,23 @@ class PlatformVariantService:
                     "content_version_id": current["content_version_id"],
                     "master_content_version_id": current["master_content_version_id"],
                 }
+        bubbles: list[dict] = []
+        if master is not None:
+            reviews = await self._store.latest_reviews(
+                principal.workspace_id, task_id, master["content_version_id"]
+            )
+            from agent_api.application.consumer_reviews import ConsumerReviewMapper
+
+            bubbles = ConsumerReviewMapper().map_bubbles(
+                reviews,
+                master_snapshot_hash=master["immutable_hash"],
+                export_snapshot_hash=master["immutable_hash"],
+            )
         return {
             "requires_approval": False,
             "master_content_version_id": master["content_version_id"] if master else None,
             "channels": channels,
+            "review": {"bubbles": bubbles},
         }
 
     async def prepare_export(self, principal: Principal, task_id: str) -> dict:

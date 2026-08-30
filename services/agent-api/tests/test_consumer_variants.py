@@ -34,10 +34,12 @@ class StubChannelGenerator:
         self.fail_channels: set[str] = set()
         self.output_by_channel = output_by_channel or {}
 
-    async def generate(self, *, channel: str, master_content: str, core_idea: str) -> dict:
+    async def generate(self, *, channel: str, master_content: str, core_idea: str, usage_out: dict | None = None) -> dict:
         self.calls.append({"channel": channel, "master_content": master_content, "core_idea": core_idea})
         if channel in self.fail_channels:
             raise GenerationFailed(channel, "provider exploded")
+        if usage_out is not None:
+            usage_out.update({"input_tokens": 50, "output_tokens": 50, "model": "stub"})
         content = self.output_by_channel.get(channel, f"{channel} 版本内容：{master_content}")
         return {"content": content, "claims": [], "block_mappings": []}
 
@@ -67,6 +69,10 @@ class MemoryVariantStore:
     async def current_variant(self, workspace_id: str, task_id: str, channel: str) -> dict | None:
         versions = self.variants.get((task_id, channel), [])
         return versions[-1] if versions else None
+
+    async def latest_reviews(self, workspace_id: str, task_id: str, content_version_id: str) -> list[dict]:
+        # memory store holds no review rows; the postgres store owns them
+        return []
 
     async def save_variant(self, *, workspace_id, task_id, channel, content, claims, block_mappings, master_content_version_id, master_snapshot_hash, prompt_version) -> dict:
         key = (task_id, channel)

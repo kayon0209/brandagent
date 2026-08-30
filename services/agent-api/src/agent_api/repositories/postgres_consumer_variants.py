@@ -76,6 +76,24 @@ class PostgresConsumerVariantStore:
             )
             return await cursor.fetchone()
 
+    async def latest_reviews(self, workspace_id: str, task_id: str, content_version_id: str) -> list[dict]:
+        """Deterministic review rows attached to a version (factual etc.)."""
+
+        async with self._pool.connection() as connection:
+            await self._scope(connection, workspace_id)
+            cursor = await connection.execute(
+                """SELECT review_type, passed, max_severity
+                   FROM review_results
+                   WHERE workspace_id=%s AND task_id=%s AND content_version_id=%s
+                   ORDER BY created_at DESC""",
+                (workspace_id, task_id, content_version_id),
+            )
+            rows = await cursor.fetchall()
+        return [
+            {"dimension": row["review_type"], "passed": row["passed"], "severity": row["max_severity"] or "warning"}
+            for row in rows
+        ]
+
     # ------------------------------------------------------------------
     # variant writes (idempotent per master hash + channel + prompt version)
     # ------------------------------------------------------------------

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from psycopg.rows import dict_row
@@ -378,7 +379,47 @@ class PostgresConsumerProjectStore:
                    WHERE workspace_id=%s AND task_id=%s""",
                 (version_id, workspace_id, task_id),
             )
+            # Deterministic pre-publish review (audit finding: the review
+            # bubbles had NO writer, so the UI could never show a real
+            # warning): every numeric claim in the adopted master must
+            # trace to a linked excerpt, else the row fails and the
+            # preview endpoint surfaces a spoken-language bubble.
+            await self._insert_factual_review(
+                connection, workspace_id, task_id, version_id, plain_text
+            )
             return row
+
+    _NUMERIC_CLAIM_RE = re.compile(r"\d+%|\d+(?:\.\d+)?[万亿倍]")
+
+    async def _insert_factual_review(self, connection, workspace_id: str, task_id: str, version_id: str, plain_text: str) -> None:
+        cursor = await connection.execute(
+            """SELECT e.excerpt_text
+               FROM material_excerpts e
+               JOIN project_material_links l
+                 ON l.workspace_id = e.workspace_id AND l.excerpt_id = e.excerpt_id
+               WHERE e.workspace_id=%s AND l.task_id=%s""",
+            (workspace_id, task_id),
+        )
+        excerpt_text = " ".join(str(row["excerpt_text"]) for row in await cursor.fetchall())
+        claims = set(self._NUMERIC_CLAIM_RE.findall(plain_text))
+        unsupported = sorted(claim for claim in claims if claim not in excerpt_text)
+        passed = not unsupported
+        review_id = str(uuid4())
+        await connection.execute(
+            """INSERT INTO review_results
+                   (review_id, workspace_id, task_id, content_version_id,
+                    review_type, passed, max_severity, reviewer_type, reviewer_version)
+               VALUES (%s, %s, %s, %s, 'factual', %s, %s, 'deterministic', 'consumer-factual:v1')
+               ON CONFLICT DO NOTHING""",
+            (
+                review_id,
+                workspace_id,
+                task_id,
+                version_id,
+                passed,
+                None if passed else "critical",
+            ),
+        )
 
     async def get_draft_snapshot_version(self, workspace_id: str, task_id: str, revision: int) -> dict | None:
         version_id = str(uuid5(NAMESPACE_URL, f"brandagent:snapshot:{task_id}:{revision}"))

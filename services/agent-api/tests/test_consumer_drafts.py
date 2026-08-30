@@ -174,8 +174,10 @@ class StubCandidateGenerator:
     def __init__(self) -> None:
         self.calls: list[dict] = []
 
-    async def generate(self, *, core_idea: str, intent: str, excerpts: list[dict], base_revision: int) -> dict:
+    async def generate(self, *, core_idea: str, intent: str, excerpts: list[dict], base_revision: int, usage_out: dict | None = None) -> dict:
         self.calls.append({"core_idea": core_idea, "excerpts": excerpts, "base_revision": base_revision})
+        if usage_out is not None:
+            usage_out.update({"input_tokens": 100, "output_tokens": 100, "model": "stub"})
         return {
             "blocks": [
                 {"block_id": "b1", "block_type": "heading", "text": core_idea},

@@ -34,7 +34,7 @@ class ConsumerDraftWriter(Protocol):
 class CandidateGenerator(Protocol):
     """Draft generation port; the LLM workflow is injected here."""
 
-    async def generate(self, *, core_idea: str, intent: str, excerpts: list[dict], base_revision: int) -> dict: ...
+    async def generate(self, *, core_idea: str, intent: str, excerpts: list[dict], base_revision: int, usage_out: dict | None = None) -> dict: ...
 
 
 _EVENT_CANDIDATE_READY = "consumer.draft.candidate_ready.v1"
@@ -58,7 +58,7 @@ class DraftGenerationService:
             raise NotFoundError(f"draft for project {task_id} not found")
         return project, draft, int(draft["revision"])
 
-    async def generate(self, principal: Principal, task_id: str) -> dict:
+    async def generate(self, principal: Principal, task_id: str, *, usage_out: dict | None = None) -> dict:
         """Run the generator and persist a candidate version (draft untouched)."""
 
         project, draft, revision = await self._context(principal, task_id)
@@ -67,6 +67,7 @@ class DraftGenerationService:
             intent=project.get("writing_intent", ""),
             excerpts=project.get("linked_excerpts", []),
             base_revision=revision,
+            usage_out=usage_out,
         )
         version = await self._store.insert_candidate_version(
             principal.workspace_id,
