@@ -33,6 +33,12 @@ test('Next middleware wires Clerk auth for the BFF route', async () => {
   assert.match(source, /clerkMiddleware/, 'middleware must install clerkMiddleware')
 })
 
+test('/app consumer routes are login-protected in middleware', async () => {
+  const source = await read('src/middleware.ts')
+  assert.match(source, /auth\.protect/, 'middleware must call auth.protect() for /app')
+  assert.match(source, /'\/app\(\.\*\)'/, 'the route matcher must cover all /app pages')
+})
+
 test('the browser can no longer reach the agent API through a rewrite bypass', async () => {
   const source = await read('next.config.js')
   assert.doesNotMatch(source, /brandflow-api/, 'the /brandflow-api rewrite must be removed')

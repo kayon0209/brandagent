@@ -36,6 +36,10 @@ async function proxy(request: NextRequest, context: RouteContext) {
     Authorization: `Bearer ${token}`,
     'X-Request-Id': requestId,
   })
+  // the original Content-Type must survive (multipart uploads break
+  // without their boundary); other hop-by-hop headers are not forwarded
+  const contentType = request.headers.get('content-type')
+  if (contentType) headers.set('Content-Type', contentType)
   const idempotencyKey = request.headers.get('idempotency-key')
   if (idempotencyKey) headers.set('Idempotency-Key', idempotencyKey)
   const lastEventId = request.headers.get('last-event-id')
@@ -43,7 +47,22 @@ async function proxy(request: NextRequest, context: RouteContext) {
 
   const search = new URL(request.url).search
   const target = `${agentApiUrl()}/${context.params.path.join('/')}${search}`
-  const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer()
+
+  let body: ArrayBuffer | undefined
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    body = await request.arrayBuffer()
+    // verify the REAL size: chunked requests carry no Content-Length and
+    // would otherwise bypass the cap above (security review P1)
+    if (body.byteLength > MAX_BODY_BYTES) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: { code: 'PAYLOAD_TOO_LARGE', message: '请求内容过大，请减小后重试。' },
+        },
+        { status: 413, headers: { 'X-Request-Id': requestId } },
+      )
+    }
+  }
 
   let upstream: Response
   try {
@@ -56,8 +75,8 @@ async function proxy(request: NextRequest, context: RouteContext) {
   }
 
   const responseHeaders = new Headers()
-  const contentType = upstream.headers.get('content-type')
-  if (contentType) responseHeaders.set('Content-Type', contentType)
+  const upstreamContentType = upstream.headers.get('content-type')
+  if (upstreamContentType) responseHeaders.set('Content-Type', upstreamContentType)
   responseHeaders.set('X-Request-Id', requestId)
   return new NextResponse(upstream.body, { status: upstream.status, headers: responseHeaders })
 }
