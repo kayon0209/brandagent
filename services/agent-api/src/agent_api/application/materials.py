@@ -107,7 +107,9 @@ class MaterialService:
         if existing_import is not None:
             return existing_import
 
-        checksum = material_checksum(material.content)
+        # checksum is workspace-seeded: identical text in two workspaces can
+        # never collide on global chunk/excerpt primary keys (review P2)
+        checksum = material_checksum(workspace_id, material.content)
         await self._emit(workspace_id, request_id, _EVENT_IMPORTED, {"source_kind": source_kind, "status": "accepted"})
 
         duplicate = await self._store.find_document_by_checksum(workspace_id, checksum)

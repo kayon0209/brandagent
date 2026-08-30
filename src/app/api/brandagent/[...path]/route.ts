@@ -9,11 +9,26 @@ const ANONYMOUS_ENVELOPE = {
   error: { code: 'AUTH_REQUIRED', message: '登录后才能继续使用工作区。' },
 }
 
+// End-to-end request body cap (security review P2): the biggest legitimate
+// payload is a material upload (10MB) + JSON envelope headroom.
+const MAX_BODY_BYTES = 12 * 1024 * 1024
+
 async function proxy(request: NextRequest, context: RouteContext) {
   const { userId, getToken } = await auth()
   const token = await getToken()
   if (!userId || !token) {
     return NextResponse.json(ANONYMOUS_ENVELOPE, { status: 401 })
+  }
+
+  const contentLength = Number(request.headers.get('content-length') ?? '0')
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: 'PAYLOAD_TOO_LARGE', message: '请求内容过大，请减小后重试。' },
+      },
+      { status: 413 },
+    )
   }
 
   const requestId = request.headers.get('x-request-id') ?? crypto.randomUUID()

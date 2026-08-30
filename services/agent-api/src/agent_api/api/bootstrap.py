@@ -63,6 +63,10 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
         if settings.auth_mode != "dev":
             raise RuntimeError("CLERK_AUDIENCE or CLERK_AUTHORIZED_PARTIES is required outside dev auth mode")
         authorized_parties = ["http://localhost:3000", "http://localhost:3001"]
+    if settings.auth_mode == "dev" and settings.environment == "production":
+        # Security review P2: a stray AUTH_MODE=dev must never silently
+        # disable authentication in a production deployment.
+        raise RuntimeError("AUTH_MODE=dev is not allowed when ENVIRONMENT=production")
     verifier = ClerkJWTVerifier(
         jwks_url=settings.clerk_jwks_url or "",
         issuer=settings.clerk_issuer or "",

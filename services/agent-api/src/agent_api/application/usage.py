@@ -82,8 +82,13 @@ class UsageLedgerService:
                 "operation": operation,
                 "estimated_tokens": estimated_tokens,
                 "state": "reserved",
+                "quota": self._quota,  # store serializes concurrent reserves (TOCTOU fix)
             }
         )
+        if entry is None:
+            # the atomic guard-INSERT rejected the reservation (quota oversubscribed
+            # by concurrent requests); nothing partial was persisted
+            raise QuotaExceeded()
         return {**entry, "replayed": False}
 
     async def settle(

@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import re
+import socket
+import struct
 from dataclasses import dataclass
 from uuid import NAMESPACE_URL, uuid5
 from urllib.parse import urlsplit
@@ -57,9 +59,14 @@ class MaterialValidationError(ValueError):
 # Checksum, chunking, provenance
 # ---------------------------------------------------------------------------
 
-def material_checksum(content: str) -> str:
-    """Stable content checksum used for workspace-level dedup."""
-    return hashlib.sha256(f"material:v1:{content}".encode("utf-8")).hexdigest()
+def material_checksum(workspace_id: str, content: str) -> str:
+    """Stable content checksum used for workspace-level dedup.
+
+    The workspace seeds the digest (security-review P2 fix): identical text
+    imported in two workspaces derives independent checksums/chunk ids and
+    can never collide on the global primary keys.
+    """
+    return hashlib.sha256(f"material:v1:{workspace_id}:{content}".encode("utf-8")).hexdigest()
 
 
 def chunk_material(content: str, *, target_chars: int = 600) -> list[str]:
@@ -142,8 +149,9 @@ def assert_safe_material_url(url: str) -> str:
     """Validate a user-submitted URL for material import; raise on private targets.
 
     Returns the canonical http(s) URL. DNS-based private resolution happens at
-    fetch time; this gate rejects literal private hosts, non-http(s) schemes,
-    and missing hosts outright.
+    fetch time; this gate rejects literal private hosts, ALL numeric IPv4
+    spellings (dotted, integer, hex, octal — inet_aton normalizes them),
+    non-http(s) schemes, and missing hosts outright.
     """
     try:
         parts = urlsplit(url)
@@ -163,8 +171,15 @@ def assert_safe_material_url(url: str) -> str:
         or host.endswith(".lan")
     ):
         raise MaterialValidationError("Private network URLs cannot be imported")
+    # numeric forms: inet_aton accepts "2130706433", "0x7f000001", "0177.0.0.1"
     try:
-        address = ipaddress.ip_address(host)
+        packed = socket.inet_aton(host)
+        (numeric_ipv4,) = struct.unpack("!I", packed)
+        host_for_ip = str(ipaddress.ip_address(numeric_ipv4))
+    except (OSError, struct.error):
+        host_for_ip = host
+    try:
+        address = ipaddress.ip_address(host_for_ip)
     except ValueError:
         pass
     else:

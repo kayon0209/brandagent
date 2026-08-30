@@ -13,7 +13,9 @@ services:
       - ./docs/deployment/postgres-roles.sql:/opt/brandflow/postgres-roles.sql:ro
       - ./docs/migrations/001_init.sql:/docker-entrypoint-initdb.d/02-legacy.sql:ro
       - ./docs/migrations/002_brandflow_v2_foundation.sql:/docker-entrypoint-initdb.d/03-brandflow.sql:ro
-      - ./docs/deployment/postgres-grants.sql:/docker-entrypoint-initdb.d/04-grants.sql:ro
+      - ./docs/migrations/003_consumer_experience.sql:/docker-entrypoint-initdb.d/04-consumer.sql:ro
+      - ./docs/migrations/004_consumer_rls.sql:/docker-entrypoint-initdb.d/05-consumer-rls.sql:ro
+      - ./docs/deployment/postgres-grants.sql:/docker-entrypoint-initdb.d/06-grants.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d brandflow"]
       interval: 5s

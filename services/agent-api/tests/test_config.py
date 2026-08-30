@@ -79,3 +79,22 @@ def test_production_composition_wires_the_full_consumer_stack() -> None:
     assert "/api/v1/consumer/projects" in paths
     assert "/api/v1/consumer/usage" in paths
     assert "/api/v1/consumer/materials" in paths
+
+
+def test_dev_auth_mode_is_refused_in_production() -> None:
+    """Security review P2: AUTH_MODE=dev must hard-fail in production."""
+
+    settings = Settings(
+        environment="production",
+        auth_mode="dev",
+        agent_database_url=SecretStr("postgresql://business@localhost:5432/app"),
+        agent_checkpoint_database_url=SecretStr("postgresql://checkpoint@localhost:5433/checkpoint"),
+        glm_api_key=SecretStr("not-a-real-key"),
+        brand_mcp_url="https://example.invalid/mcp",
+        brand_mcp_service_token=SecretStr("not-a-real-token"),
+        clerk_jwks_url="https://example.invalid/jwks",
+        clerk_issuer="https://example.invalid",
+        clerk_audience="brandflow",
+    )
+    with pytest.raises(RuntimeError, match="not allowed when ENVIRONMENT=production"):
+        create_production_app(settings)

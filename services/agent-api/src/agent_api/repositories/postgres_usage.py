@@ -73,27 +73,71 @@ class PostgresUsageLedgerStore:
             row["estimated_tokens"] = int(float(cost) * 1_000_000) if cost is not None else 0
         return row
 
-    async def insert_entry(self, entry: dict) -> dict:
+    async def insert_entry(self, entry: dict) -> dict | None:
+        """Reserve quota atomically; None means the quota check failed.
+
+        Review-P2 TOCTOU fix: committed-usage check and INSERT happen in ONE
+        statement under a per-workspace advisory lock, so concurrent reserves
+        for the same workspace can never both pass the check.
+        """
+
         estimated = entry.get("estimated_tokens", 0) or 0
+        quota = entry.get("quota")
         async with self._pool.connection() as connection:
             await self._scope(connection, entry["workspace_id"])
-            cursor = await connection.execute(
-                """INSERT INTO usage_ledger
-                       (workspace_id, request_id, user_id, operation, state,
-                        estimated_cost)
-                   VALUES (%s, %s, %s, %s, 'reserved', %s)
-                   RETURNING workspace_id, request_id, user_id, operation,
-                             model, input_tokens, output_tokens, estimated_cost,
-                             state""",
-                (
-                    entry["workspace_id"],
-                    entry["request_id"],
-                    entry["user_id"],
-                    entry["operation"],
-                    estimated * 0.000001,
-                ),
-            )
-            return self._with_estimated(await cursor.fetchone())
+            if quota is not None:
+                await connection.execute(
+                    'SELECT pg_advisory_xact_lock(hashtext(%s))',
+                    (f"usage-quota:{entry['workspace_id']}",),
+                )
+                cursor = await connection.execute(
+                    """INSERT INTO usage_ledger
+                           (workspace_id, request_id, user_id, operation, state,
+                            estimated_cost)
+                    SELECT %s, %s, %s, %s, 'reserved', %s
+                    WHERE %s + COALESCE((
+                        SELECT SUM(
+                            CASE
+                              WHEN state='settled' THEN COALESCE(input_tokens,0)+COALESCE(output_tokens,0)
+                              WHEN state='reserved' THEN CEIL(COALESCE(estimated_cost,0)*1000000)
+                              WHEN state='refunded' THEN 0
+                            END)
+                        FROM usage_ledger
+                        WHERE workspace_id=%s AND state IN ('settled','reserved')
+                    ), 0) <= %s
+                    RETURNING workspace_id, request_id, user_id, operation,
+                              model, input_tokens, output_tokens, estimated_cost,
+                              state""",
+                    (
+                        entry["workspace_id"],
+                        entry["request_id"],
+                        entry["user_id"],
+                        entry["operation"],
+                        estimated * 0.000001,
+                        estimated,
+                        entry["workspace_id"],
+                        quota,
+                    ),
+                )
+            else:
+                cursor = await connection.execute(
+                    """INSERT INTO usage_ledger
+                           (workspace_id, request_id, user_id, operation, state,
+                            estimated_cost)
+                       VALUES (%s, %s, %s, %s, 'reserved', %s)
+                    RETURNING workspace_id, request_id, user_id, operation,
+                              model, input_tokens, output_tokens, estimated_cost,
+                              state""",
+                    (
+                        entry["workspace_id"],
+                        entry["request_id"],
+                        entry["user_id"],
+                        entry["operation"],
+                        estimated * 0.000001,
+                    ),
+                )
+            row = await cursor.fetchone()
+            return self._with_estimated(row) if row is not None else None
 
     async def update_entry(self, workspace_id: str, request_id: str, updates: dict) -> dict:
         async with self._pool.connection() as connection:
