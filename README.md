@@ -224,6 +224,10 @@ docs/
 4. 提交前全绿：`lint + typecheck + test:contracts + test:unit`（Python 侧 `pytest` 两套）
 5. PR 描述里附质量命令的真实输出
 
+## 前身项目
+
+BrandAgent 由 **AI Blog Assistant**（中文博客 AI 写作助手：结构化扩写、标题/大纲生成、三级润色、SEO 分析）演进而来，后端沉淀为 BrandFlow 企业内容工作流，再于 2026-08 升级为面向个人创作者的写作工作台。旧版页面在兼容窗口内保留（`/dashboard`），不承载新功能。完整演进史见 [PRD v2](./docs/PRD-v2.md)。
+
 ## License
 
 [MIT](./LICENSE)
