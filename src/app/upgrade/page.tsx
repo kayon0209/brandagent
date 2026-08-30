@@ -105,7 +105,7 @@ function UpgradeForm() {
         >
           感谢支持 — 你的反馈是我们继续开发的最大动力
         </p>
-        <Link href="/dashboard" className="btn-primary">
+        <Link href="/app" className="btn-primary">
           继续使用免费版
         </Link>
       </div>
@@ -311,13 +311,13 @@ export default function UpgradePage() {
         <div className="max-w-7xl mx-auto px-6 md:px-10">
           <div className="flex items-center justify-between h-16">
             <Link href="/" style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: '1.125rem', color: 'var(--color-ink)', textDecoration: 'none' }}>
-              AI写作助手
+              BrandAgent
             </Link>
             <div className="flex items-center gap-4">
               <Link href="/#pricing" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--color-ink-muted)', textDecoration: 'none', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                 ← 返回定价
               </Link>
-              <Link href="/dashboard" className="btn-ghost" style={{ padding: '0.5rem 1.25rem', fontSize: '0.6875rem' }}>
+              <Link href="/app" className="btn-ghost" style={{ padding: '0.5rem 1.25rem', fontSize: '0.6875rem' }}>
                 工作台
               </Link>
             </div>

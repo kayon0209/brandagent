@@ -122,6 +122,46 @@ export default async function DashboardPage() {
   const userId = 'anonymous'
   const firstName = '创作者'
 
+  // 旧版数据源（Supabase）在未配置的部署里必须降级为说明页，
+  // 而不是抛 500 白页（验收 P1-2）。新创作工作台在 /app。
+  const supabaseConfigured =
+    Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
+    Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  if (!supabaseConfigured) {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-16 text-center">
+        <p
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.6875rem',
+            textTransform: 'uppercase',
+            letterSpacing: '0.16em',
+            color: 'var(--color-gold)',
+            marginBottom: '0.5rem',
+          }}
+        >
+          旧版控制台
+        </p>
+        <h1
+          style={{
+            fontFamily: 'var(--font-serif)',
+            fontSize: '1.75rem',
+            fontWeight: 700,
+            color: 'var(--color-ink)',
+          }}
+        >
+          这里是升级前的旧版写作台
+        </h1>
+        <p className="mt-4 text-sm leading-7" style={{ color: 'var(--color-ink-muted)' }}>
+          旧版文章数据源（Supabase）在当前部署中未接入。
+          新的个人创作工作台在<Link href="/app" className="underline">/app</Link>，
+          素材、稿纸、平台预览都在那边。
+        </p>
+      </div>
+    )
+  }
+
   // 查询最近 3 篇文章
   const supabase = createSupabaseAdminClient()
   const { data, error } = await supabase

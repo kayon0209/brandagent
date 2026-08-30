@@ -1,61 +1,24 @@
 // ============================================================
-// Token 配额查询接口
+// Token 配额查询接口（已废弃）
 // src/app/api/quota/route.ts
 // ============================================================
+// 按升级计划 Task 13：C 端配额的唯一权威是 FastAPI usage ledger
+// (/api/v1/consumer/projects/{id}/usage)。这个旧 Supabase 端点在兼容
+// 窗口内保留，但不再作为真实数据源——返回结构化的 deprecated 信封，
+// 绝不在未配置 Supabase 的部署里崩成 500。
 import { NextResponse } from 'next/server'
-import { createSupabaseAdminClient } from '@/lib/api/supabase-server'
 
-// 按请求查询配额，不做 build 时预渲染（离线构建会失败）
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const userId = 'anonymous'
-
-  const admin = createSupabaseAdminClient()
-  const { data: user, error } = await admin
-    .from('users')
-    .select('plan_tier, token_used, token_quota, quota_reset_at')
-    .eq('clerk_id', userId)
-    .single()
-
-  if (error || !user) {
-    // 用户记录尚不存在，返回免费默认值
-    return NextResponse.json({
-      success: true,
-      data: { used: 0, total: 30000, plan: 'Free' },
-    })
-  }
-
-  // 检查是否需要重置配额（每月 1 日）
-  const resetAtRaw = user.quota_reset_at
-  let used = user.token_used
-
-  if (resetAtRaw) {
-    const resetAt = new Date(resetAtRaw)
-    const now = new Date()
-
-    // Guard against invalid dates from DB
-    if (!isNaN(resetAt.getTime()) && now >= resetAt) {
-      used = 0
-      const nextReset = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-      // 异步重置，记录错误但不阻断响应
-      admin
-        .from('users')
-        .update({ token_used: 0, quota_reset_at: nextReset.toISOString() })
-        .eq('clerk_id', userId)
-        .then(({ error: resetErr }) => {
-          if (resetErr) console.error('[quota] monthly reset failed:', resetErr.message)
-        })
-    }
-  }
-
-  const planLabel =
-    user.plan_tier === 'pro' ? 'Pro' : user.plan_tier === 'team' ? 'Team' : 'Free'
-
-  const total = user.plan_tier === 'free' ? user.token_quota : null // null 表示无限制
-
-  return NextResponse.json({
-    success: true,
-    data: { used, total, plan: planLabel },
-  })
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        code: 'ENDPOINT_DEPRECATED',
+        message: '配额查询已迁移到新的写作服务。请使用 /api/v1/consumer/projects/{id}/usage。',
+      },
+    },
+    { status: 410 },
+  )
 }
