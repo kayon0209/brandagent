@@ -7,11 +7,16 @@ const workspace = {
   task,
   brief: { topic: 'Nova', target_audience: 'IT 决策者', publishing_objective: '解释产品价值', desired_audience_action: '预约演示' },
   versions: [{ content_version_id: 'v1', content_type: 'master_outline', channel: null, version_number: 1, content: '第一节\n第二节', created_by_type: 'model' }],
-  reviews: [], issues: [], tool_calls: [], lineage: [],
+  reviews: [], issues: [], tool_calls: [], lineage: [], human_decisions: [], model_call_logs: [],
   approval_requirements: [{ approval_requirement_id: 'r1', content_version_id: 'v1', decision_type: 'outline', status: 'pending', target_snapshot_hash: 'a'.repeat(64) }],
 }
 
 async function mockApi(page: Page) {
+  // useBrandFlow POSTs /workspaces/bootstrap before anything else; without this
+  // mock the hook lands in its error state and every page shows the retry shell.
+  await page.route('**/api/v1/workspaces/bootstrap', (route) =>
+    route.fulfill({ json: { success: true, data: { workspace_id: 'ws-e2e', role: 'final_approver' } } }),
+  )
   await page.route('**/api/v1/tasks', async (route) => {
     if (route.request().method() === 'POST') return route.fulfill({ json: { success: true, data: task }, status: 201 })
     return route.fulfill({ json: { success: true, data: { items: [task] } } })
@@ -25,6 +30,8 @@ test('create task, complete guided Brief, and open the workflow workspace', asyn
   await mockApi(page)
   await page.goto('/brandflow')
   await page.getByRole('button', { name: '创建任务' }).click()
+  // The guided Brief walks 8 sections; only the fields the API requires are
+  // gated (title, topic, brandId, productId, audience, objective, action).
   await page.getByLabel('任务名称').fill('Nova 发布任务')
   await page.getByLabel('主题').fill('Nova')
   await page.getByRole('button', { name: '继续' }).click()
@@ -32,9 +39,18 @@ test('create task, complete guided Brief, and open the workflow workspace', asyn
   await page.getByLabel('发布目标').fill('解释产品价值')
   await page.getByLabel('期望受众行动').fill('预约演示')
   await page.getByRole('button', { name: '继续' }).click()
-  await page.getByLabel('品牌 ID').fill('00000000-0000-0000-0000-000000000010')
-  await page.getByLabel('产品 ID').fill('00000000-0000-0000-0000-000000000020')
+  // 品牌/产品 ID are <select> dropdowns (UI contract since the v2 task form);
+  // pick the seeded default options instead of the retired free-text fill.
+  await page.getByLabel('品牌 ID').selectOption('default')
+  await page.getByLabel('产品 ID').selectOption('prod_default')
+  await page.getByLabel('关键产品').fill('BrandFlow 平台')
+  await page.getByLabel('关键事实').fill('BrandFlow 提供可追溯的内容生成')
   await page.getByRole('button', { name: '继续' }).click()
+  // sections 4-6 (必需事实/语气/禁止声明) are optional: walk through
+  for (let i = 0; i < 4; i++) {
+    const next = page.getByRole('button', { name: '继续' })
+    if (await next.count()) await next.first().click().catch(() => {})
+  }
   await page.getByRole('button', { name: '提交任务' }).click()
   await expect(page.getByText('需要人工操作')).toBeVisible()
 })
@@ -45,7 +61,11 @@ test('approve outline deliberately and expose issues, versions, lineage and tool
   await page.getByText('Nova 发布任务').click()
   page.once('dialog', (dialog) => dialog.accept('已核对来源和结构'))
   await page.getByRole('button', { name: '检查并批准' }).click()
-  for (const tab of ['问题', '版本', '谱系', '工具']) await expect(page.getByRole('button', { name: tab })).toBeVisible()
+  for (const tab of ['问题', '谱系', '工具']) {
+    await expect(page.getByRole('button', { name: tab, exact: true })).toBeVisible()
+  }
+  // the versions tab button is 版本对比 in the current workspace UI
+  await expect(page.getByRole('button', { name: '版本对比' })).toBeVisible()
 })
 
 test('recover from MCP failure and interrupted service state', async ({ page }) => {
@@ -55,8 +75,9 @@ test('recover from MCP failure and interrupted service state', async ({ page }) 
   await page.route('**/api/v1/tasks/*/retry', (route) => route.fulfill({ json: { success: true, data: task } }))
   await page.goto('/brandflow')
   await page.getByText('Nova 发布任务').click()
-  await expect(page.getByText('工作已安全保存')).toBeVisible()
-  await page.getByRole('button', { name: '从安全检查点重试' }).click()
+  // the recovery panel evolved into RecoveryWizard copy (safe + retry)
+  await expect(page.getByText('已保存的工作内容安全，不会丢失。')).toBeVisible()
+  await page.getByRole('button', { name: '从检查点重试' }).click()
 })
 
 test('channel approval, cross-channel final gate, version comparison and export remain API-gated', async ({ request }) => {
@@ -110,6 +131,8 @@ test('material drawer shows summary first and reveals source traceability on dem
   await page.getByText('第一份素材').click()
   await expect(page.getByText('一句可读的摘要')).toBeVisible()
   await expect(page.getByText('适合引用的原文')).toBeHidden()
-  await page.getByRole('button', { name: '来源' }).click()
+  // the drawer now has both a 来源 toggle and a 查看完整来源 action; scope
+  // to the exact summary toggle (aria-expanded) to stay strict.
+  await page.getByRole('button', { name: '来源', exact: true }).click()
   await expect(page.getByText('适合引用的原文')).toBeVisible()
 })

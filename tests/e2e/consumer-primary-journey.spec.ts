@@ -105,5 +105,7 @@ test('full consumer journey from material import to export preparation', async (
   await expect(page.getByTestId('wechat-paragraphs')).toBeVisible()
   await expect(page.getByText('发布前再看一眼')).toBeVisible()
   await expect(page.getByRole('button', { name: '采用这版' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '准备发布' })).toBeVisible()
+  // 准备发布 exists BOTH in the topbar and the primary action bar (v4 spec);
+  // scope to the topbar to keep the locator strict.
+  await expect(page.getByRole('banner').getByRole('button', { name: '准备发布' })).toBeVisible()
 })

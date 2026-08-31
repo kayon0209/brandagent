@@ -9,8 +9,31 @@ const draft = {
   plain_text: '这是第一段。这里有一个需要改写的句子。',
 }
 
+// The write page fetches the project server-side for the core idea (commit
+// 7fda06d); the specs must mock that GET too or the page falls into the
+// honest project-error state ("Project not found").
+const project = {
+  task_id: draft.task_id,
+  title: 'E2E 写作项目',
+  core_idea: '把复杂的方法讲成普通人能上手的步骤',
+  writing_intent: '',
+  active_master_version_id: null,
+}
+
+async function mockProject(page: import('@playwright/test').Page) {
+  await page.route('**/api/v1/consumer/projects/*', route => {
+    const url = new URL(route.request().url())
+    // only the bare project GET (no /draft, /variants, /materials suffix)
+    if (/\/projects\/[^/]+$/.test(url.pathname)) {
+      return route.fulfill({ json: { success: true, data: project } })
+    }
+    return route.fallback()
+  })
+}
+
 test('manuscript editor autosaves and recovers from revision conflicts', async ({ page }) => {
   let revision = draft.revision
+  await mockProject(page)
   await page.route('**/api/v1/consumer/projects/*/draft', async route => {
     if (route.request().method() === 'GET') {
       return route.fulfill({ json: { success: true, data: { ...draft, revision } } })
@@ -43,6 +66,7 @@ test('manuscript editor autosaves and recovers from revision conflicts', async (
 })
 
 test('platform preview renders three structures and never asks for approval', async ({ page }) => {
+  await mockProject(page)
   await page.route('**/api/v1/consumer/projects/*/draft', route =>
     route.fulfill({ json: { success: true, data: draft } }),
   )
