@@ -62,8 +62,13 @@ class ClerkJWTVerifier:
             **kwargs,
         )
         if not self._dev_mode:
+            # azp enforcement only applies to tokens that CARRY an azp claim
+            # (Clerk custom templates / cross-origin flows). The default
+            # session template issued to the BFF has no azp at all — rejecting
+            # those would 401 every real signed-in user (live-stack finding);
+            # they stay bound by signature + issuer (+ audience when set).
             authorized_party = claims.get("azp")
-            if self._authorized_parties and authorized_party not in self._authorized_parties:
+            if "azp" in claims and self._authorized_parties and authorized_party not in self._authorized_parties:
                 raise ValueError("Token authorized party is not allowed")
         organization = claims.get("o") if isinstance(claims.get("o"), dict) else {}
         external_workspace_id = claims.get("org_id") or organization.get("id")

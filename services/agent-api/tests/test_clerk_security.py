@@ -39,6 +39,19 @@ def session_token(private_key, **overrides):
     return jwt.encode(claims, private_key, algorithm="RS256")
 
 
+def default_template_session_token(private_key, **overrides):
+    """The token shape Clerk actually mints for `getToken()` with the DEFAULT
+    template: identical to session_token but WITHOUT the azp claim."""
+    now = datetime.now(UTC)
+    claims = {
+        "sub": "user-1", "o": {"id": "org_workspace_1", "rol": "member"},
+        "iss": "https://clerk.test",
+        "iat": now, "exp": now + timedelta(minutes=5),
+        **overrides,
+    }
+    return jwt.encode(claims, private_key, algorithm="RS256")
+
+
 @pytest.mark.asyncio
 async def test_clerk_verifier_checks_signature_issuer_audience_and_role() -> None:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -97,3 +110,32 @@ async def test_clerk_verifier_rejects_unsupported_roles_and_foreign_parties() ->
         await verifier.verify(session_token(private_key, o={"id": "org_workspace_1", "rol": "unknown"}))
     with pytest.raises(ValueError, match="authorized party"):
         await verifier.verify(session_token(private_key, azp="http://evil.local"))
+
+
+@pytest.mark.asyncio
+async def test_clerk_verifier_accepts_default_template_without_azp() -> None:
+    """Regression (live-stack P0): the DEFAULT Clerk session template minted for
+    the BFF carries NO azp claim. The parties guard must only fire on tokens
+    that actually carry azp — rejecting azp-less tokens 401'd every real
+    signed-in user while all unit tests (which always hand-crafted azp) stayed
+    green. Security stays bound by signature + issuer (+ aud when configured).
+    """
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verifier = ClerkJWTVerifier(
+        jwks_url="https://unused",
+        issuer="https://clerk.test",
+        authorized_parties=["http://localhost:3000"],
+        jwk_client=StaticJWKClient(private_key.public_key()),
+    )
+    # azp absent — exactly the production BFF token shape
+    token = default_template_session_token(private_key)
+    claims = jwt.decode(token, options={"verify_signature": False})
+    assert "azp" not in claims, "fixture drifted from the real default template"
+    principal = await verifier.verify(token)
+    assert principal.user_id == "user-1"
+    # azp present but foreign is STILL rejected (guard intact)
+    with pytest.raises(ValueError, match="authorized party"):
+        await verifier.verify(session_token(private_key, azp="http://evil.local"))
+    # azp present and allowed passes
+    principal_ok = await verifier.verify(session_token(private_key, azp="http://localhost:3000"))
+    assert principal_ok.user_id == "user-1"
