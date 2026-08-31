@@ -54,6 +54,16 @@ export default function BrandFlowTaskDetail() {
     }
   }, [toast])
 
+  // Deep links land here with an empty hook instance (useBrandFlow is per-page,
+  // not a shared provider): load the URL's task or the page can never show the
+  // workspace (audit finding: direct task URLs rendered 已退出任务视图 forever).
+  useEffect(() => {
+    if (flow.workspace?.task.task_id !== params.taskId) {
+      void flow.openTask(params.taskId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.taskId])
+
   if (!flow.isLoaded || flow.loading) {
     return (
       <main className={styles.centered}>
