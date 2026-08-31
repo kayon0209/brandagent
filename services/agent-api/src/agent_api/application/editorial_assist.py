@@ -225,7 +225,9 @@ class EditorialAssistService:
         suggestion = await self._store.get_suggestion(principal.workspace_id, suggestion_id)
         if suggestion is None:
             raise NotFoundError(f"suggestion {suggestion_id} not found")
-        if suggestion.get("task_id") != task_id:
+        # str() both sides: psycopg hands back task_id as a UUID object while the
+        # route passes the URL string (same live-stack finding as apply_candidate).
+        if str(suggestion.get("task_id")) != str(task_id):
             # in-workspace tenancy: a suggestion must belong to THIS project
             raise NotFoundError(f"suggestion {suggestion_id} does not belong to project {task_id}")
         if suggestion.get("status") == "accepted":

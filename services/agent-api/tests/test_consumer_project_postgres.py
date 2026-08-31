@@ -6,7 +6,7 @@ autosave without content_version, adopt idempotency, and cross-workspace 404.
 """
 
 import os
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -95,6 +95,64 @@ async def test_project_and_draft_lifecycle_on_postgres() -> None:
         # stale adopt conflicts
         with pytest.raises(ConflictError):
             await drafts.adopt(principal, created["task_id"], base_revision=0)
+    finally:
+        await store.close()
+
+
+@pytest.mark.asyncio
+async def test_apply_candidate_survives_postgres_uuid_task_ids() -> None:
+    """Regression (live-stack P1): psycopg returns content_versions.task_id as a
+    UUID OBJECT while the API route passes the URL STRING. The old bare
+    `version["task_id"] != task_id` comparison 404'd every real apply-candidate
+    on PostgreSQL even though the in-memory test stores (plain strings) stayed
+    green. This test pins the production shape: insert a candidate through the
+    store, then apply it through the service with a STRING task_id."""
+    store = PostgresConsumerProjectStore(os.environ["AGENT_TEST_DATABASE_URL"])
+    await store.open()
+    try:
+        await _ensure_workspace(store, WORKSPACE, "consumer-1")
+        principal = Principal(user_id="consumer-1", workspace_id=WORKSPACE, role="admin", experience="personal")
+        projects = ConsumerProjectService(store=store)
+        drafts = DraftService(store=store)
+        created = await projects.create_project(principal, title="CAS", core_idea="候选应用", intent="")
+        await drafts.autosave(
+            principal,
+            created["task_id"],
+            {"blocks": [{"block_id": "b1", "block_type": "paragraph", "text": "用户打断"}]},
+            "用户打断",
+            expected_revision=0,
+        )
+
+        from agent_api.application.draft_generation import DraftGenerationService
+
+        class FixedGenerator:
+            async def generate(self, *, core_idea, intent, excerpts, base_revision, usage_out=None):
+                return {
+                    "plain_text": "候选正文",
+                    "blocks": [{"block_id": "b1", "block_type": "paragraph", "text": "候选正文"}],
+                    "prompt_version": "test:v1",
+                }
+
+        generation = DraftGenerationService(store=store, generator=FixedGenerator(), projects=projects)
+        result = await generation.generate(principal, created["task_id"])
+        candidate_id = result["candidate"]["content_version_id"]
+
+        # the store hands back a UUID object on PostgreSQL — pin the production shape
+        version_row = await store.get_version(WORKSPACE, candidate_id)
+        assert version_row is not None
+        assert isinstance(version_row["task_id"], UUID), (
+            "fixture drifted: the store must return the raw psycopg UUID here "
+            "(this regression only bites when the column comes back as a UUID object)"
+        )
+        # THE ROUTE PASSES A STRING: FastAPI path params are str. A bare
+        # `UUID != str` comparison is what 404'd every real apply-candidate.
+        route_task_id = str(created["task_id"])
+        applied = await generation.apply_candidate(
+            principal, route_task_id, candidate_id, base_revision=result["base_revision"]
+        )
+        assert applied is not None, "apply-candidate must succeed when the candidate belongs to this project"
+        assert applied["revision"] == result["base_revision"] + 1
+        assert applied["plain_text"] == "候选正文"
     finally:
         await store.close()
 

@@ -95,7 +95,11 @@ class DraftGenerationService:
         version = await self._store.get_version(principal.workspace_id, content_version_id)
         if version is None:
             raise NotFoundError(f"version {content_version_id} not found in this workspace")
-        if version.get("task_id") != task_id:
+        # str() both sides: psycopg returns task_id as a UUID object while the
+        # route passes the URL string — a bare != made every real apply-candidate
+        # 404 on PostgreSQL (the in-memory test stores keep strings, so the suite
+        # stayed green while the live stack broke; live-stack audit finding).
+        if str(version.get("task_id")) != str(task_id):
             # in-workspace tenancy: a candidate must belong to THIS project
             raise NotFoundError(f"version {content_version_id} does not belong to project {task_id}")
         try:

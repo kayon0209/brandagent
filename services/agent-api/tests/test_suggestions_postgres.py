@@ -15,6 +15,7 @@ from agent_api.api.security import Principal
 from agent_api.application.consumer_projects import ConsumerProjectService
 from agent_api.application.drafts import DraftService
 from agent_api.application.editorial_assist import EditorialAssistService, SelectionStale
+from agent_api.providers.base import ModelCallResult
 from agent_api.repositories.postgres_consumer_projects import PostgresConsumerProjectStore
 from agent_api.repositories.postgres_suggestions import PostgresSuggestionStore
 
@@ -28,18 +29,22 @@ TARGET = "这里有一个需要改写的句子，它有点啰嗦。"
 
 
 class StubProvider:
-    async def generate(self, *, system: str, prompt: str, prompt_version: str) -> dict:
-        return {
-            "content": "精炼后的句子。",
-            "provider": "stub",
-            "model": "stub",
-            "prompt_version": prompt_version,
-            "latency_ms": 5,
-            "input_tokens": 1,
-            "output_tokens": 1,
-            "usage_source": "none",
-            "retry_count": 0,
-        }
+    """Returns the REAL ModelCallResult contract (not a dict) so this gated
+    integration suite cannot mask provider-protocol drift from the in-memory
+    suite (test_editorial_assist.RecordingProvider pins the same contract)."""
+
+    async def generate(self, *, system: str, prompt: str, prompt_version: str) -> ModelCallResult:
+        return ModelCallResult(
+            content="精炼后的句子。",
+            provider="stub",
+            model="stub",
+            prompt_version=prompt_version,
+            latency_ms=5,
+            input_tokens=1,
+            output_tokens=1,
+            usage_source="none",
+            retry_count=0,
+        )
 
 
 async def _ensure_workspace(store: PostgresConsumerProjectStore, workspace_id: str, user_id: str) -> None:
