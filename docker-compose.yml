@@ -49,7 +49,9 @@ services:
       BRAND_MCP_URL: http://brand-tools-mcp:8100/mcp
       BRAND_MCP_SERVICE_TOKEN: ${BRAND_MCP_SERVICE_TOKEN}
       GLM_API_KEY: ${GLM_API_KEY:?set GLM_API_KEY}
-      GLM_MODEL: glm-4.7
+      GLM_MODEL: ${GLM_MODEL:-glm-4.7}
+      # OpenAI-compatible gateway base URL (Zhipu BigModel default; Gitee AI etc. via env)
+      GLM_BASE_URL: ${GLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
       CLERK_JWKS_URL: ${CLERK_JWKS_URL:?set CLERK_JWKS_URL}
       CLERK_ISSUER: ${CLERK_ISSUER:?set CLERK_ISSUER}
       CLERK_AUDIENCE: ${CLERK_AUDIENCE:-}
@@ -75,6 +77,11 @@ services:
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
     environment:
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?set CLERK_SECRET_KEY}
+      # Clerk middleware reads the publishable key at RUNTIME (dev-browser
+      # detection / clerk proxy routing); the build-arg only satisfies
+      # `next build`. Without this line the live stack rewrites protected
+      # routes to a dangling /clerk_* proxy path and returns 404.
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       BRANDFLOW_AGENT_INTERNAL_URL: http://agent-api:8000
     depends_on:
       agent-api:

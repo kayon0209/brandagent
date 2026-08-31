@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     auth_mode: str | None = None
     glm_api_key: SecretStr | None = None
     glm_model: str = "glm-4.7"
+    # OpenAI-compatible base URL of the model gateway. Defaults to Zhipu BigModel;
+    # Gitee AI (https://ai.gitee.com/v1) and other compatible gateways only need
+    # this env override — no code change.
+    glm_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
     agent_database_url: SecretStr | None = None
     agent_checkpoint_database_url: SecretStr | None = None
     brand_mcp_url: str | None = None
