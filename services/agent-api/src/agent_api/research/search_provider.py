@@ -20,6 +20,11 @@ from typing import Protocol
 import httpx
 
 
+class BudgetExceeded(RuntimeError):
+    """Raised BEFORE any further provider call when the run's search
+    budget cap is reached; strategies MUST let it propagate."""
+
+
 class SearchProvider(Protocol):
     async def search(self, query: str, *, max_results: int = 5) -> list[dict]:
         """Return [{url, title, content, score}] — normalized search hits."""

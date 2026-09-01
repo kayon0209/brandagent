@@ -26,7 +26,7 @@ from agent_api.research.metrics import (
     duplication_rate,
     now_iso,
 )
-from agent_api.research.search_provider import TavilySearchProvider
+from agent_api.research.search_provider import BudgetExceeded, TavilySearchProvider
 
 
 def env_get(key: str, default: str) -> str:
@@ -41,10 +41,6 @@ DEFAULT_DATASET = _REPO_ROOT / "services/agent-api/evaluation/research/research_
 DEFAULT_OUTDIR = _REPO_ROOT / "services/agent-api/evaluation/research/runs"
 SEARCH_COST_CAP_DOLLARS = 10.0
 CREDITS_PER_DOLLAR = 125.0  # Tavily PAYG $0.008/credit
-
-
-class BudgetExceeded(RuntimeError):
-    pass
 
 
 class _BudgetSearch(TavilySearchProvider):

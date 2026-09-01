@@ -22,7 +22,7 @@ import re
 
 from agent_api.providers.base import ModelCallResult
 from agent_api.research.metrics import EvidenceCard, StrategyRun, now_iso
-from agent_api.research.search_provider import SearchProvider
+from agent_api.research.search_provider import BudgetExceeded, SearchProvider
 
 # ---------------------------------------------------------------- prompts
 
@@ -197,6 +197,8 @@ async def run_s1(question: str, *, generate, search: SearchProvider, run: Strate
     for q in queries:  # sequential: latency accumulates by design
         try:
             hits = await _search_catch(search, q, run, counter=getattr(search, "call_counter", None))
+        except BudgetExceeded:
+            raise  # cost control is never absorbable by a single direction
         except Exception:
             continue  # a failed direction contributes no evidence, recorded on run
         cards.extend(_cards_from_hits(hits))
@@ -240,6 +242,8 @@ async def run_s2(
         for attempt in range(2):  # per-direction retries <= 2 (plan constraint)
             try:
                 return await _scout(direction, question, generate=generate, search=search, run=run)
+            except BudgetExceeded:
+                raise  # cost control aborts the whole run, not one scout
             except Exception as error:  # noqa: BLE001
                 last = error
         run.errors.append(f"scout-failed:{direction}"[:120])
