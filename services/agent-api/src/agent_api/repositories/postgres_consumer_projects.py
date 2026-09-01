@@ -306,6 +306,23 @@ class PostgresConsumerProjectStore:
             )
             return await cursor.fetchone()
 
+    async def latest_candidate_version(self, workspace_id: str, task_id: str) -> dict | None:
+        """Newest master_revised candidate for the task (replay recovery)."""
+        async with self._pool.connection() as connection:
+            await self._scope(connection, workspace_id)
+            cursor = await connection.execute(
+                """SELECT content_version_id, task_id, workspace_id, content_type,
+                          version_number, content, structured_blocks,
+                          created_by_type, approval_status, immutable_hash,
+                          prompt_version, created_at
+                   FROM content_versions
+                   WHERE workspace_id=%s AND task_id=%s AND content_type='master_revised'
+                   ORDER BY version_number DESC
+                   LIMIT 1""",
+                (workspace_id, task_id),
+            )
+            return await cursor.fetchone()
+
     async def insert_snapshot_version(self, workspace_id: str, task_id: str, document: dict, plain_text: str, revision: int) -> dict:
         """Immutable master_draft snapshot of the draft at `revision`."""
 

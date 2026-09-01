@@ -26,6 +26,7 @@ class ConsumerProjectReader(Protocol):
 class ConsumerDraftWriter(Protocol):
     async def get_draft(self, workspace_id: str, task_id: str) -> dict | None: ...
     async def insert_candidate_version(self, workspace_id: str, task_id: str, plain_text: str, document: dict, *, prompt_version: str) -> dict: ...
+    async def latest_candidate_version(self, workspace_id: str, task_id: str) -> dict | None: ...
     async def get_version(self, workspace_id: str, version_id: str) -> dict | None: ...
     async def save_draft(self, workspace_id: str, task_id: str, document: dict, plain_text: str, expected_revision: int) -> dict: ...
     async def append_event(self, event: dict) -> None: ...
@@ -57,6 +58,21 @@ class DraftGenerationService:
         if draft is None:
             raise NotFoundError(f"draft for project {task_id} not found")
         return project, draft, int(draft["revision"])
+
+    async def latest_candidate(self, principal: Principal, task_id: str) -> dict | None:
+        """Replay recovery (P1-9): the newest generated candidate for this
+        task, so a retry under the SAME Idempotency-Key returns something
+        the UI can adopt instead of a null candidate."""
+        version = await self._store.latest_candidate_version(principal.workspace_id, task_id)
+        if version is None:
+            return None
+        draft = await self._store.get_draft(principal.workspace_id, task_id)
+        return {
+            "content_version_id": str(version["content_version_id"]),
+            "task_id": str(version["task_id"]),
+            "content": version.get("content", ""),
+            "base_revision": int(draft["revision"]) if draft else 0,
+        }
 
     async def generate(self, principal: Principal, task_id: str, *, usage_out: dict | None = None) -> dict:
         """Run the generator and persist a candidate version (draft untouched)."""

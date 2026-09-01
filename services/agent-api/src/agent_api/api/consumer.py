@@ -148,7 +148,18 @@ class ConsumerProjectsApp(Protocol):
 
 
 class ConsumerAssist(Protocol):
-    async def propose(self, principal: Principal, task_id: str, *, action: str, selected_text: str, block_id: str, base_revision: int) -> dict | None: ...
+    async def propose(
+        self,
+        principal: Principal,
+        task_id: str,
+        *,
+        action: str,
+        selected_text: str,
+        block_id: str,
+        base_revision: int,
+        start_offset: int,
+        end_offset: int,
+    ) -> dict | None: ...
     async def accept(self, principal: Principal, task_id: str, suggestion_id: str, *, base_revision: int) -> dict: ...
 
 
@@ -177,6 +188,7 @@ class ConsumerDrafts(Protocol):
 class ConsumerGeneration(Protocol):
     async def generate(self, principal: Principal, task_id: str) -> dict: ...
     async def apply_candidate(self, principal: Principal, task_id: str, content_version_id: str, *, base_revision: int) -> dict | None: ...
+    async def latest_candidate(self, principal: Principal, task_id: str) -> dict | None: ...
 
 
 def _error_status(error) -> int:
@@ -334,17 +346,31 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
     async def generate_draft(
         task_id: str,
         actor: Principal = Depends(principal),
-        idempotency_key: str | None = Header(alias="Idempotency-Key", default=None, min_length=8, max_length=128),
+        # P1-2: the client's key is the ledger request id — the server must
+        # never invent one (a retry under a fresh id would double-call the
+        # model and double-charge). Missing key -> 422 before any work.
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=128),
     ):
         from agent_api.application.usage import ledgered_call
         from agent_api.domain.errors import ApplicationError, NotFoundError
-        from uuid import uuid4
 
-        request_id = idempotency_key or f"gen-{uuid4().hex}"
+        request_id = idempotency_key
         try:
             await apps.drafts.get_or_create_draft(actor, task_id)  # ensure the draft exists
             async with ledgered_call(apps.usage_ledger, actor, request_id=request_id, operation="draft_generation", estimated_tokens=2000) as outcome:
-                result = await apps.generation.generate(actor, task_id, usage_out=outcome)
+                if outcome.get("replayed"):
+                    # P1-9 replay contract: return the EXISTING candidate so
+                    # a retry after a lost response RECOVERS instead of
+                    # showing a generic failure. The model is not re-called
+                    # and no second candidate version is inserted.
+                    candidate = await apps.generation.latest_candidate(actor, task_id)
+                    result = {
+                        "replayed": True,
+                        "candidate": candidate,
+                        "base_revision": candidate.get("base_revision") if candidate else None,
+                    }
+                else:
+                    result = await apps.generation.generate(actor, task_id, usage_out=outcome)
         except NotFoundError:
             raise HTTPException(status_code=404, detail="Project or draft not found") from None
         except ApplicationError as error:
@@ -393,49 +419,83 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
         return {"success": True, "data": {"revision": draft["revision"], "task_id": draft["task_id"]}}
 
     @router.post("/{task_id}/suggestions")
-    async def propose_suggestion(task_id: str, body: dict, actor: Principal = Depends(principal)):
-        from agent_api.application.editorial_assist import ActionNotSupported, SelectionStale
+    async def propose_suggestion(
+        task_id: str,
+        body: dict,
+        actor: Principal = Depends(principal),
+        # P1-2: suggestions cost model calls — the client key is the ledger
+        # request id; no server-side random id (retries would double-charge)
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ):
+        from agent_api.application.editorial_assist import (
+            ActionNotSupported,
+            MissingAnchor,
+            SelectionStale,
+            validate_selection_anchor,
+        )
+        from agent_api.application.usage import ledgered_call
         from agent_api.domain.errors import ApplicationError, NotFoundError
 
         action = str(body.get("action", ""))
-        selected_text = body.get("selectedText")
         block_id = str(body.get("blockId", ""))
         start_offset = body.get("startOffset")
         end_offset = body.get("endOffset")
+
+        # P1-1: offsets are the ONLY anchor — all shape checks live in the
+        # application layer (validate_selection_anchor) so this handler
+        # stays thin; anything malformed is refused before quota/model.
         base_revision = body.get("baseRevision")
-        if not isinstance(selected_text, str) or not block_id or not isinstance(base_revision, int):
-            raise HTTPException(status_code=422, detail="selectedText, blockId and baseRevision (int) are required")
-        if (start_offset is None) != (end_offset is None):
-            raise HTTPException(status_code=422, detail="startOffset and endOffset must be provided together")
-        if start_offset is not None and (not isinstance(start_offset, int) or not isinstance(end_offset, int) or start_offset < 0 or end_offset < start_offset):
-            raise HTTPException(status_code=422, detail="startOffset/endOffset must be non-negative ints with start <= end")
-        from uuid import uuid4
-
-        from agent_api.application.usage import ledgered_call
-
-        request_id = f"suggest-{uuid4().hex}"
+        try:
+            selected_text = validate_selection_anchor(
+                selected_text=body.get("selectedText"),
+                block_id=block_id,
+                base_revision=base_revision,
+                start_offset=start_offset,
+                end_offset=end_offset,
+            )
+        except ValueError as error:
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": str(error)}},
+            )
+        request_id = idempotency_key
         try:
             async with ledgered_call(apps.usage_ledger, actor, request_id=request_id, operation="suggestion", estimated_tokens=600) as outcome:
-                suggestion = await apps.assist.propose(
-                    actor,
-                    task_id,
-                    action=action,
-                    selected_text=selected_text,
-                    block_id=block_id,
-                    base_revision=base_revision,
-                    start_offset=start_offset,
-                    end_offset=end_offset,
-                    usage_out=outcome,
-                )
+                if outcome.get("replayed"):
+                    suggestion = None
+                    replayed = True
+                else:
+                    replayed = False
+                    suggestion = await apps.assist.propose(
+                        actor,
+                        task_id,
+                        action=action,
+                        selected_text=selected_text,
+                        block_id=block_id,
+                        base_revision=base_revision,
+                        start_offset=start_offset,
+                        end_offset=end_offset,
+                        usage_out=outcome,
+                    )
         except ActionNotSupported:
             return JSONResponse(
                 status_code=422,
                 content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": f"不支持的改写动作：{action}"}},
             )
+        except MissingAnchor as error:
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": str(error)}},
+            )
         except SelectionStale:
             return JSONResponse(
                 status_code=409,
                 content={"success": False, "error": {"code": "SELECTION_STALE", "message": "选区已过期，请重新选择"}},
+            )
+        except ValueError:
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": "请求缺少完整的选区锚点"}},
             )
         except NotFoundError:
             raise HTTPException(status_code=404, detail="Draft not found") from None
@@ -450,6 +510,14 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
             return JSONResponse(
                 status_code=502,
                 content={"success": False, "error": {"code": "ASSIST_UNAVAILABLE", "message": "AI 助手暂时不可用，稿件未做任何改动"}},
+            )
+        if replayed:
+            # the first execution under this key already proposed (or
+            # refused); a retry must not re-run the model — the client
+            # refreshes its suggestion state from the draft surface
+            return JSONResponse(
+                status_code=200,
+                content={"success": True, "data": {"replayed": True}},
             )
         if suggestion is None:
             return JSONResponse(
@@ -504,16 +572,23 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
             raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
 
     @router.post("/{task_id}/variants/generate")
-    async def variants_generate(task_id: str, actor: Principal = Depends(principal)):
-        from uuid import uuid4
-
+    async def variants_generate(
+        task_id: str,
+        actor: Principal = Depends(principal),
+        # P1-2: model-costing call — the client key is the ledger request id
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ):
         from agent_api.application.platform_variants import VariantGenerationError
         from agent_api.application.usage import ledgered_call
         from agent_api.domain.errors import ApplicationError, NotFoundError
 
-        request_id = f"variants-{uuid4().hex}"
+        request_id = idempotency_key
         try:
             async with ledgered_call(apps.usage_ledger, actor, request_id=request_id, operation="variants", estimated_tokens=3000) as outcome:
+                if outcome.get("replayed"):
+                    # first execution already generated the channel set; a
+                    # retry must not add a second batch of versions
+                    return {"success": True, "data": {"replayed": True}}
                 return {"success": True, "data": await apps.variants.generate_variants(actor, task_id, usage_out=outcome)}
         except NotFoundError:
             raise HTTPException(status_code=404, detail="先采用当前稿，再生成平台版本") from None
@@ -531,9 +606,13 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
             raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
 
     @router.post("/{task_id}/variants/{channel}/regenerate")
-    async def variants_regenerate(task_id: str, channel: str, actor: Principal = Depends(principal)):
-        from uuid import uuid4
-
+    async def variants_regenerate(
+        task_id: str,
+        channel: str,
+        actor: Principal = Depends(principal),
+        # P1-2: model-costing call — the client key is the ledger request id
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ):
         from agent_api.application.platform_variants import (
             ALLOWED_CONSUMER_CHANNELS,
             VariantGenerationError,
@@ -544,9 +623,13 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
         if channel not in ALLOWED_CONSUMER_CHANNELS:
             raise HTTPException(status_code=404, detail=f"不支持的渠道：{channel}")
 
-        request_id = f"regen-{uuid4().hex}"
+        request_id = idempotency_key
         try:
             async with ledgered_call(apps.usage_ledger, actor, request_id=request_id, operation="variants", estimated_tokens=1200) as outcome:
+                if outcome.get("replayed"):
+                    # first execution already appended the new version; a
+                    # retry must not stack another one
+                    return {"success": True, "data": {"replayed": True}}
                 return {"success": True, "data": await apps.variants.regenerate(actor, task_id, channel, usage_out=outcome)}
         except NotFoundError:
             raise HTTPException(status_code=404, detail="先采用当前稿，再生成平台版本") from None

@@ -181,19 +181,27 @@ async def ledgered_call(
     """Route-level quota guard: reserve BEFORE the model call.
 
     - QuotaExceeded propagates and the guarded call never runs;
+    - a REPLAYED reserve (the ledger already holds this request_id) sets
+      outcome["replayed"]=True and the body is SKIPPED: a network retry
+      under the same Idempotency-Key must not re-invoke the provider,
+      re-book ledger rows, or re-generate candidates/variants;
     - success settles with the reservation estimate unless the caller
-      wrote real provider tokens into `outcome` (services do this via
-      their usage_out parameter);
+      wrote real provider tokens into `outcome`;
     - any exception refunds the reservation.
     """
 
-    await ledger.reserve(
+    reserved = await ledger.reserve(
         principal,
         request_id=request_id,
         operation=operation,
         estimated_tokens=estimated_tokens,
     )
-    outcome: dict = {"input_tokens": None, "output_tokens": None, "model": None}
+    outcome: dict = {"input_tokens": None, "output_tokens": None, "model": None, "replayed": bool(reserved.get("replayed"))}
+    if outcome["replayed"]:
+        # the first execution already settled (or refunded) this key: the
+        # replay must be a no-op for tokens and for generated artifacts
+        yield outcome
+        return
     try:
         yield outcome
     except Exception:

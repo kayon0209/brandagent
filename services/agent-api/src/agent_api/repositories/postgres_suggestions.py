@@ -10,11 +10,6 @@ from __future__ import annotations
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
-from agent_api.domain.errors import NotFoundError
-
-
-_NULL_OFFSET = -1
-
 
 class PostgresSuggestionStore:
     def __init__(self, database_url: str, *, draft_store) -> None:
@@ -66,23 +61,14 @@ class PostgresSuggestionStore:
     async def insert_suggestion(self, suggestion: dict) -> dict:
         workspace_id = suggestion["workspace_id"]
         task_id = suggestion["task_id"]
-        # the client's block-local offsets are authoritative; derive from
-        # the canonical block text only when they are absent (legacy)
-        start_offset = suggestion.get("start_offset")
-        end_offset = suggestion.get("end_offset")
+        # P1-1: the client's block-local offsets are the ONLY anchor — a
+        # .find()-derived position mis-targets duplicate text. Suggestions
+        # without a complete offset pair are refused at the application
+        # layer before they ever reach this store.
+        start_offset = suggestion["start_offset"]
+        end_offset = suggestion["end_offset"]
         if not isinstance(start_offset, int) or not isinstance(end_offset, int):
-            draft = await self._drafts.get_draft(workspace_id, task_id)
-            if draft is None:
-                raise NotFoundError(f"draft for project {task_id} not found")
-            block = next(
-                (b for b in draft["document"].get("blocks", []) if b.get("block_id") == suggestion["block_id"]),
-                None,
-            )
-            if block is None:
-                raise NotFoundError(f"block {suggestion['block_id']} not found in the draft")
-            start = block.get("text", "").find(suggestion["selected_text"])
-            start_offset = start if start >= 0 else _NULL_OFFSET
-            end_offset = (start + len(suggestion["selected_text"]) - 1) if start >= 0 else _NULL_OFFSET
+            raise ValueError("suggestion requires integer start_offset/end_offset anchors")
 
         async with self._pool.connection() as connection:
             await self._scope(connection, workspace_id)

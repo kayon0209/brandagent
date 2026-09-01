@@ -46,6 +46,36 @@ class ActionNotSupported(ValueError):
         self.action = action
 
 
+class MissingAnchor(ValueError):
+    def __init__(self, message: str = "选区缺少 blockId/startOffset/endOffset 完整锚点，不能生成建议") -> None:
+        super().__init__(message)
+
+
+def validate_selection_anchor(
+    *,
+    selected_text: object,
+    block_id: str,
+    base_revision: object,
+    start_offset: object,
+    end_offset: object,
+) -> str:
+    """Route-level P1-1 validation, shared contract for the propose route.
+
+    Returns the validated selected_text; raises ValueError with a spoken
+    message the route maps to 422 VALIDATION_ERROR. Kept OUT of the route
+    handler so routing stays thin (project rule: no fat handlers).
+    """
+    if not isinstance(selected_text, str) or not block_id or not isinstance(base_revision, int):
+        raise ValueError("selectedText, blockId and baseRevision (int) are required")
+    if not isinstance(start_offset, int) or isinstance(start_offset, bool) or not isinstance(end_offset, int) or isinstance(end_offset, bool):
+        raise ValueError("startOffset 和 endOffset（整数）必填，用于锚定选区")
+    if start_offset < 0 or end_offset < start_offset:
+        raise ValueError("startOffset/endOffset 必须满足 0 <= start <= end")
+    if end_offset - start_offset + 1 != len(selected_text):
+        raise ValueError("选区长度与 startOffset/endOffset 不一致，无法锚定")
+    return selected_text
+
+
 class SelectionStale(ConflictError):
     def __init__(self, message: str = "选区已过期，稿件在别处有更新") -> None:
         super().__init__(message)
@@ -77,7 +107,6 @@ def _context_sentence(plain_text: str, selected: str) -> str:
     start = max(0, index - _CONTEXT_RADIUS)
     end = min(len(plain_text), index + len(selected) + _CONTEXT_RADIUS)
     return plain_text[start:end]
-
 
 class EditorialAssistService:
     def __init__(self, *, store: SuggestionStore, provider: AssistProvider) -> None:
@@ -126,18 +155,23 @@ class EditorialAssistService:
             raise ActionNotSupported(action)
         if not selected_text.strip():
             raise ValueError("selected_text is required")
+        # P1-1: the block-local offset pair is the ONLY anchor. Proposing
+        # without it (and letting persistence .find() the text later) is the
+        # duplicate-text mis-targeting bug; refuse instead of guessing.
+        if not isinstance(start_offset, int) or not isinstance(end_offset, int):
+            raise MissingAnchor()
 
         draft = await self._draft(principal, task_id)
         block_text = self._block_text(draft["document"], block_id)
         if block_text is None:
             raise NotFoundError(f"block {block_id} not found in the draft")
-        # anchor verification: client offsets are authoritative when sent;
-        # the server recomputes the slice and compares, never plain_text.find
-        if start_offset is not None and end_offset is not None:
-            expected = block_text[start_offset : end_offset + 1]
-            if expected != selected_text:
-                raise SelectionStale("选区与当前稿件不一致，请重新选择")
-        elif selected_text not in block_text:
+        # anchor verification: the server recomputes the slice at the exact
+        # client offsets and compares — never plain_text.find
+        if not (0 <= start_offset <= end_offset < len(block_text)):
+            # out-of-range offsets are a malformed request (422), not a
+            # stale document (409): the range can never anchor at all
+            raise MissingAnchor("选区偏移超出稿件范围，请重新选择")
+        if block_text[start_offset : end_offset + 1] != selected_text:
             raise SelectionStale("选区与当前稿件不一致，请重新选择")
 
         excerpts = await self._linked_excerpts(principal, task_id)
@@ -200,19 +234,19 @@ class EditorialAssistService:
     def _canonical_selection(self, suggestion: dict, draft: dict, block_text: str) -> str | None:
         """Resolve the selection against the CURRENT server document.
 
-        Block-local offsets are authoritative (the client computed them
-        against this very block); the raw selected text is only a legacy
-        fallback for stores that did not persist offsets.
+        Block-local offsets are the ONLY anchor: the client computed them
+        against this very block. Suggestions persisted without a complete
+        offset pair (legacy rows) have no anchor — return None so accept
+        fails closed with a stale conflict instead of guessing position.
         """
 
         start = suggestion.get("start_offset")
         end = suggestion.get("end_offset")
-        if isinstance(start, int) and isinstance(end, int) and 0 <= start <= end < len(block_text):
-            return block_text[start : end + 1]
-        selected = suggestion.get("selected_text")
-        if selected and selected in block_text:
-            return selected
-        return None
+        if not isinstance(start, int) or not isinstance(end, int):
+            return None
+        if not (0 <= start <= end < len(block_text)):
+            return None
+        return block_text[start : end + 1]
 
     async def accept(
         self,
@@ -245,29 +279,21 @@ class EditorialAssistService:
         if block is None:
             raise SelectionStale("选区所在段落已不存在")
 
-        # canonical selection: block-local offsets first, raw text fallback
+        # canonical selection: block-local offsets are the only anchor; a
+        # suggestion without a complete offset pair can never be accepted
         block_text = block.get("text", "")
         selection = self._canonical_selection(suggestion, draft, block_text)
         if selection is None:
             raise SelectionStale("选区与当前稿件不一致，请重新生成建议")
         if selection_hash(selection) != suggestion["selected_text_hash"]:
             raise SelectionStale("选区校验失败")
-        if selection not in block_text:
-            raise SelectionStale("选区与当前稿件不一致，请重新生成建议")
 
-        # replace within the block at the verified anchor (block-local
-        # offset when present; first text occurrence otherwise), then
-        # rebuild plain text from the same block text so the two surfaces
-        # can never diverge.
-        offset = suggestion.get("start_offset")
-        if isinstance(offset, int) and block_text[offset : suggestion.get("end_offset", offset) + 1] == selection:
-            occurrence_in_block = offset
-        else:
-            occurrence_in_block = block_text.find(selection)
-            if occurrence_in_block < 0:
-                raise SelectionStale("选区与当前稿件不一致，请重新生成建议")
+        # replace at the exact verified offset range — never .find(), which
+        # mis-targets when the same sentence appears more than once
+        start = suggestion["start_offset"]
+        end = suggestion["end_offset"]
         new_block_text = (
-            block_text[:occurrence_in_block] + suggestion["suggested_text"] + block_text[occurrence_in_block + len(selection):]
+            block_text[:start] + suggestion["suggested_text"] + block_text[end + 1:]
         )
         new_blocks = [
             {**b, "text": new_block_text} if b.get("block_id") == suggestion["block_id"] else b
