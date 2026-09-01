@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { agentApiUrl } from '@/lib/api/server-agent-api'
 
-type RouteContext = { params: { path: string[] } }
+type RouteContext = { params: Promise<{ path: string[] }> }
 
 const ANONYMOUS_ENVELOPE = {
   success: false as const,
@@ -14,6 +14,7 @@ const ANONYMOUS_ENVELOPE = {
 const MAX_BODY_BYTES = 12 * 1024 * 1024
 
 async function proxy(request: NextRequest, context: RouteContext) {
+  const { path } = await context.params
   const { userId, getToken } = await auth()
   const token = await getToken()
   if (!userId || !token) {
@@ -46,7 +47,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
   if (lastEventId) headers.set('Last-Event-ID', lastEventId)
 
   const search = new URL(request.url).search
-  const target = `${agentApiUrl()}/${context.params.path.join('/')}${search}`
+  const target = `${agentApiUrl()}/${path.join('/')}${search}`
 
   let body: ArrayBuffer | undefined
   if (request.method !== 'GET' && request.method !== 'HEAD') {

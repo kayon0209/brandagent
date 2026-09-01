@@ -694,7 +694,7 @@ interface WritingStepProps {
   expandedContent: Record<string, string>
   agentStatus: Record<string, SectionAgentStatus>
   expandingSections: Set<string>
-  activeSectionRef: React.RefObject<HTMLDivElement>
+  activeSectionRef: React.RefObject<HTMLDivElement | null>
   onExpandSection: (section: OutlineSection) => void
   onExpandAll: () => void
   onUpdateSectionContent: (id: string, content: string) => void
@@ -961,7 +961,7 @@ function WritingStep({
 // ═══════════════════════════════════════════════════════════════
 function EditorPageInner() {
   const editor = useArticleEditor()
-  const activeSectionRef = useRef<HTMLDivElement>(null)
+  const activeSectionRef = useRef<HTMLDivElement | null>(null)
   const searchParams = useSearchParams()
   const moderation = useModerationCheck()
   const quota = useQuota()
