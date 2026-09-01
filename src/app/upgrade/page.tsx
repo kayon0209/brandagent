@@ -41,7 +41,8 @@ type PlanKey = keyof typeof PLAN_INFO
 // ─── 表单（需要 useSearchParams，包在 Suspense 里）────────
 function UpgradeForm() {
   const searchParams = useSearchParams()
-  const planParam = searchParams.get('plan') as PlanKey | null
+  // Next 14 types useSearchParams() as possibly null on initial render
+  const planParam = (searchParams?.get('plan') ?? null) as PlanKey | null
   const plan: PlanKey = planParam === 'team' ? 'team' : 'pro'
   const info = PLAN_INFO[plan]
 

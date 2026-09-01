@@ -965,14 +965,17 @@ function EditorPageInner() {
   const searchParams = useSearchParams()
   const moderation = useModerationCheck()
   const quota = useQuota()
+  // stable members of the hook return object — the object identity changes
+  // every render, but these values are the effect's real inputs
+  const { articleId, loadArticle } = editor
 
   // 读取 URL ?id= 参数，若存在则加载文章（避免重复加载）
   useEffect(() => {
-    const id = searchParams.get('id')
-    if (id && !editor.articleId) {
-      editor.loadArticle(id)
+    const id = searchParams?.get('id')
+    if (id && !articleId) {
+      loadArticle(id)
     }
-  }, [searchParams, editor.articleId, editor.loadArticle])
+  }, [searchParams, articleId, loadArticle])
 
   // 当进入 writing 步骤后自动滚动到顶部
   useEffect(() => {

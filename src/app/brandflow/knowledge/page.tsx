@@ -22,7 +22,7 @@ export default function BrandFlowKnowledge() {
   const tabKeys = ['product_facts', 'brand_guidelines', 'channel_guidelines', 'approved_content', 'forbidden_claims'] as const
 
   useEffect(() => {
-    const q = searchParams.get('search')
+    const q = searchParams?.get('search')
     if (q) {
       setSearch(q)
     }

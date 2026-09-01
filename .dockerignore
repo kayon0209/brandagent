@@ -2,11 +2,17 @@
 # services/*/src, so the source trees must stay in the context — only
 # the heavy artifacts are excluded (this was a regression: a blanket
 # `services` exclusion broke `docker compose up --build`).
+#
+# P1-6: `.next.bak.*` user backup directories MUST be excluded from the
+# build context (never deleted) — a multi-GB backup in the context broke
+# the legacy builder before it even reached the ignore evaluation.
 .pnpm-store
 node_modules
 **/node_modules
 .git
 .next
+.next.bak.*
+.next.bak.*/
 _sandbox
 tests
 docs/migrations
@@ -16,5 +22,7 @@ docs/migrations
 **/*.egg-info
 **/dist
 **/build
+**/test-results
+**/playwright-report
 .env*
 *.log

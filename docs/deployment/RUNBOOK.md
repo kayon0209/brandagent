@@ -7,7 +7,7 @@ This runbook covers the Web, Agent API, Brand Tools MCP and PostgreSQL services.
 ### Consumer upgrade compatibility window (plan task 15)
 
 - The consumer workspace (`/app`) and the B-end BrandFlow workspace (`/brandflow`) run side by side during the compatibility window; both stay deployed.
-- The default landing entry still routes to `/brandflow`; switching the default entry to `/app` (and any removal of legacy routes) requires separate user authorization plus a rollback switch.
+- `/app` is the consumer-facing workspace and the default entry for C-end users; `/brandflow` remains reachable during the compatibility window. Any change to the DEFAULT landing route (`/`) or removal of legacy routes requires separate user authorization plus a rollback switch.
 - Quota authority for C-end users is the FastAPI usage ledger (`usage_ledger`); the legacy Supabase quota endpoint is deprecated and not double-written.
 
 ## Required secrets
@@ -20,6 +20,16 @@ This runbook covers the Web, Agent API, Brand Tools MCP and PostgreSQL services.
 - Clerk publishable/secret keys and JWKS URL/issuer, plus either a JWT-template audience or comma-separated authorized frontend origins
 
 Use a secret manager outside local development. Never put values in source, logs, screenshots or support tickets. Rotate the MCP token by updating Agent API and MCP together, then restart both services.
+
+## Build exclusivity (Windows)
+
+`corepack pnpm build` and `next dev` share `.next`. If a dev server is
+running (or a previous build crashed), stale chunks make the next build
+fail with `Cannot find module './NNNN.js'` or prerender
+`TypeError: e[o] is not a function` — on ANY source tree, including a
+clean checkout. Before building: stop the dev server, `rm -rf .next`
+(the build cache only — never the user's `.next.bak.*` backups), then
+run `corepack pnpm build` and expect exit 0 with no prerender errors.
 
 ## Start
 
@@ -45,7 +55,7 @@ Readiness gates:
 
 - MCP: `GET http://127.0.0.1:8100/health`
 - Agent API: `GET http://127.0.0.1:8000/api/v1/readiness`
-- Web: `GET http://127.0.0.1:3000/brandflow`
+- Web: `GET http://127.0.0.1:3000/app` (consumer entry; `/brandflow` stays up during the compatibility window)
 
 Agent readiness fails closed when PostgreSQL checkpoint isolation, GLM configuration, MCP discovery or internal authentication is unavailable.
 
@@ -53,7 +63,7 @@ Agent readiness fails closed when PostgreSQL checkpoint isolation, GLM configura
 
 - `brandflow_app` owns business reads/writes.
 - `brandflow_checkpoint` uses the separate `brandflow_checkpoint` schema and must not equal the business role.
-- Apply numbered migrations to a fresh disposable database before any shared environment.
+- Apply numbered migrations to a fresh disposable database before any shared environment. The consumer gate (`RUN_BRANDFLOW_DB_TESTS=true pnpm test:db:consumer`) applies 001-005 and asserts the 004 RLS policies plus the 005 FORCE hardening (owner bypass closed) on a disposable container.
 - Content versions, decisions, lineage and audit events are append-only. Never repair them with direct updates.
 
 ## Recovery
@@ -92,3 +102,41 @@ node node_modules\@playwright\test\cli.js test --list
 ```
 
 Authenticated Playwright execution requires `BRANDFLOW_E2E_STORAGE_STATE`; live API gate coverage additionally requires `BRANDFLOW_E2E_API_TOKEN` and a disposable database. Skipped tests must not be reported as executed capabilities.
+
+## Authenticated E2E identity (real-journey suite)
+
+The real consumer journey (`tests/e2e/consumer-real-journey.spec.ts`) runs
+against the real stack and never mocks core consumer APIs. It requires:
+
+- `BRANDFLOW_E2E_STORAGE_STATE` — a Playwright storage-state JSON for a
+  disposable Clerk TEST user (never a production identity). Export it by
+  signing the test user in once against a disposable environment and
+  saving the authenticated browser state.
+- `BRANDFLOW_E2E_API_TOKEN` (optional) — a pre-minted agent-api bearer
+  token for direct API assertions.
+- The backend MUST point at a disposable PostgreSQL database; the suite
+  creates real projects/materials and must never run against shared data.
+
+When these are absent the real suite reports itself as "ENVIRONMENT NOT
+PREPARED — not executed". A skipped real suite is never a pass; the
+`[mock]` UI specs are wiring coverage only and cannot substitute.
+
+### Clerk configuration sanity (no secrets involved)
+
+`/` and `/app*` redirect-loop or 404 symptoms almost always mean the
+Clerk keys in the running environment do not come from the SAME Clerk
+instance:
+
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` must be
+  issued by the same Clerk application. The publishable key embeds the
+  instance prefix (`pk_test_<instance>...` / `pk_live_<instance>...`).
+- The token issuer (`CLERK_JWT_ISSUER` / JWKS URL, e.g.
+  `https://<instance>.clerk.accounts.dev` or your custom domain) must
+  match that same instance prefix. A secret from instance A with a
+  publishable key from instance B fails exactly as a redirect loop.
+- Verify WITHOUT printing values: decode the publishable key's middle
+  segment and compare the instance prefix with the issuer host's
+  leftmost label. They must be equal.
+- Session tokens must carry the expected `azp` (authorized party) or be
+  accepted by the azp-less default path (see
+  `services/agent-api/tests/test_clerk_security.py`).

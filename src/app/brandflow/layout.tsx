@@ -42,7 +42,7 @@ export default function BrandFlowLayout({ children }: { children: ReactNode }) {
 
   const pendingCount = tasks.filter((t) => t.status.startsWith('waiting_for_')).length
 
-  const segments = pathname.replace('/brandflow', '').split('/').filter(Boolean)
+  const segments = (pathname ?? '').replace('/brandflow', '').split('/').filter(Boolean)
   const isTaskId = (s: string) => /^[a-f0-9-]{20,}$/.test(s)
   const breadcrumbs = [
     { label: 'BrandFlow', href: '/brandflow' },
@@ -86,7 +86,7 @@ export default function BrandFlowLayout({ children }: { children: ReactNode }) {
         </div>
         <nav>
           {navItems.map(({ href, icon: Icon, label }) => {
-            const isActive = pathname.startsWith(href)
+            const isActive = (pathname ?? '').startsWith(href)
             return (
               <Link key={href} href={href} className={isActive ? styles.active : undefined}>
                 <Icon size={18} />
@@ -102,7 +102,7 @@ export default function BrandFlowLayout({ children }: { children: ReactNode }) {
       </aside>
       <nav className={styles.mobileNav}>
         {navItems.map(({ href, icon: Icon, label }) => {
-          const isActive = pathname.startsWith(href)
+          const isActive = (pathname ?? '').startsWith(href)
           return (
             <Link key={href} href={href} className={isActive ? styles.active : undefined}>
               <Icon size={20} />

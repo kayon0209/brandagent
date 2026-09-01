@@ -15,7 +15,7 @@ export default function BrandFlowTasks() {
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    if (searchParams.get('create') === 'true') {
+    if (searchParams?.get('create') === 'true') {
       setCreating(true)
     }
   }, [searchParams])

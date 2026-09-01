@@ -34,6 +34,7 @@ const stageByStatus: Record<string, number> = {
 
 export default function BrandFlowTaskDetail() {
   const params = useParams<{ taskId: string }>()
+  const taskId = params?.taskId
   const flow = useBrandFlow()
   const [tab, setTab] = useState<'lineage' | 'issues' | 'versions' | 'tools'>('issues')
   const [contentTab, setContentTab] = useState<ContentTab>('content')
@@ -58,11 +59,11 @@ export default function BrandFlowTaskDetail() {
   // not a shared provider): load the URL's task or the page can never show the
   // workspace (audit finding: direct task URLs rendered 已退出任务视图 forever).
   useEffect(() => {
-    if (flow.workspace?.task.task_id !== params.taskId) {
-      void flow.openTask(params.taskId)
+    if (taskId && flow.workspace?.task.task_id !== taskId) {
+      void flow.openTask(taskId)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.taskId])
+  }, [taskId])
 
   if (!flow.isLoaded || flow.loading) {
     return (
@@ -74,7 +75,7 @@ export default function BrandFlowTaskDetail() {
     )
   }
 
-  if (!flow.workspace || flow.workspace.task.task_id !== params.taskId) {
+  if (!flow.workspace || flow.workspace.task.task_id !== taskId) {
     return (
       <main className={styles.centered}>
         <div><Gauge size={32} /></div>
@@ -173,7 +174,11 @@ export default function BrandFlowTaskDetail() {
         <RecoveryWizard
           error={task.error}
           onRetry={() => flow.command(`/api/v1/tasks/${task.task_id}/retry`, {})}
-          onAbandon={() => {/* TODO: POST cancel */}}
+          onAbandon={() => {
+            // B-end recovery: cancel the failed task through the real
+            // idempotent cancel endpoint (backend already shipped + tested)
+            void flow.command(`/api/v1/tasks/${task.task_id}/cancel`, {})
+          }}
         />
       )}
       <ol className={styles.stepper}>
