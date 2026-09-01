@@ -788,7 +788,7 @@ export interface paths {
         put?: never;
         /**
          * Propose Selection Suggestion
-         * @description Propose an anchored rewrite (expand/replace_example/shorten) over the user's current selection; the model only sees the selection, its context, and linked excerpts. Refuses untraceable facts with 422 SUGGESTION_REFUSED.
+         * @description Propose an anchored rewrite (expand/replace_example/shorten) over the user's current selection; the model only sees the selection, its context, and linked excerpts. startOffset/endOffset are REQUIRED — they are the only anchor, so the request is rejected with 422 when they are missing, non-integer, negative, or start > end. Refuses untraceable facts with 422 SUGGESTION_REFUSED.
          */
         post: operations["propose_suggestion_api_v1_consumer_projects__task_id__suggestions_post"];
         delete?: never;
@@ -808,7 +808,7 @@ export interface paths {
         put?: never;
         /**
          * Accept Selection Suggestion
-         * @description Atomic accept; verifies revision, block, offsets and selection hash against the canonical server document, replaces the exact range, bumps the draft revision, and records a user-action event (not an enterprise approval). Idempotent replays return the accepted outcome.
+         * @description Atomic accept; verifies revision, block, offsets and selection hash against the canonical server document, replaces the exact offset range, bumps the draft revision, and records a user-action event (not an enterprise approval). Legacy suggestions without a complete offset anchor return 409 SELECTION_STALE instead of guessing a position. Idempotent replays return the accepted outcome.
          */
         post: operations["accept_suggestion_api_v1_consumer_projects__task_id__suggestions__suggestion_id__accept_post"];
         delete?: never;
@@ -2835,14 +2835,14 @@ export interface operations {
                     blockId: string;
                     /**
                      * Start Offset
-                     * @description Selection start offset within the block text (inclusive).
+                     * @description Selection start offset within the block text (inclusive). Required — the offset pair is the only anchor; requests without it are rejected with 422 so duplicate text can never be mis-targeted.
                      */
-                    startOffset?: number;
+                    startOffset: number;
                     /**
                      * End Offset
-                     * @description Selection end offset within the block text (inclusive).
+                     * @description Selection end offset within the block text (inclusive). Must satisfy startOffset <= endOffset.
                      */
-                    endOffset?: number;
+                    endOffset: number;
                     /** Base Revision */
                     baseRevision: number;
                 };

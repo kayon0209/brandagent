@@ -1,5 +1,11 @@
 'use client'
 
+// Clerk-protected, data-driven page: prerender has no session, so a
+// static export would bake the interception shell (prod 404 root
+// cause). Render per-request like the middleware expects.
+export const dynamic = 'force-dynamic'
+
+
 /**
  * Consumer materials page (upgrade plan task 7): /app/materials.
  *
@@ -8,15 +14,29 @@
  * (audit finding: import/link existed in the hook but no page called it).
  */
 
-import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { Suspense, useState } from 'react'
 
 import { useConsumerMaterials } from '@/hooks/useConsumerMaterials'
 import { MaterialCard } from '@/components/consumer/materials/MaterialCard'
 import { MaterialSourceDetail } from '@/components/consumer/materials/MaterialSourceDetail'
+import { buildMaterialsBackLink, MATERIALS_FROM_PARAM } from '@/lib/navigation/materials'
 import styles from '@/components/consumer/materials/consumer-materials.module.css'
 
 export default function MaterialsPage() {
+  // useSearchParams needs a Suspense boundary in a statically-exported
+  // client page (Next 14 build requirement)
+  return (
+    <Suspense fallback={<div className={styles.page}><p>正在打开素材…</p></div>}>
+      <MaterialsPageInner />
+    </Suspense>
+  )
+}
+
+function MaterialsPageInner() {
   const { loading, error, materials, excerpts, refresh, loadExcerpts, importText } = useConsumerMaterials()
+  const searchParams = useSearchParams()
+  const fromProjectId = searchParams?.get(MATERIALS_FROM_PARAM)
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null)
   const [selectedExcerpt, setSelectedExcerpt] = useState<string | null>(null)
   const [importOpen, setImportOpen] = useState(false)
@@ -55,6 +75,11 @@ export default function MaterialsPage() {
 
   return (
     <div className={styles.page}>
+      <nav aria-label="返回导航">
+        <a href={buildMaterialsBackLink(fromProjectId)} data-testid="materials-back">
+          {fromProjectId ? '回到写作' : '回到我的写作'}
+        </a>
+      </nav>
       <h1>素材</h1>
 
       {error && (

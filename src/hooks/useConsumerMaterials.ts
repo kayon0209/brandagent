@@ -19,6 +19,7 @@ import {
 } from '@/lib/api/consumer'
 import { BrandFlowApiError } from '@/lib/api/brandflow'
 import type { ConsumerMaterialExcerpt, MaterialLinkState } from '@/types/consumer.types'
+import { newIdempotencyKey } from '@/lib/idempotency'
 
 export { type MaterialLinkState as MATERIAL_LINK_STATES }
 
@@ -31,14 +32,13 @@ export interface ConsumerMaterialsState {
   refresh: () => Promise<void>
   importText: (text: string, name: string) => Promise<MaterialImportResult>
   linkToProject: (projectId: string, excerptId: string) => Promise<void>
+  /** Merge SERVER-known link states (e.g. from the project view) so the
+   * drawer shows real associations, not just this session's actions. */
+  seedLinkStates: (states: Record<string, MaterialLinkState>) => void
   loadExcerpts: (documentId: string) => Promise<void>
   loadAllExcerpts: () => Promise<void>
 }
 
-function newIdempotencyKey(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
 
 export function useConsumerMaterials(): ConsumerMaterialsState {
   const [loading, setLoading] = useState(true)
@@ -113,6 +113,11 @@ export function useConsumerMaterials(): ConsumerMaterialsState {
     }
   }, [])
 
+  const seedLinkStates = useCallback((states: Record<string, MaterialLinkState>) => {
+    // server truth only; never downgrade a failed/linking state mid-action
+    setLinkStates(previous => ({ ...states, ...previous }))
+  }, [])
+
   return {
     loading,
     error,
@@ -122,6 +127,7 @@ export function useConsumerMaterials(): ConsumerMaterialsState {
     refresh,
     importText,
     linkToProject,
+    seedLinkStates,
     loadExcerpts,
     loadAllExcerpts,
   }

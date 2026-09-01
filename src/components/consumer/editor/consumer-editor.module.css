@@ -471,3 +471,16 @@
     grid-column: 2;
   }
 }
+
+/* quiet workspace back-link in the topbar (no nav islands): inherits the
+   materials button's subtle tone instead of the brand serif weight */
+.topbarBackLink {
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  padding: 8px 6px;
+}
+
+.topbarBackLink:hover {
+  color: var(--ink);
+}

@@ -13,6 +13,7 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Editor } from '@tiptap/core'
+import { useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 
@@ -22,6 +23,7 @@ import { SelectionToolbar, type AssistAction } from './SelectionToolbar'
 import { SuggestionPopover } from './SuggestionPopover'
 import { useConsumerDraft, type ConsumerDraftApi } from '@/hooks/useConsumerDraft'
 import styles from './consumer-editor.module.css'
+import { newIdempotencyKey } from '@/lib/idempotency'
 
 const ACTION_LABELS: Record<AssistAction, string> = {
   expand: '展开说说',
@@ -34,6 +36,7 @@ const ZOOM_MAX = 1.5
 const ZOOM_STEP = 0.1
 const ZOOM_STORAGE_KEY = 'brandagent:zoom'
 const SEED_RADIUS = 120
+
 
 interface Block {
   block_id: string
@@ -111,10 +114,12 @@ interface ConsumerEditorProps {
   api: ConsumerDraftApi
   onAdopted?(): void
   onStatus?(status: EditorStatusPayload): void
+  /** P1-3: persist an edited core idea (project PATCH); read-only if absent */
+  onSaveCoreIdea?(coreIdea: string): Promise<void>
 }
 
 export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorProps>(
-  function ConsumerEditor({ projectId, coreIdea, api, onAdopted, onStatus }, ref) {
+  function ConsumerEditor({ projectId, coreIdea, api, onAdopted, onStatus, onSaveCoreIdea }, ref) {
   const draft = useConsumerDraft(projectId, api)
   const [zoom, setZoom] = useState(() => {
     try {
@@ -137,43 +142,37 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
   const markDirtyRef = useRef(draft.markDirty)
   markDirtyRef.current = draft.markDirty
 
-  const editor = useMemo(() => {
-    const created = new Editor({
-      extensions: [
-        StarterKit,
-        Placeholder.configure({ placeholder: '从这里开始写下你的想法…' }),
-      ],
-      content: '<p></p>',
-      onUpdate: ({ editor: current }) => {
-        const blocks = editorToBlocks(current)
-        markDirtyRef.current({ blocks }, current.getText())
-        setWordCount(current.getText().length)
-      },
-      onSelectionUpdate: ({ editor: current }) => {
-        const { from, to, empty } = current.state.selection
-        const text = current.state.doc.textBetween(from, to, ' ')
-        setSelectionInfo({ from, to, empty, text })
-        setToolbarHidden(false)
-        if (!empty) {
-          const selection = window.getSelection()
-          if (selection && selection.rangeCount > 0) {
-            setSelectionRect(selection.getRangeAt(0).cloneRange())
-          }
-        } else {
-          setSelectionRect(null)
+  // tiptap v3: the mount protocol between Editor and EditorContent only
+  // works through useEditor — a raw `new Editor()` renders an empty <div>
+  // with zero errors (this round's P0 finding). Component is ssr:false.
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Placeholder.configure({ placeholder: '从这里开始写下你的想法…' }),
+    ],
+    content: '<p></p>',
+    onUpdate: ({ editor: current }: { editor: Editor }) => {
+      const blocks = editorToBlocks(current)
+      markDirtyRef.current({ blocks }, current.getText())
+      setWordCount(current.getText().length)
+    },
+    onSelectionUpdate: ({ editor: current }: { editor: Editor }) => {
+      const { from, to, empty } = current.state.selection
+      const text = current.state.doc.textBetween(from, to, ' ')
+      setSelectionInfo({ from, to, empty, text })
+      setToolbarHidden(false)
+      if (!empty) {
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0) {
+          setSelectionRect(selection.getRangeAt(0).cloneRange())
         }
-      },
-      onBlur: () => setToolbarHidden(true),
-    })
-    editorRef.current = created
-    return created
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      editor.destroy()
-    }
-  }, [editor])
+      } else {
+        setSelectionRect(null)
+      }
+    },
+    onBlur: () => setToolbarHidden(true),
+  })
+  editorRef.current = editor
 
   // seed / re-seed the editor from the server document whenever a fresh
   // load bumps seedVersion — accepted suggestions and recovered drafts
@@ -251,6 +250,9 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
       const anchor = resolveSelectionAnchor(editor, selectionInfo.from, selectionInfo.to)
       if (!anchor) return
       setSuggesting(action)
+      // P1-2: one toolbar action = one idempotency key; the same action's
+      // automatic retries reuse it so the model is never called twice
+      const idempotencyKey = newIdempotencyKey()
       try {
         const result = (await api.proposeSuggestion({
           projectId,
@@ -260,6 +262,7 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
           startOffset: anchor.startOffset,
           endOffset: anchor.endOffset,
           baseRevision: draft.revision,
+          idempotencyKey,
         })) as { suggestion_id?: string; suggested_text?: string }
         if (!result?.suggested_text) {
           setSuggestion(null)
@@ -318,7 +321,7 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
     <div className={styles.editorColumn} data-testid="consumer-editor">
       <div className={styles.main}>
         <div className={styles.manuscriptColumn}>
-          <CoreIdeaBlock coreIdea={coreIdea} />
+          <CoreIdeaBlock coreIdea={coreIdea} onSave={onSaveCoreIdea} />
           <ManuscriptCanvas editor={editor} zoom={zoom} />
         </div>
       </div>
@@ -348,3 +351,23 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
   )
 }
 )
+
+/**
+ * Ref-object variant for the next/dynamic boundary (P0-2 regression fix):
+ * Next 14's dynamic() drops refs, so ConsumerEditorClient passes a ref
+ * OBJECT as a plain prop instead. Same contract, same imperative handle —
+ * the page reads editorHandle.current exactly as before.
+ */
+export function ConsumerEditorWithHandle(
+  props: Omit<ConsumerEditorProps, never> & { handleRefObj?: { current: ConsumerEditorHandle | null } },
+) {
+  const { handleRefObj, ...rest } = props
+  const innerRef = useRef<ConsumerEditorHandle>(null)
+  useEffect(() => {
+    if (handleRefObj) handleRefObj.current = innerRef.current
+    return () => {
+      if (handleRefObj) handleRefObj.current = null
+    }
+  })
+  return <ConsumerEditor {...rest} ref={innerRef} />
+}

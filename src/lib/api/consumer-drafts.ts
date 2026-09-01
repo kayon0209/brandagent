@@ -39,11 +39,13 @@ export async function proposeConsumerSuggestion(input: {
   startOffset: number
   endOffset: number
   baseRevision: number
+  idempotencyKey: string
 }): Promise<{ suggestion_id: string; suggested_text: string }> {
   return brandFlowRequest<{ suggestion_id: string; suggested_text: string }>(
     `/api/v1/consumer/projects/${input.projectId}/suggestions`,
     {
       method: 'POST',
+      headers: { 'Idempotency-Key': input.idempotencyKey },
       body: JSON.stringify({
         action: input.action,
         selectedText: input.selectedText,
@@ -74,12 +76,21 @@ export interface DraftCandidate {
   content_version_id: string
   task_id: string
   content: string
+  base_revision?: number
+}
+
+export interface GenerateDraftResult {
+  /** present on first execution; a SAME-KEY replay returns the existing
+   * candidate for adoption (P1-9 replay contract) */
+  candidate: DraftCandidate | null
+  base_revision?: number | null
+  replayed?: boolean
 }
 
 export async function generateDraftCandidate(
   projectId: string,
   idempotencyKey: string,
-): Promise<{ candidate: DraftCandidate; base_revision: number }> {
+): Promise<GenerateDraftResult> {
   return brandFlowRequest<{ candidate: DraftCandidate; base_revision: number }>(
     `/api/v1/consumer/projects/${projectId}/draft/generate`,
     {

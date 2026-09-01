@@ -93,8 +93,19 @@ export async function getConsumerProject(
   core_idea: string
   writing_intent: string
   active_master_version_id: string | null
+  linked_excerpts?: { excerpt_id: string }[]
 }> {
   return brandFlowRequest(`/api/v1/consumer/projects/${projectId}`)
+}
+
+export async function updateConsumerProject(
+  projectId: string,
+  patch: { title?: string; core_idea?: string; writing_intent?: string },
+): Promise<{ task_id: string; title: string; core_idea: string; writing_intent: string }> {
+  return brandFlowRequest(`/api/v1/consumer/projects/${projectId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
 }
 
 export { BrandFlowApiError }

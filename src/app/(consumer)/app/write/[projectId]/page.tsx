@@ -1,5 +1,11 @@
 'use client'
 
+// Clerk-protected, data-driven page: prerender has no session, so a
+// static export would bake the interception shell (prod 404 root
+// cause). Render per-request like the middleware expects.
+export const dynamic = 'force-dynamic'
+
+
 /**
  * Write page — the confirmed index-v4 skeleton, fully wired:
  *
@@ -16,6 +22,8 @@
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { buildMaterialsHref } from '@/lib/navigation/materials'
+
 import { ConsumerEditorClient } from '@/components/consumer/editor/ConsumerEditorClient'
 import type { ConsumerEditorHandle, EditorStatusPayload } from '@/components/consumer/editor/ConsumerEditor'
 import { SaveStatus, type SaveState } from '@/components/consumer/editor/SaveStatus'
@@ -24,7 +32,7 @@ import { MaterialDrawer } from '@/components/consumer/materials/MaterialDrawer'
 import { PlatformPreview } from '@/components/consumer/preview/PlatformPreview'
 import { PrePublishReview, type ReviewBubble } from '@/components/consumer/preview/PrePublishReview'
 import { PrimaryActionBar } from '@/components/consumer/preview/PrimaryActionBar'
-import { getConsumerProject } from '@/lib/api/consumer'
+import { getConsumerProject, updateConsumerProject } from '@/lib/api/consumer'
 import {
   acceptConsumerSuggestion,
   getConsumerDraft,
@@ -39,6 +47,7 @@ import { usePlatformVariants } from '@/hooks/usePlatformVariants'
 import { useConsumerMaterials } from '@/hooks/useConsumerMaterials'
 import styles from '@/components/consumer/editor/consumer-editor.module.css'
 import materialStyles from '@/components/consumer/materials/consumer-materials.module.css'
+import { newIdempotencyKey } from '@/lib/idempotency'
 
 const api: ConsumerDraftApi = {
   getDraft: getConsumerDraft,
@@ -47,14 +56,10 @@ const api: ConsumerDraftApi = {
   acceptSuggestion: acceptConsumerSuggestion as unknown as ConsumerDraftApi['acceptSuggestion'],
 }
 
-function newIdempotencyKey(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
 
 export default function ProjectWritePage() {
   const routeParams = useParams<{ projectId: string }>()
-  const projectId = routeParams.projectId
+  const projectId = routeParams?.projectId ?? ''
   const editorRef = useRef<ConsumerEditorHandle>(null)
   const variants = usePlatformVariants(projectId)
   const materials = useConsumerMaterials()
@@ -63,6 +68,10 @@ export default function ProjectWritePage() {
   const [projectError, setProjectError] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [draftText, setDraftText] = useState('')
+  // P1-9: one generate action = one idempotency key; the SAME action's
+  // retries (timeout re-send, user retry click) reuse it so the model is
+  // never called twice for one intent
+  const generateKeyRef = useRef<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [status, setStatus] = useState<EditorStatusPayload | null>(null)
@@ -72,7 +81,15 @@ export default function ProjectWritePage() {
     let cancelled = false
     getConsumerProject(projectId)
       .then(data => {
-        if (!cancelled) setProject({ title: data.title, core_idea: data.core_idea })
+        if (cancelled) return
+        setProject({ title: data.title, core_idea: data.core_idea })
+        // excerpts linked on the SERVER show as linked in the drawer even
+        // before this session links anything (P1-3: returning from the
+        // materials page must show the real association state)
+        const linked = data.linked_excerpts ?? []
+        if (linked.length) {
+          materials.seedLinkStates(Object.fromEntries(linked.map(e => [e.excerpt_id, 'linked' as const])))
+        }
       })
       .catch(error => {
         if (!cancelled) setProjectError(error instanceof Error ? error.message : '项目暂时打不开。')
@@ -80,6 +97,7 @@ export default function ProjectWritePage() {
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
   // track draft emptiness so the empty state can offer real generation
@@ -107,6 +125,23 @@ export default function ProjectWritePage() {
     setStatus(payload)
   }, [])
 
+  // P1-3: explicit core-idea editing through the project PATCH API; the
+  // local mirror updates ONLY after the server confirms, so generation
+  // (first draft + variants) always reads the persisted value
+  const saveCoreIdea = useCallback(
+    async (coreIdea: string) => {
+      await updateConsumerProject(projectId, { core_idea: coreIdea })
+      setProject(previous => (previous ? { ...previous, core_idea: coreIdea } : previous))
+    },
+    [projectId],
+  )
+
+  // the empty drawer's 导入素材 navigates to the real import flow, carrying
+  // this project as the return context so 素材页 can send the user back
+  const importFromDrawer = useCallback(() => {
+    window.location.assign(buildMaterialsHref(projectId))
+  }, [projectId])
+
   const generateFirstDraft = useCallback(async () => {
     setGenerating(true)
     setGenerateError(null)
@@ -116,15 +151,29 @@ export default function ProjectWritePage() {
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('TIMEOUT')), 60_000),
       )
-      const { candidate, base_revision: baseRevision } = await Promise.race([
-        generateDraftCandidate(projectId, newIdempotencyKey()),
+      if (!generateKeyRef.current) generateKeyRef.current = newIdempotencyKey()
+      const result = await Promise.race([
+        generateDraftCandidate(projectId, generateKeyRef.current),
         timeout,
       ])
-      // revision compare-and-swap: if the user typed while generating,
-      // the server keeps the user's newer draft and reports a conflict
-      await applyDraftCandidate(projectId, candidate.content_version_id, baseRevision)
-      await editorRef.current?.reloadDraft()
-      setDraftText('applied')
+      // P1-9 replay contract: a retry under the same key returns the
+      // EXISTING candidate — adopt it instead of failing generically
+      const candidate = result.candidate
+      if (candidate?.content_version_id) {
+        const baseRevision = result.base_revision ?? candidate.base_revision ?? 0
+        // revision compare-and-swap: if the user typed while generating,
+        // the server keeps the user's newer draft and reports a conflict
+        await applyDraftCandidate(projectId, candidate.content_version_id, baseRevision)
+        await editorRef.current?.reloadDraft()
+        setDraftText('applied')
+        generateKeyRef.current = null // completed — next click is a new action
+      } else {
+        // replay with no recoverable candidate (e.g. the draft was adopted
+        // already): just re-read the server state
+        await editorRef.current?.reloadDraft()
+        setDraftText('applied')
+        generateKeyRef.current = null
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : ''
       // machine errors must never surface raw (English provider text,
@@ -138,6 +187,7 @@ export default function ProjectWritePage() {
       } else {
         setGenerateError('初稿生成暂时不可用，你的稿纸没有任何改动。稍后再试一次。')
       }
+      generateKeyRef.current = null // failed+refunded — retry is a new action
     } finally {
       setGenerating(false)
     }
@@ -181,6 +231,11 @@ export default function ProjectWritePage() {
       <header className={styles.topbar}>
         <div className={styles.topbarLeft}>
           <span className={styles.brand}>BrandAgent</span>
+          {/* back to the workspace list — the write page is reachable again
+              without browser back (no nav islands) */}
+          <a href="/app" className={styles.topbarBackLink} data-testid="back-to-app">
+            我的项目
+          </a>
           <button
             type="button"
             className={styles.materialsButton}
@@ -216,6 +271,7 @@ export default function ProjectWritePage() {
             coreIdea={project?.core_idea ?? ''}
             api={api}
             onStatus={onStatus}
+            onSaveCoreIdea={saveCoreIdea}
           />
           {draftText === '' && (
             <section className={materialStyles.state}>
@@ -284,6 +340,7 @@ export default function ProjectWritePage() {
         loading={materials.loading}
         error={materials.error ? { code: materials.error.code, message: materials.error.message } : null}
         onRetry={() => void materials.refresh()}
+        onImport={importFromDrawer}
         onLink={linkExcerpt}
         linkStates={materials.linkStates}
       />

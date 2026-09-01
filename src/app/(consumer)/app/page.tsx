@@ -1,5 +1,11 @@
 'use client'
 
+// Clerk-protected, data-driven page: prerender has no session, so a
+// static export would bake the interception shell (prod 404 root
+// cause). Render per-request like the middleware expects.
+export const dynamic = 'force-dynamic'
+
+
 /**
  * Consumer home (/app) — the personal projects list (plan §3.1 step 1).
  * Shown only for signed-in users; Clerk middleware routes anonymous visitors
@@ -68,6 +74,14 @@ export default function ConsumerHomePage() {
   return (
     <div className={styles.page}>
       <h1>我的写作</h1>
+
+      {/* P1-3: a discoverable, accessible materials-library entry so new
+          users never need to type /app/materials by hand */}
+      <nav aria-label="工作区入口">
+        <a href="/app/materials" data-testid="materials-entry">
+          素材库
+        </a>
+      </nav>
 
       {loading && <p>正在打开你的工作区…</p>}
 

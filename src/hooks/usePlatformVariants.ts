@@ -4,12 +4,18 @@
  * Platform variants state hook (task 12 + Phase 5 review fix):
  * network/server failures surface an honest error state — never a fake
  * "no master" empty state — and error codes travel with the state.
+ *
+ * P1-2: every model-costing action carries an Idempotency-Key held for the
+ * whole action lifetime, so an automatic retry of the SAME action can never
+ * double-call the provider or double-book the usage ledger. A NEW user
+ * action (clicking generate again) mints a fresh key.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { brandFlowRequest, BrandFlowApiError } from '@/lib/api/brandflow'
 import type { ChannelVariantState } from '@/components/consumer/preview/PlatformPreview'
+import { newIdempotencyKey } from '@/lib/idempotency'
 
 export type VariantsStatus = 'no_master' | 'generating' | 'failed' | 'ready' | 'error'
 
@@ -25,6 +31,7 @@ interface GenerateResult {
   channels: Record<string, { status: 'ready' | 'failed'; retryable?: boolean; error_code?: string; content_version_id?: string }>
 }
 
+
 export function usePlatformVariants(projectId: string) {
   const [state, setState] = useState<VariantsState>({
     status: 'no_master',
@@ -32,6 +39,9 @@ export function usePlatformVariants(projectId: string) {
     failedChannels: {},
     reviewBubbles: [],
   })
+  // one key per in-flight action: retries of the same action reuse it
+  const generateKeyRef = useRef<string | null>(null)
+  const regenKeysRef = useRef<Record<string, string>>({})
 
   const load = useCallback(async () => {
     try {
@@ -69,10 +79,13 @@ export function usePlatformVariants(projectId: string) {
 
   const generate = useCallback(async () => {
     setState(previous => ({ ...previous, status: 'generating' }))
+    // a fresh user action mints a fresh key; the SAME action's retries reuse it
+    if (!generateKeyRef.current) generateKeyRef.current = newIdempotencyKey()
+    const key = generateKeyRef.current
     try {
       const result = await brandFlowRequest<GenerateResult>(
         `/api/v1/consumer/projects/${projectId}/variants/generate`,
-        { method: 'POST' },
+        { method: 'POST', headers: { 'Idempotency-Key': key } },
       )
       const failedChannels: VariantsState['failedChannels'] = {}
       for (const [channel, outcome] of Object.entries(result.channels ?? {})) {
@@ -80,6 +93,7 @@ export function usePlatformVariants(projectId: string) {
           failedChannels[channel] = { retryable: outcome.retryable ?? true }
         }
       }
+      generateKeyRef.current = null // action completed — next click is a new action
       setState(previous => ({
         status: 'ready',
         channels: previous.channels, // previous versions stay visible
@@ -109,11 +123,14 @@ export function usePlatformVariants(projectId: string) {
         return
       }
       setState(previous => ({ ...previous, status: 'generating' }))
+      if (!regenKeysRef.current[channel]) regenKeysRef.current[channel] = newIdempotencyKey()
+      const key = regenKeysRef.current[channel]
       try {
         await brandFlowRequest<Record<string, unknown>>(
           `/api/v1/consumer/projects/${projectId}/variants/${channel}/regenerate`,
-          { method: 'POST' },
+          { method: 'POST', headers: { 'Idempotency-Key': key } },
         )
+        delete regenKeysRef.current[channel] // completed — next regenerate is new
         await load()
       } catch (error) {
         setState(previous => ({

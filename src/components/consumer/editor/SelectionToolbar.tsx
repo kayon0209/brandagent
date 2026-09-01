@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import styles from './consumer-editor.module.css'
 
@@ -57,20 +58,52 @@ export function SelectionToolbar({ editorState, rangeRect, hidden, onAction, bus
     }
     x = Math.max(x, VIEWPORT_MARGIN)
     x = Math.min(x, window.innerWidth - TOOLBAR_WIDTH - VIEWPORT_MARGIN)
+    // P1-4: the selection can sit outside the viewport (long page, zoom,
+    // scroll) — the toolbar is position:fixed and must stay VISIBLE, so
+    // clamp y into the viewport instead of following the rect off-screen.
+    y = Math.max(y, VIEWPORT_MARGIN)
+    y = Math.min(y, window.innerHeight - 44 - VIEWPORT_MARGIN)
     setPosition({ x, y })
   }, [rangeRect, selection])
+
+  // P1-4: reposition on viewport changes (scroll/resize/zoom) — a stale
+  // rect leaves the toolbar pinned at old coordinates
+  useEffect(() => {
+    if (!position) return
+    const recompute = () => {
+      const current = position
+      setPosition({
+        x: Math.min(Math.max(current.x, VIEWPORT_MARGIN), window.innerWidth - TOOLBAR_WIDTH - VIEWPORT_MARGIN),
+        y: Math.min(Math.max(current.y, VIEWPORT_MARGIN), window.innerHeight - 44 - VIEWPORT_MARGIN),
+      })
+    }
+    window.addEventListener('resize', recompute)
+    window.addEventListener('scroll', recompute, true)
+    return () => {
+      window.removeEventListener('resize', recompute)
+      window.removeEventListener('scroll', recompute, true)
+    }
+  }, [position])
 
   if (!selection || selection.empty || hidden || !position) {
     return null
   }
 
-  return (
+  // P1-4 fix: portal to document.body with top/left. A `transform` on a
+  // fixed-position element makes ANCESTOR transforms/zoom (the manuscript
+  // canvas uses CSS zoom) its containing block, silently pinning the
+  // toolbar off-viewport (observed: transform y=368 rendered at y=926).
+  // Portaling out of the zoomed tree + explicit top/left removes the
+  // dependency on ancestor coordinate spaces entirely.
+  return createPortal(
     <div
       data-testid="selection-toolbar"
       className={styles.toolbar}
       role="toolbar"
       style={{
-        transform: `translateX(${position.x}px) translateY(${position.y}px)`,
+        top: `${position.y}px`,
+        left: `${position.x}px`,
+        right: 'auto',
       }}
     >
       {ASSIST_ACTIONS.map(({ action, label }) => (
@@ -85,6 +118,7 @@ export function SelectionToolbar({ editorState, rangeRect, hidden, onAction, bus
           {label}
         </button>
       ))}
-    </div>
+    </div>,
+    document.body,
   )
 }

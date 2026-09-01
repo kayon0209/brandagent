@@ -58,9 +58,15 @@ export function MaterialDrawer({
           {!error && !loading && materials.length === 0 && (
             <div className={styles.state}>
               <p>还没有素材。从一篇笔记、一段录音稿或一个链接开始。</p>
-              <button type="button" onClick={() => onImport?.()}>
-                导入素材
-              </button>
+              {onImport ? (
+                <button type="button" onClick={() => onImport?.()}>
+                  导入素材
+                </button>
+              ) : (
+                // no dead buttons (P1-3): without an import handler the drawer
+                // points at the materials page instead of doing nothing
+                <a href="/app/materials">去素材库导入</a>
+              )}
             </div>
           )}
 

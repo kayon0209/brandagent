@@ -1543,7 +1543,7 @@ paths:
   /api/v1/consumer/projects/{task_id}/suggestions:
     post:
       summary: Propose Selection Suggestion
-      description: Propose an anchored rewrite (expand/replace_example/shorten) over the user's current selection; the model only sees the selection, its context, and linked excerpts. Refuses untraceable facts with 422 SUGGESTION_REFUSED.
+      description: Propose an anchored rewrite (expand/replace_example/shorten) over the user's current selection; the model only sees the selection, its context, and linked excerpts. startOffset/endOffset are REQUIRED — they are the only anchor, so the request is rejected with 422 when they are missing, non-integer, negative, or start > end. Refuses untraceable facts with 422 SUGGESTION_REFUSED.
       operationId: propose_suggestion_api_v1_consumer_projects__task_id__suggestions_post
       security:
       - HTTPBearer: []
@@ -1565,6 +1565,8 @@ paths:
               - selectedText
               - blockId
               - baseRevision
+              - startOffset
+              - endOffset
               properties:
                 action:
                   type: string
@@ -1581,12 +1583,14 @@ paths:
                   title: Block Id
                 startOffset:
                   type: integer
+                  minimum: 0
                   title: Start Offset
-                  description: Selection start offset within the block text (inclusive).
+                  description: Selection start offset within the block text (inclusive). Required — the offset pair is the only anchor; requests without it are rejected with 422 so duplicate text can never be mis-targeted.
                 endOffset:
                   type: integer
+                  minimum: 0
                   title: End Offset
-                  description: Selection end offset within the block text (inclusive).
+                  description: Selection end offset within the block text (inclusive). Must satisfy startOffset <= endOffset.
                 baseRevision:
                   type: integer
                   title: Base Revision
@@ -1618,7 +1622,7 @@ paths:
   /api/v1/consumer/projects/{task_id}/suggestions/{suggestion_id}/accept:
     post:
       summary: Accept Selection Suggestion
-      description: Atomic accept; verifies revision, block, offsets and selection hash against the canonical server document, replaces the exact range, bumps the draft revision, and records a user-action event (not an enterprise approval). Idempotent replays return the accepted outcome.
+      description: Atomic accept; verifies revision, block, offsets and selection hash against the canonical server document, replaces the exact offset range, bumps the draft revision, and records a user-action event (not an enterprise approval). Legacy suggestions without a complete offset anchor return 409 SELECTION_STALE instead of guessing a position. Idempotent replays return the accepted outcome.
       operationId: accept_suggestion_api_v1_consumer_projects__task_id__suggestions__suggestion_id__accept_post
       security:
       - HTTPBearer: []
