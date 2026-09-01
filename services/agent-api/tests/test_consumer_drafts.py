@@ -478,7 +478,7 @@ def test_generate_and_apply_candidate_over_http() -> None:
     )
     task_id = created.json()["data"]["task_id"]
     headers = {"Authorization": "Bearer valid-token"}
-    generated = client.post(f"/api/v1/consumer/projects/{task_id}/draft/generate", headers=headers)
+    generated = client.post(f"/api/v1/consumer/projects/{task_id}/draft/generate", headers={**headers, "Idempotency-Key": "draft-gen-key-000001"})
     assert generated.status_code == 200, generated.text
     candidate_id = generated.json()["data"]["candidate"]["content_version_id"]
     applied = client.post(
@@ -503,7 +503,7 @@ def test_quota_exhausted_blocks_generation_but_not_saving() -> None:
     headers = {"Authorization": "Bearer valid-token"}
 
     # AI generation is rejected BEFORE the model runs
-    blocked = client.post(f"/api/v1/consumer/projects/{task_id}/draft/generate", headers=headers)
+    blocked = client.post(f"/api/v1/consumer/projects/{task_id}/draft/generate", headers={**headers, "Idempotency-Key": "draft-gen-key-000002"})
     assert blocked.status_code == 409
     assert blocked.json()["error"]["code"] == "QUOTA_EXCEEDED"
 

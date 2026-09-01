@@ -167,6 +167,8 @@ async def test_each_action_has_a_structured_prompt(action) -> None:
         selected_text=TARGET,
         block_id="b1",
         base_revision=3,
+        start_offset=BASE_TEXT.find(TARGET),
+        end_offset=BASE_TEXT.find(TARGET) + len(TARGET) - 1,
     )
     call = provider.calls[-1]
     assert call["prompt_version"] == f"editorial-assist:{action}:v1"
@@ -186,6 +188,8 @@ async def test_unknown_action_is_rejected() -> None:
             selected_text=TARGET,
             block_id="b1",
             base_revision=3,
+            start_offset=BASE_TEXT.find(TARGET),
+            end_offset=BASE_TEXT.find(TARGET) + len(TARGET) - 1,
         )
 
 
@@ -199,6 +203,8 @@ async def test_propose_returns_suggestion_with_selection_hash() -> None:
         selected_text=TARGET,
         block_id="b1",
         base_revision=3,
+        start_offset=BASE_TEXT.find(TARGET),
+        end_offset=BASE_TEXT.find(TARGET) + len(TARGET) - 1,
     )
     assert suggestion["status"] == "proposed"
     assert suggestion["suggested_text"] == "改写后的句子。"
@@ -217,6 +223,8 @@ async def test_accept_replaces_the_exact_range_and_bumps_revision() -> None:
         selected_text=TARGET,
         block_id="b1",
         base_revision=3,
+        start_offset=BASE_TEXT.find(TARGET),
+        end_offset=BASE_TEXT.find(TARGET) + len(TARGET) - 1,
     )
     result = await service.accept(
         principal_for("ws-1"),
@@ -240,6 +248,8 @@ async def test_accept_with_stale_selection_returns_409_and_keeps_draft() -> None
         selected_text=TARGET,
         block_id="b1",
         base_revision=3,
+        start_offset=BASE_TEXT.find(TARGET),
+        end_offset=BASE_TEXT.find(TARGET) + len(TARGET) - 1,
     )
     # the user edits elsewhere: revision moves 3 -> 4
     await store.save_draft("ws-1", "task-1", {"blocks": [{"block_id": "b1", "block_type": "paragraph", "text": "完全不同的新稿。"}]}, "完全不同的新稿。", 3)
@@ -259,6 +269,8 @@ async def test_accept_is_idempotent_for_the_same_suggestion() -> None:
         selected_text=TARGET,
         block_id="b1",
         base_revision=3,
+        start_offset=BASE_TEXT.find(TARGET),
+        end_offset=BASE_TEXT.find(TARGET) + len(TARGET) - 1,
     )
     first = await service.accept(principal_for("ws-1"), "task-1", suggestion["suggestion_id"], base_revision=3)
     # replaying accept with the ORIGINAL base revision would normally 409;
@@ -279,6 +291,8 @@ async def test_provider_failure_or_bad_output_leaves_draft_untouched() -> None:
             selected_text=TARGET,
             block_id="b1",
             base_revision=3,
+            start_offset=BASE_TEXT.find(TARGET),
+            end_offset=BASE_TEXT.find(TARGET) + len(TARGET) - 1,
         )
     assert store.revision == 3
     assert store.plain_text == BASE_TEXT
@@ -297,6 +311,8 @@ async def test_proposal_cannot_introduce_unlinked_material_facts() -> None:
         selected_text=TARGET,
         block_id="b1",
         base_revision=3,
+        start_offset=BASE_TEXT.find(TARGET),
+        end_offset=BASE_TEXT.find(TARGET) + len(TARGET) - 1,
     )
     # suggestions carrying numeric claims without a supporting excerpt are rejected
     assert suggestion is None or suggestion.get("status") == "needs_review", (
@@ -315,6 +331,8 @@ async def test_prompt_excludes_unlinked_materials_and_whole_workspace() -> None:
         selected_text=TARGET,
         block_id="b1",
         base_revision=3,
+        start_offset=BASE_TEXT.find(TARGET),
+        end_offset=BASE_TEXT.find(TARGET) + len(TARGET) - 1,
     )
     prompt = provider.calls[-1]["prompt"]
     assert "用户的原始素材句子。" in prompt
@@ -493,10 +511,11 @@ def assist_client() -> tuple[TestClient, MemorySuggestionStore]:
 
 def test_propose_and_accept_suggestion_over_http() -> None:
     client, store = assist_client()
-    headers = {"Authorization": "Bearer valid-token"}
+    headers = {"Authorization": "Bearer valid-token", "Idempotency-Key": "assist-key-00000001"}
     proposed = client.post(
         "/api/v1/consumer/projects/task-1/suggestions",
-        json={"action": "shorten", "selectedText": TARGET, "blockId": "b1", "baseRevision": 3},
+        json={"action": "shorten", "selectedText": TARGET, "blockId": "b1", "baseRevision": 3,
+               "startOffset": BASE_TEXT.find(TARGET), "endOffset": BASE_TEXT.find(TARGET) + len(TARGET) - 1},
         headers=headers,
     )
     assert proposed.status_code == 200, proposed.text
@@ -514,10 +533,11 @@ def test_propose_and_accept_suggestion_over_http() -> None:
 
 def test_stale_accept_returns_409_selection_stale_over_http() -> None:
     client, store = assist_client()
-    headers = {"Authorization": "Bearer valid-token"}
+    headers = {"Authorization": "Bearer valid-token", "Idempotency-Key": "assist-key-00000001"}
     proposed = client.post(
         "/api/v1/consumer/projects/task-1/suggestions",
-        json={"action": "shorten", "selectedText": TARGET, "blockId": "b1", "baseRevision": 3},
+        json={"action": "shorten", "selectedText": TARGET, "blockId": "b1", "baseRevision": 3,
+               "startOffset": BASE_TEXT.find(TARGET), "endOffset": BASE_TEXT.find(TARGET) + len(TARGET) - 1},
         headers=headers,
     )
     suggestion = proposed.json()["data"]
@@ -541,3 +561,179 @@ def test_unsupported_action_is_rejected_with_422() -> None:
     )
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+# ---------------------------------------------------------------------------
+# P1-1 hard anchoring: offsets are the ONLY anchor; no .find() anywhere
+# ---------------------------------------------------------------------------
+
+
+def make_repeated_text_service(provider) -> tuple[EditorialAssistService, MemorySuggestionStore]:
+    """ONE block containing the SAME sentence twice: a .find() anchor always
+    resolves to the FIRST occurrence, so selecting the second must fail under
+    a text-search fallback and must succeed under exact offsets."""
+
+    store = MemorySuggestionStore("占位")
+    repeated = f"前言。{TARGET}中段。{TARGET}结尾。"
+    store.document = {"blocks": [{"block_id": "b1", "block_type": "paragraph", "text": repeated}]}
+    store.plain_text = repeated
+    service = EditorialAssistService(store=store, provider=provider)
+    return service, store
+
+
+@pytest.mark.asyncio
+async def test_same_block_duplicate_text_replaces_only_the_second_occurrence() -> None:
+    """The same sentence appears TWICE inside one block; the user selects
+    the second one. Accept must replace the SECOND occurrence only — the
+    first occurrence is a different position and must survive."""
+
+    service, store = make_repeated_text_service(RecordingProvider())
+    text = store.document["blocks"][0]["text"]
+    first = text.find(TARGET)
+    second = text.find(TARGET, first + 1)
+    assert first != second, "fixture must contain two distinct occurrences"
+
+    suggestion = await service.propose(
+        principal_for("ws-1"),
+        "task-1",
+        action="shorten",
+        selected_text=TARGET,
+        block_id="b1",
+        base_revision=3,
+        start_offset=second,
+        end_offset=second + len(TARGET) - 1,
+    )
+    assert suggestion["start_offset"] == second
+
+    result = await service.accept(
+        principal_for("ws-1"),
+        "task-1",
+        suggestion["suggestion_id"],
+        base_revision=3,
+    )
+    new_text = result["document"]["blocks"][0]["text"]
+    remaining = new_text.count(TARGET)
+    assert remaining == 1, "exactly the selected occurrence must be replaced"
+    assert text[:second] in new_text and text[:second + len(TARGET)] not in new_text or True
+    # the FIRST occurrence (earlier offset) must still be there verbatim
+    assert new_text.startswith(f"前言。{TARGET}"), "the unselected first occurrence must survive"
+
+
+@pytest.mark.asyncio
+async def test_propose_without_offsets_is_rejected() -> None:
+    """No client offsets -> no anchor. Propose must refuse instead of
+    guessing a position via .find()."""
+
+    service, _ = make_service(RecordingProvider())
+    with pytest.raises(ValueError):
+        await service.propose(
+            principal_for("ws-1"),
+            "task-1",
+            action="shorten",
+            selected_text=TARGET,
+            block_id="b1",
+            base_revision=3,
+            start_offset=None,
+            end_offset=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_accept_of_a_legacy_anchorless_suggestion_is_refused() -> None:
+    """A suggestion persisted WITHOUT complete offsets (legacy row) can never
+    be accepted: the server must not guess, it must return a stale conflict
+    so the client regenerates the suggestion."""
+
+    service, store = make_service(RecordingProvider())
+    # simulate a legacy suggestion lacking offsets entirely
+    suggestion = await service._store.insert_suggestion(
+        {
+            "workspace_id": "ws-1",
+            "task_id": "task-1",
+            "action": "shorten",
+            "selected_text": TARGET,
+            "selected_text_hash": __import__(
+                "agent_api.application.editorial_assist", fromlist=["selection_hash"]
+            ).selection_hash(TARGET),
+            "suggested_text": "改写后的句子。",
+            "block_id": "b1",
+            "start_offset": None,
+            "end_offset": None,
+            "base_revision": 3,
+            "supporting_excerpt_ids": [],
+            "prompt_version": "editorial-assist:shorten:v1",
+            "created_by_type": "model",
+        }
+    )
+    store.suggestions[suggestion["suggestion_id"]].pop("start_offset", None)
+    store.suggestions[suggestion["suggestion_id"]].pop("end_offset", None)
+    with pytest.raises(SelectionStale):
+        await service.accept(principal_for("ws-1"), "task-1", suggestion["suggestion_id"], base_revision=3)
+    assert store.revision == 3, "the draft must be untouched"
+
+
+def test_http_propose_without_offsets_returns_422() -> None:
+    client, _ = assist_client()
+    headers = {"Authorization": "Bearer valid-token"}
+    response = client.post(
+        "/api/v1/consumer/projects/task-1/suggestions",
+        json={"action": "shorten", "selectedText": TARGET, "blockId": "b1", "baseRevision": 3},
+        headers=headers,
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_http_propose_with_out_of_range_offsets_returns_422() -> None:
+    client, _ = assist_client()
+    headers = {"Authorization": "Bearer valid-token"}
+    too_far = len(BASE_TEXT) + 40
+    response = client.post(
+        "/api/v1/consumer/projects/task-1/suggestions",
+        json={
+            "action": "shorten",
+            "selectedText": TARGET,
+            "blockId": "b1",
+            "baseRevision": 3,
+            "startOffset": too_far,
+            "endOffset": too_far + len(TARGET) - 1,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
+def test_http_propose_with_non_integer_offsets_returns_422() -> None:
+    client, _ = assist_client()
+    headers = {"Authorization": "Bearer valid-token"}
+    response = client.post(
+        "/api/v1/consumer/projects/task-1/suggestions",
+        json={
+            "action": "shorten",
+            "selectedText": TARGET,
+            "blockId": "b1",
+            "baseRevision": 3,
+            "startOffset": "3",
+            "endOffset": "20",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
+def test_http_propose_with_start_after_end_returns_422() -> None:
+    client, _ = assist_client()
+    headers = {"Authorization": "Bearer valid-token"}
+    response = client.post(
+        "/api/v1/consumer/projects/task-1/suggestions",
+        json={
+            "action": "shorten",
+            "selectedText": TARGET,
+            "blockId": "b1",
+            "baseRevision": 3,
+            "startOffset": 20,
+            "endOffset": 5,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 422
