@@ -1,0 +1,20 @@
+{"id": "s1", "difficulty": "simple", "question": "2026 年中国 AIGC 备案要求企业公示哪几类信息？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "s2", "difficulty": "simple", "question": "小红书 2026 年对 AI 生成内容的标注规则是什么？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "s3", "difficulty": "simple", "question": "微信公众号目前的原创声明与转载机制的核心要求有哪些？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "s4", "difficulty": "simple", "question": "口播视频（60 秒）在抖音平台的平均完播率行业基准是多少？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "s5", "difficulty": "simple", "question": "中文公众号正文的最佳段落长度建议是多少字？主流排版规范怎么说？", "needs_current_evidence": false, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "s6", "difficulty": "simple", "question": "《广告法》对“最佳”“第一”这类极限词的最新处罚案例尺度如何？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "s7", "difficulty": "simple", "question": "B 站 2026 年视频起飞（流量分发）的主要影响因素有哪些？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "m1", "difficulty": "medium", "question": "2026 年国内主流大模型 API 定价对比：GLM、Qwen、DeepSeek 的商业授权差异？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "m2", "difficulty": "medium", "question": "个人创作者在小红书做“知识类内容”的变现路径有哪些？各路径的门槛与平台抽成？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "m3", "difficulty": "medium", "question": "2026 年公众号互选广告（官方派单）的准入条件与报价区间？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "m4", "difficulty": "medium", "question": "视频号直播带货的流量分发机制与抖音有何核心差异？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "m5", "difficulty": "medium", "question": "中文互联网 2026 年对 AI 生成内容的平台政策对比：哪些平台要求强制标注？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "m6", "difficulty": "medium", "question": "知识付费（小报童/知识星球类）产品 2026 年的主流定价策略与转化率基准？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "m7", "difficulty": "medium", "question": "个人 IP 做播客，国内播客平台（小宇宙等）的分成与商业合作模式？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "c1", "difficulty": "complex", "question": "2026 年中国 AI 生成内容监管框架的完整图景：已生效法规、正在立法的、平台自律规则三者之间的关系与矛盾？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "c2", "difficulty": "complex", "question": "AI 大模型对内容创作行业的就业影响：不同研究机构的结论有哪些分歧？各方论据是什么？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "c3", "difficulty": "complex", "question": "2026 年自媒体人的多平台分发策略：各内容平台算法偏好的实证研究与相互矛盾的经验之谈，哪些有数据支撑？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "c4", "difficulty": "complex", "question": "中文大模型在中文写作任务上的能力对比：公开评测怎么说？评测方法本身有什么争议？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "c5", "difficulty": "complex", "question": "创作者经济 2026 趋势：机构化 vs 个人化两种路线的最新数据与支持/反对证据？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
+{"id": "c6", "difficulty": "complex", "question": "AI 搜索（Perplexity 类）与传统搜索对创作者流量分配的影响：有哪些研究或平台数据？争议点在哪？", "needs_current_evidence": true, "source_policy": "公开中文网页优先；官方公告/法规原文优先于二手转述；2024 年前的信息需标注时效"}
