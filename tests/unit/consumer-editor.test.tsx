@@ -40,7 +40,7 @@ describe('SelectionToolbar', () => {
     const { container } = render(
       <SelectionToolbar editorState={makeEditorState({ selection: { from: 3, to: 3, empty: true } })} />,
     )
-    expect(container.querySelector('[data-testid="selection-toolbar"]')).toBeNull()
+    expect(document.querySelector('[data-testid="selection-toolbar"]')).toBeNull()
   })
 
   it('shows three white pill action buttons when a paragraph is selected', () => {
@@ -62,11 +62,11 @@ describe('SelectionToolbar', () => {
     const { container } = render(
       <SelectionToolbar editorState={makeEditorState()} rangeRect={rangeWithRect(rect)} />,
     )
-    const toolbar = container.querySelector<HTMLElement>('[data-testid="selection-toolbar"]')
+    const toolbar = document.querySelector<HTMLElement>('[data-testid="selection-toolbar"]')
     expect(toolbar).not.toBeNull()
     // toolbar center should be the selection center: left 240 + width/2 (120/2) = 300
-    expect(toolbar!.style.transform).toMatch(/translateX\(\s*226/) // center 300 - half toolbar width (148/2)
-    const y = Number(toolbar!.style.transform.match(/translateY\(([\d.]+)px\)/)![1])
+    expect(toolbar!.style.left).toBe('226px') // center 300 - half toolbar width (148/2)
+    const y = Number(toolbar!.style.top!.replace('px', ''))
     expect(y).toBeLessThan(300) // 8px above the selection top
   })
 
@@ -75,8 +75,8 @@ describe('SelectionToolbar', () => {
     const { container } = render(
       <SelectionToolbar editorState={makeEditorState()} rangeRect={rangeWithRect(rect)} />,
     )
-    const toolbar = container.querySelector<HTMLElement>('[data-testid="selection-toolbar"]')!
-    const y = Number(toolbar.style.transform.match(/translateY\(([\d.]+)px\)/)![1])
+    const toolbar = document.querySelector<HTMLElement>('[data-testid="selection-toolbar"]')!
+    const y = Number(toolbar.style.top!.replace('px', ''))
     expect(y).toBeGreaterThanOrEqual(rect.bottom + 8)
   })
 
@@ -85,8 +85,8 @@ describe('SelectionToolbar', () => {
     const { container } = render(
       <SelectionToolbar editorState={makeEditorState()} rangeRect={rangeWithRect(rect)} />,
     )
-    const toolbar = container.querySelector<HTMLElement>('[data-testid="selection-toolbar"]')!
-    const x = Number(toolbar.style.transform.match(/translateX\(([-\d.]+)px\)/)![1])
+    const toolbar = document.querySelector<HTMLElement>('[data-testid="selection-toolbar"]')!
+    const x = Number(toolbar.style.left!.replace('px', ''))
     expect(x).toBeGreaterThanOrEqual(12)
   })
 
@@ -94,9 +94,9 @@ describe('SelectionToolbar', () => {
     const state = makeEditorState()
     const rect = rangeWithRect(rectOf(100, 100))
     const { container, rerender } = render(<SelectionToolbar editorState={state} rangeRect={rect} />)
-    expect(container.querySelector('[data-testid="selection-toolbar"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="selection-toolbar"]')).not.toBeNull()
     rerender(<SelectionToolbar editorState={state} rangeRect={rect} hidden />)
-    expect(container.querySelector('[data-testid="selection-toolbar"]')).toBeNull()
+    expect(document.querySelector('[data-testid="selection-toolbar"]')).toBeNull()
   })
 
   it('invokes onAction with the selected action', () => {
@@ -163,13 +163,13 @@ describe('useConsumerDraft', () => {
     acceptSuggestion: jest.fn(),
   })
 
-  beforeEach(() => {
-  })
-  afterEach(() => {
-  })
+
 
   it('debounces saves at 800ms and shows saved only after server confirm', async () => {
-    jest.spyOn(global, 'setTimeout')
+    // fake timers ONLY for this hook test (tiptap needs real timers in the
+    // component tests); advanceTimersByTime is real here, not a warned no-op
+    jest.useFakeTimers()
+    try {
     const api = makeApi()
     const { result } = renderHook(() => useConsumerDraft('task-1', api))
     await act(async () => { await Promise.resolve() })
@@ -190,9 +190,12 @@ describe('useConsumerDraft', () => {
     await act(async () => { resolveSave!({ revision: 4 }) })
     expect(result.current.status).toBe('saved')
     expect(result.current.revision).toBe(4)
+    } finally { jest.useRealTimers() }
   })
 
   it('keeps the local draft text on 409 and exposes recovery', async () => {
+    jest.useFakeTimers()
+    try {
     const api = makeApi()
     api.saveDraft.mockRejectedValue({ code: 'REVISION_CONFLICT', message: 'conflict' })
     const { result } = renderHook(() => useConsumerDraft('task-1', api))
@@ -216,9 +219,12 @@ describe('useConsumerDraft', () => {
     expect(result.current.status).toBe('dirty')
     expect(result.current.localPlainText).toBe('本地继续编辑')
     expect(result.current.revision).toBe(7)
+    } finally { jest.useRealTimers() }
   })
 
   it('marks error (offline-tolerant) when saving fails', async () => {
+    jest.useFakeTimers()
+    try {
     const api = makeApi()
     api.saveDraft.mockRejectedValue(new TypeError('fetch failed'))
     const { result } = renderHook(() => useConsumerDraft('task-1', api))
@@ -228,6 +234,7 @@ describe('useConsumerDraft', () => {
     await act(async () => { await result.current.flush() })
     expect(result.current.status).toBe('error')
     expect(result.current.localPlainText).toBe('断网时编辑的内容')
+    } finally { jest.useRealTimers() }
   })
 
   it('serializes concurrent flushes instead of dropping the second payload', async () => {
@@ -283,16 +290,23 @@ describe('ConsumerEditor', () => {
     acceptSuggestion: jest.fn(),
   })
 
-  function renderEditor(overrides: Record<string, unknown> = {}) {
+  async function renderEditor(overrides: Record<string, unknown> = {}) {
     const api = makeApi()
     const utilities = render(
       <ConsumerEditor projectId="task-1" coreIdea="核心观点" api={api} {...overrides} />,
     )
+    // the mount-effect draft load resolves on a microtask AFTER render's act
+    // boundary; flush it inside act so the seeded state updates never warn
+    // (P2: tests pass on real timing, not behind a wall of warnings)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
     return { api, ...utilities }
   }
 
   it('renders a 720px manuscript canvas with the core idea block above the prose', async () => {
-    renderEditor()
+    await renderEditor()
     const canvas = await screen.findByTestId('manuscript-canvas')
     expect(canvas).toBeInTheDocument()
     expect(canvas.style.maxWidth).toBe('720px')
@@ -308,6 +322,11 @@ describe('ConsumerEditor', () => {
     render(
       <ConsumerEditor projectId="task-1" coreIdea="核心观点" api={api} onStatus={onStatus} />,
     )
+    // flush the mount-effect draft load inside act (no unwarned state updates)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
     await screen.findByTestId('manuscript-canvas')
     // the canvas keeps the 720px paper contract; zoom travels in the payload
     const canvas = screen.getByTestId('manuscript-canvas')
@@ -317,7 +336,9 @@ describe('ConsumerEditor', () => {
     expect(payload.zoom).toBeGreaterThanOrEqual(0.75)
     expect(payload.zoom).toBeLessThanOrEqual(1.5)
     expect(typeof payload.changeZoom).toBe('function')
-    payload.changeZoom(1.2)
+    act(() => {
+      payload.changeZoom(1.2)
+    })
     await waitFor(() => {
       const updated = onStatus.mock.calls.at(-1)[0]
       expect(updated.zoom).toBe(1.2)
@@ -325,7 +346,7 @@ describe('ConsumerEditor', () => {
   })
 
   it('hides the selection toolbar on Escape', async () => {
-    renderEditor()
+    await renderEditor()
     // direct Escape at document level hides whatever toolbar state exists
     const before = document.querySelector('[data-testid="selection-toolbar"]')
     if (before) {

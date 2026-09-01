@@ -1,4 +1,10 @@
 /**
+ * [MOCK UI SUITE] consumer API responses below are route.fulfill-ed with
+ * canned payloads — UI-wiring coverage only, never real-stack proof.
+ * Real-journey coverage: consumer-real-journey.spec.ts.
+ */
+
+/**
  * Consumer recovery journeys (upgrade plan task 15, failure paths).
  *
  * Provider timeout, autosave 409, material parsing failure, variant
@@ -39,7 +45,7 @@ async function mockStableBase(page: Page) {
   )
 }
 
-test('provider timeout keeps the draft and shows a retryable failure', async ({ page }) => {
+test('[mock] provider timeout keeps the draft and shows a retryable failure', async ({ page }) => {
   await mockStableBase(page)
   await page.route(`**/api/v1/consumer/projects/${TASK_ID}/draft/generate`, route => {
     // route.fulfill never resolves the POST before the server timeout: emulate 502
@@ -50,7 +56,7 @@ test('provider timeout keeps the draft and shows a retryable failure', async ({ 
   await expect(page.getByText('正常稿内容。')).toBeVisible()
 })
 
-test('autosave 409 keeps local text and offers recovery', async ({ page }) => {
+test('[mock] autosave 409 keeps local text and offers recovery', async ({ page }) => {
   await mockStableBase(page)
   await page.route(`**/api/v1/consumer/projects/${TASK_ID}/draft`, async route => {
     if (route.request().method() === 'PUT') {
@@ -70,7 +76,7 @@ test('autosave 409 keeps local text and offers recovery', async ({ page }) => {
   await expect(page.getByText(/稿件在别处有更新|未保存|正在保存/)).toBeVisible({ timeout: 6000 })
 })
 
-test('variant generation failure keeps the previous preview', async ({ page }) => {
+test('[mock] variant generation failure keeps the previous preview', async ({ page }) => {
   await mockStableBase(page)
   await page.route(`**/api/v1/consumer/projects/${TASK_ID}/variants/preview`, route =>
     route.fulfill(variantPreview({ wechat_website: { content: '上一版公众号内容。' } })),
@@ -82,7 +88,7 @@ test('variant generation failure keeps the previous preview', async ({ page }) =
   await expect(page.getByText('平台预览')).toBeVisible()
 })
 
-test('quota exhausted blocks AI but never manual editing', async ({ page }) => {
+test('[mock] quota exhausted blocks AI but never manual editing', async ({ page }) => {
   await mockStableBase(page)
   await page.route(`**/api/v1/consumer/projects/${TASK_ID}/draft`, async route => {
     if (route.request().method() === 'PUT') {
@@ -102,7 +108,7 @@ test('quota exhausted blocks AI but never manual editing', async ({ page }) => {
   await expect(page.locator('.ProseMirror')).toContainText('手工编辑不受影响')
 })
 
-test('empty material library shows the honest empty state', async ({ page }) => {
+test('[mock] empty material library shows the honest empty state', async ({ page }) => {
   await page.route('**/api/v1/consumer/materials', route =>
     route.fulfill({ json: { success: true, data: { items: [] } } }),
   )

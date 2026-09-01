@@ -1,3 +1,9 @@
+/**
+ * [MOCK UI SUITE] consumer API responses below are route.fulfill-ed with
+ * canned payloads — UI-wiring coverage only, never real-stack proof.
+ * Real-journey coverage: consumer-real-journey.spec.ts.
+ */
+
 import { expect, test } from '@playwright/test'
 
 test.skip(!process.env.BRANDFLOW_E2E_STORAGE_STATE, 'Requires an authenticated Clerk storage state; no fake production identity is used.')
@@ -31,7 +37,7 @@ async function mockProject(page: import('@playwright/test').Page) {
   })
 }
 
-test('manuscript editor autosaves and recovers from revision conflicts', async ({ page }) => {
+test('[mock] manuscript editor autosaves and recovers from revision conflicts', async ({ page }) => {
   let revision = draft.revision
   await mockProject(page)
   await page.route('**/api/v1/consumer/projects/*/draft', async route => {
@@ -65,7 +71,7 @@ test('manuscript editor autosaves and recovers from revision conflicts', async (
   await page.evaluate(() => window.dispatchEvent(new Event('beforeunload')))
 })
 
-test('platform preview renders three structures and never asks for approval', async ({ page }) => {
+test('[mock] platform preview renders three structures and never asks for approval', async ({ page }) => {
   await mockProject(page)
   await page.route('**/api/v1/consumer/projects/*/draft', route =>
     route.fulfill({ json: { success: true, data: draft } }),

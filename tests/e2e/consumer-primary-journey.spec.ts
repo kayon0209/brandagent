@@ -1,5 +1,10 @@
 /**
- * Consumer primary journey (upgrade plan task 15, normal path).
+ * [MOCK UI SUITE] Consumer primary journey (upgrade plan task 15).
+ *
+ * ⚠️ MOCK-ONLY: every consumer API below is route.fulfill-ed with canned
+ * payloads — this spec verifies UI WIRING, not the real stack. It must
+ * never be cited as proof of a working backend. The real-journey coverage
+ * lives in consumer-real-journey.spec.ts (real API + real PostgreSQL).
  *
  * 1. bootstrap personal workspace
  * 2. import text material and wait for excerpts
@@ -89,7 +94,7 @@ async function mockAll(page: Page) {
   )
 }
 
-test('full consumer journey from material import to export preparation', async ({ page }) => {
+test('[mock] full consumer journey from material import to export preparation', async ({ page }) => {
   await mockAll(page)
 
   // 1-2: material library shows the distilled document and its excerpt

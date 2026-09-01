@@ -55,12 +55,16 @@ describe('MaterialDrawer', () => {
   })
 
   it('shows actionable empty state with an import entry when open and empty', () => {
+    const onImport = jest.fn()
     render(
-      <MaterialDrawer materials={[]} open onToggle={jest.fn()} loading={false} error={null} />
+      <MaterialDrawer materials={[]} open onToggle={jest.fn()} loading={false} error={null} onImport={onImport} />
     )
     expect(screen.getByLabelText('素材抽屉内容区')).toBeInTheDocument()
     expect(screen.getByText(/还没有素材/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '导入素材' })).toBeInTheDocument()
+    // the import entry must DO something when clicked (P1-3: no dead button)
+    const entry = screen.getByRole('button', { name: '导入素材' })
+    fireEvent.click(entry)
+    expect(onImport).toHaveBeenCalled()
   })
 
   it('shows a processing state instead of fabricating material', () => {
