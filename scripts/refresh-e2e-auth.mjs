@@ -36,7 +36,15 @@ try {
     await page.waitForTimeout(4000)
     if (!page.url().includes('sign-in')) break
   }
-  const ok = await page.getByRole('heading', { name: '我的写作' }).isVisible().catch(() => false)
+  // poll for the workspace heading: after the ticket exchange the Clerk
+  // handshake can still be settling for several seconds — a single
+  // isVisible() check races it and false-negatives (acceptance finding)
+  let ok = false
+  for (let i = 0; i < 10; i++) {
+    ok = await page.getByRole('heading', { name: '我的写作' }).isVisible().catch(() => false)
+    if (ok) break
+    await page.waitForTimeout(2000)
+  }
   if (!ok) {
     console.error(`login did not land on /app (url=${page.url()})`)
     process.exit(1)
