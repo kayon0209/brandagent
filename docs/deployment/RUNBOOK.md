@@ -63,7 +63,28 @@ Agent readiness fails closed when PostgreSQL checkpoint isolation, GLM configura
 
 - `brandflow_app` owns business reads/writes.
 - `brandflow_checkpoint` uses the separate `brandflow_checkpoint` schema and must not equal the business role.
-- Apply numbered migrations to a fresh disposable database before any shared environment. The consumer gate (`RUN_BRANDFLOW_DB_TESTS=true pnpm test:db:consumer`) applies 001-005 and asserts the 004 RLS policies plus the 005 FORCE hardening (owner bypass closed) on a disposable container.
+- Apply numbered migrations to a fresh disposable database before any shared environment.
+
+### Applying a new migration to an EXISTING stack (e.g. 005)
+
+`docker-entrypoint-initdb.d` only runs when the persistent volume is
+FIRST initialized. For an already-running stack, apply the migration
+explicitly — 005 is idempotent (safe to re-run) and additive only:
+
+```powershell
+docker compose exec postgres psql -U postgres -d brandflow `
+  -v ON_ERROR_STOP=1 `
+  -f /docker-entrypoint-initdb.d/06-consumer-rls-force.sql
+```
+
+Verify after applying (owner bypass must read `closed`):
+
+```powershell
+docker compose exec postgres psql -U postgres -d brandflow -t -c `
+  "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='consumer_projects';"
+```
+
+Never delete the data volume to "re-run" migrations; upgrade in place. The consumer gate (`RUN_BRANDFLOW_DB_TESTS=true pnpm test:db:consumer`) applies 001-005 and asserts the 004 RLS policies plus the 005 FORCE hardening (owner bypass closed) on a disposable container.
 - Content versions, decisions, lineage and audit events are append-only. Never repair them with direct updates.
 
 ## Recovery
