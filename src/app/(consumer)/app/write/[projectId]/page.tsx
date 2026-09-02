@@ -45,6 +45,7 @@ import { brandFlowRequest } from '@/lib/api/brandflow'
 import type { ConsumerDraftApi } from '@/hooks/useConsumerDraft'
 import { usePlatformVariants } from '@/hooks/usePlatformVariants'
 import { useConsumerMaterials } from '@/hooks/useConsumerMaterials'
+import { useConsumerProjectEvents } from '@/hooks/useConsumerProjectEvents'
 import styles from '@/components/consumer/editor/consumer-editor.module.css'
 import materialStyles from '@/components/consumer/materials/consumer-materials.module.css'
 import { newIdempotencyKey } from '@/lib/idempotency'
@@ -199,6 +200,21 @@ export default function ProjectWritePage() {
     },
     [materials, projectId],
   )
+
+  // §7.4 event stream: server-side progress (variant generation, material
+  // distillation, draft adoption) invalidates exactly the affected slice —
+  // a variant becoming ready refreshes the preview rail, a distilled
+  // material refreshes the drawer; no blind full-page reloads
+  useConsumerProjectEvents(projectId, {
+    variantGenerated: () => void variants.reload(),
+    variantFailed: () => void variants.reload(),
+    draftAdopted: () => {
+      void variants.reload()
+    },
+    materialDistilled: () => void materials.refresh(),
+    materialImported: () => void materials.refresh(),
+    materialFailed: () => void materials.refresh(),
+  })
 
   const handleAdopt = async () => {
     await editorRef.current?.adoptCurrent()

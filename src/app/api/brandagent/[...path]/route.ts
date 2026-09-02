@@ -68,12 +68,16 @@ async function proxy(request: NextRequest, context: RouteContext) {
   let upstream: Response
   try {
     // no hang: a stuck upstream must surface as GATEWAY_UNAVAILABLE in
-    // bounded time, never an infinite "生成中" (runtime audit finding)
+    // bounded time, never an infinite "生成中" (runtime audit finding).
+    // SSE streams are exempt: the connection is intentionally long-lived
+    // and aborts on client disconnect — a 90s cap would silently saw
+    // every event stream in half.
+    const isEventStream = path[path.length - 1] === 'events'
     upstream = await fetch(target, {
       method: request.method,
       headers,
       body,
-      signal: AbortSignal.timeout(90_000),
+      ...(isEventStream ? {} : { signal: AbortSignal.timeout(90_000) }),
     })
   } catch {
     return NextResponse.json(
