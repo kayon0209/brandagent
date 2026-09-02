@@ -1,11 +1,25 @@
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-from starlette.routing import Route
+import sys
 
-from .config import Settings
-from .repository import BrandToolsRepository
-from .security import ServiceAuthMiddleware
-from .tools import create_mcp
+# Windows + psycopg async: the whole project forces SelectorEventLoop for
+# its SSL/DB stacks (agent-api run.py / server.py / research runner.py do
+# the same). Without this, ProactorEventLoop makes the psycopg pool fail
+# on every connection ("Psycopg cannot use the ProactorEventLoop"), which
+# only surfaces when the server runs on a Windows HOST (Docker is fine).
+# Module import happens before uvicorn creates its event loop, so setting
+# the policy here is effective.
+if sys.platform == "win32":
+    import asyncio
+
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+from starlette.requests import Request  # noqa: E402
+from starlette.responses import JSONResponse  # noqa: E402
+from starlette.routing import Route  # noqa: E402
+
+from .config import Settings  # noqa: E402
+from .repository import BrandToolsRepository  # noqa: E402
+from .security import ServiceAuthMiddleware  # noqa: E402
+from .tools import create_mcp  # noqa: E402
 
 
 settings = Settings()
