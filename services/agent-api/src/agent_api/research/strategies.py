@@ -74,6 +74,18 @@ def _evidence_block(cards: list[EvidenceCard]) -> str:
     return "\n\n".join(lines)
 
 
+async def _generate_once_retry(generate, *, system, prompt, prompt_version):
+    """Model call with ONE timeout retry — identical across S0/S1/S2 so a
+    slow gateway window can never differentially bias one strategy."""
+    try:
+        return await generate(system=system, prompt=prompt, prompt_version=prompt_version)
+    except Exception as error:  # noqa: BLE001 — retried once (timeout windows)
+        from asyncio import sleep as _sleep
+
+        await _sleep(2)
+        return await generate(system=system, prompt=prompt, prompt_version=prompt_version)
+
+
 # ---------------------------------------------------------------- helpers
 
 
@@ -140,7 +152,8 @@ async def run_s0(question: str, *, generate, run: StrategyRun) -> None:
 
 
 async def _plan_queries(question: str, *, generate, run: StrategyRun, s2: bool) -> list[str]:
-    result = await generate(
+    result = await _generate_once_retry(
+        generate,
         system=PLANNER_SYSTEM_S2 if s2 else PLANNER_SYSTEM,
         prompt=PLANNER_USER.format(question=question),
         prompt_version="research:plan:v1" if not s2 else "research:plan-s2:v1",
@@ -176,7 +189,8 @@ def _cards_from_hits(hits: list[dict]) -> list[EvidenceCard]:
 async def _synthesis(
     question: str, cards: list[EvidenceCard], *, generate, run: StrategyRun, version: str
 ) -> None:
-    result = await generate(
+    result = await _generate_once_retry(
+        generate,
         system=SYNTHESIS_SYSTEM,
         prompt=SYNTHESIS_USER.format(question=question, evidence_block=_evidence_block(cards)),
         prompt_version=version,
