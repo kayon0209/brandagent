@@ -39,17 +39,25 @@ class TavilySearchProvider:
     # billing counter: incremented on EVERY outbound HTTP attempt so the
     # experiment's search_calls always equals real provider requests
     call_counter: list = None  # type: ignore[assignment]
+    _client: httpx.AsyncClient | None = None
 
     def __post_init__(self) -> None:
         if self.call_counter is None:
             self.call_counter = [0]
 
     async def search(self, query: str, *, max_results: int = 5) -> list[dict]:
+        # connection reuse: the local network intermittently kills fresh
+        # TLS handshakes (http_proxy start_tls ConnectError, reproduced);
+        # one warm client removes most handshake attempts, and the retry
+        # loop below absorbs the rest with backoff
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self.timeout_seconds)
         last_error: Exception | None = None
         for attempt in range(1 + self.max_retries):
             try:
                 self.call_counter[0] += 1
-                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                if True:
+                    client = self._client
                     response = await client.post(
                         f"{self.base_url}/search",
                         json={

@@ -298,6 +298,17 @@ def _env() -> dict:
 
 
 def main() -> int:
+    # Windows + asyncio: the whole project forces SelectorEventLoop for
+    # its SSL stacks (run.py / server.py / conftest); Proactor has a known
+    # record-layer failure mode with httpx here (5/6 S1 pilot runs died
+    # at the first model call with [SSL] record layer failure). The
+    # runner is the last entry point missing this.
+    import sys as _sys
+
+    if _sys.platform == "win32":
+        import selectors as _selectors
+
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     parser = argparse.ArgumentParser(description="research controlled experiment")
     parser.add_argument("--strategies", nargs="+", default=["S0"],
                         help="S0 S1 S2 subset to run (default S0 only)")

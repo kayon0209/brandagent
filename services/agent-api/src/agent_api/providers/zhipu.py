@@ -21,12 +21,24 @@ class ZhipuProvider(LLMProvider):
         self._model = model
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
+        self._client: httpx.AsyncClient | None = None
 
     async def generate(self, *, system: str, prompt: str, prompt_version: str) -> ModelCallResult:
         started = time.perf_counter()
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                response = await client.post(
+        # connection reuse: a FRESH AsyncClient per call re-handshakes TLS
+        # every time; on this gateway the second handshake in quick
+        # succession (plan call -> search -> synthesize call) reliably
+        # dies with [SSL] record layer failure in ~5s. Holding ONE client
+        # (like the passing reproduction script) keeps the warm
+        # connection and eliminates the failure mode.
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self._timeout_seconds)
+        # transient transport failures (proxy intermittently kills TLS
+        # streams on this host, ~5s in, reproduced): back off and retry —
+        # the run must not die to a single network hiccup
+        for attempt in range(3):
+            try:
+                response = await self._client.post(
                     f"{self._base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {self._api_key.get_secret_value()}"},
                     json={
@@ -38,10 +50,19 @@ class ZhipuProvider(LLMProvider):
                         "temperature": 0.2,
                     },
                 )
-        except httpx.TimeoutException as error:
-            raise ProviderExecutionError("MODEL_TIMEOUT", "The model provider timed out.", retryable=True) from error
-        except httpx.TransportError as error:
-            raise ProviderExecutionError("MODEL_UNAVAILABLE", "The model provider is unavailable.", retryable=True) from error
+                break
+            except httpx.TimeoutException as error:
+                raise ProviderExecutionError("MODEL_TIMEOUT", "The model provider timed out.", retryable=True) from error
+            except httpx.TransportError as error:
+                if attempt < 2:
+                    # a killed stream poisons the pooled connection: drop it
+                    await self._client.aclose()
+                    self._client = httpx.AsyncClient(timeout=self._timeout_seconds)
+                    import asyncio as _aio
+
+                    await _aio.sleep(0.5 * (2 ** attempt))
+                    continue
+                raise ProviderExecutionError("MODEL_UNAVAILABLE", "The model provider is unavailable.", retryable=True) from error
         if response.status_code == 429:
             raise ProviderExecutionError("MODEL_RATE_LIMITED", "The model provider rate limit was reached.", retryable=True)
         if response.status_code >= 500:
