@@ -1767,6 +1767,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/projects/{task_id}/events:
+    get:
+      summary: Project Events
+      description: Server-sent event stream for one consumer project (material distillation, draft generation, channel variants). Wire format matches the BrandFlow task stream - `id:` cursor with Last-Event-ID resume, versioned envelope in `data:`, 5s heartbeat comments, disconnect-aware. `follow=false` returns the current event snapshot once and closes.
+      operationId: project_events_api_v1_consumer_projects__task_id__events_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: follow
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+          title: Follow
+      - name: Last-Event-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last-Event-Id
+      responses:
+        '200':
+          description: Event stream (text/event-stream) or single snapshot
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '404':
+          description: Project not found (cross-tenant ids do not reveal existence)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/consumer/projects/{task_id}/export/prepare:
     post:
       summary: Prepare Export Snapshot

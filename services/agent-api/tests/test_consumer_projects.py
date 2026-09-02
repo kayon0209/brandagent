@@ -86,6 +86,14 @@ class MemoryConsumerProjectStore:
     async def append_event(self, event: dict) -> None:
         self.events.append(event)
 
+    async def list_events(self, workspace_id: str, task_id: str, *, after_event_id: int = 0, limit: int = 100) -> list[dict]:
+        rows = [
+            {**e, "event_id": index + 1, "event_version": "1.0", "workflow_node": "consumer_projects", "created_at": "2026-09-03T00:00:00+00:00"}
+            for index, e in enumerate(self.events)
+            if e["task_id"] == task_id and e["workspace_id"] == workspace_id
+        ]
+        return [r for r in rows if r["event_id"] > after_event_id][:limit]
+
 
 def make_service() -> tuple[ConsumerProjectService, MemoryConsumerProjectStore]:
     store = MemoryConsumerProjectStore()
@@ -104,6 +112,36 @@ async def test_create_project_persists_title_core_idea_and_intent() -> None:
     assert created["writing_intent"] == "公众号文章"
     assert created["task_id"]
     assert any(e["event_type"] == "consumer.project.created.v1" for e in store.events)
+
+
+@pytest.mark.asyncio
+async def test_list_project_events_returns_stream_in_order_with_cursor() -> None:
+    service, _ = make_service()
+    principal = principal_for("ws-1")
+    created = await service.create_project(principal, title="事件流", core_idea="观点", intent="")
+    task_id = created["task_id"]
+    await service.update_project(principal, task_id, title="新标题", core_idea=None, intent=None)
+
+    all_events = await service.list_project_events(principal, task_id)
+    assert [e["event_type"] for e in all_events] == [
+        "consumer.project.created.v1",
+        "consumer.project.updated.v1",
+    ]
+    # cursor semantics: only strictly-after events come back
+    tail = await service.list_project_events(principal, task_id, after_event_id=all_events[0]["event_id"])
+    assert [e["event_type"] for e in tail] == ["consumer.project.updated.v1"]
+    # beyond the last event id: empty, not an error
+    assert await service.list_project_events(principal, task_id, after_event_id=all_events[-1]["event_id"]) == []
+
+
+@pytest.mark.asyncio
+async def test_list_project_events_is_workspace_scoped() -> None:
+    service, _ = make_service()
+    created = await service.create_project(principal_for("ws-1"), title="A", core_idea="a", intent="")
+    other = principal_for("ws-2")
+    with pytest.raises(NotFoundError):
+        # cross-tenant id must not reveal stream contents
+        await service.list_project_events(other, created["task_id"])
 
 
 @pytest.mark.asyncio

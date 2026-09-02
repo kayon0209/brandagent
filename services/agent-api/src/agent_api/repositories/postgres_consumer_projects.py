@@ -463,6 +463,25 @@ class PostgresConsumerProjectStore:
                 ),
             )
 
+    async def list_events(self, workspace_id: str, task_id: str, *, after_event_id: int = 0, limit: int = 100) -> list[dict]:
+        """Read the project event stream (ascending) after a cursor.
+
+        Workspace-scoped by RLS like every other access; uses the
+        task_events_stream_idx (workspace_id, task_id, event_id) index.
+        """
+        async with self._pool.connection() as connection:
+            await self._scope(connection, workspace_id)
+            cursor = await connection.execute(
+                """SELECT event_id, event_type, event_version, public_payload, workflow_node, created_at
+                   FROM task_events
+                   WHERE task_id = %s AND event_id > %s
+                   ORDER BY event_id ASC
+                   LIMIT %s""",
+                (task_id, after_event_id, limit),
+            )
+            rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
     @staticmethod
     def _jsonable(value):
         if isinstance(value, dict):

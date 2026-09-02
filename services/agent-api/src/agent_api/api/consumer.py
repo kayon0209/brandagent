@@ -7,10 +7,12 @@ Bearer token; no anonymous access.
 
 from __future__ import annotations
 
+import asyncio
+import json
 from typing import Protocol
 
-from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from agent_api.api.security import Principal
 from agent_api.api.main import create_principal_dependency
@@ -667,6 +669,55 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
             raise HTTPException(status_code=404, detail="Usage not found") from None
         except ApplicationError as error:
             raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+
+    @router.get("/{task_id}/events")
+    async def project_events(
+        task_id: str,
+        request: Request,
+        actor: Principal = Depends(principal),
+        last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+        follow: bool = True,
+    ) -> StreamingResponse:
+        """Project event stream (plan §7.4): material distillation, draft
+        generation and channel variants surface progress here. Same wire
+        format as the BrandFlow task stream: `id: <event_id>` cursor (resume
+        via Last-Event-ID), versioned envelope in `data:`, 5s heartbeat,
+        disconnect-aware. `follow=false` returns the current snapshot once.
+        """
+        from agent_api.domain.errors import NotFoundError
+
+        try:
+            await apps.projects.get_project(actor, task_id)
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="Project not found") from None
+        try:
+            cursor = int(last_event_id) if last_event_id else 0
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail="Last-Event-ID must be an integer") from error
+
+        async def stream():
+            current = cursor
+            while True:
+                events = await apps.projects.list_project_events(actor, task_id, after_event_id=current)
+                for event in events:
+                    current = int(event["event_id"])
+                    payload = {
+                        "type": event["event_type"],
+                        "project_id": task_id,
+                        "event_version": event.get("event_version", "1.0"),
+                        "data": event.get("public_payload", {}),
+                        "created_at": str(event["created_at"]),
+                    }
+                    yield (
+                        f"id: {event['event_id']}\nevent: {event['event_type']}\n"
+                        f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                    )
+                if not follow or await request.is_disconnected():
+                    break
+                yield ": heartbeat\n\n"
+                await asyncio.sleep(5)
+
+        return StreamingResponse(stream(), media_type="text/event-stream")
 
     return router
 

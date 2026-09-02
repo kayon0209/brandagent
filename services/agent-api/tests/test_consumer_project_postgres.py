@@ -173,3 +173,37 @@ async def test_cross_workspace_draft_and_project_reads_are_scoped() -> None:
         assert await store.get_draft(WORKSPACE, created["task_id"]) is None
     finally:
         await store.close()
+
+
+@pytest.mark.asyncio
+async def test_project_event_stream_roundtrip_and_rls_scoping_on_postgres() -> None:
+    """SSE read side (plan §7.4): append_event rows must come back through
+    list_events in order with a working cursor, and never leak across the
+    RLS workspace boundary."""
+    store = PostgresConsumerProjectStore(os.environ["AGENT_TEST_DATABASE_URL"])
+    await store.open()
+    try:
+        await _ensure_workspace(store, WORKSPACE, "consumer-1")
+        principal = Principal(user_id="consumer-1", workspace_id=WORKSPACE, role="admin", experience="personal")
+        projects = ConsumerProjectService(store=store)
+        created = await projects.create_project(principal, title="事件流", core_idea="观点", intent="")
+        await projects.update_project(principal, created["task_id"], title="新标题", core_idea=None, intent=None)
+
+        events = await projects.list_project_events(principal, created["task_id"])
+        assert [e["event_type"] for e in events] == [
+            "consumer.project.created.v1",
+            "consumer.project.updated.v1",
+        ]
+        assert all(e["event_id"] for e in events)
+
+        tail = await projects.list_project_events(
+            principal, created["task_id"], after_event_id=events[0]["event_id"]
+        )
+        assert [e["event_type"] for e in tail] == ["consumer.project.updated.v1"]
+
+        # cross-tenant: RLS hides the rows; the service surfaces 404 semantics
+        intruder = Principal(user_id="intruder", workspace_id=OTHER_WORKSPACE, role="admin", experience="personal")
+        with pytest.raises(NotFoundError):
+            await projects.list_project_events(intruder, created["task_id"])
+    finally:
+        await store.close()

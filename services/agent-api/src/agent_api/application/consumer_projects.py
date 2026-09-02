@@ -85,6 +85,18 @@ class ConsumerProjectService:
     async def get_project(self, principal: Principal, task_id: str) -> dict:
         return await self._project_view(await self._require_project(principal, task_id), principal)
 
+    async def list_project_events(
+        self, principal: Principal, task_id: str, *, after_event_id: int = 0, limit: int = 100
+    ) -> list[dict]:
+        """SSE read side of the project event stream (plan §7.4: long tasks
+        surface progress via task_events + SSE; the same stream is also the
+        cross-tab invalidation source). 404 semantics match get_project so a
+        cross-tenant id never reveals existence."""
+        await self._require_project(principal, task_id)
+        return await self._store.list_events(
+            principal.workspace_id, task_id, after_event_id=after_event_id, limit=limit
+        )
+
     async def list_projects(self, principal: Principal) -> list[dict]:
         projects = await self._store.list_projects(principal.workspace_id)
         return [await self._project_view(project, principal) for project in projects]
