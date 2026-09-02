@@ -34,11 +34,23 @@ interface SelectionToolbarProps {
   rangeRect?: { getBoundingClientRect(): DOMRect }
   hidden?: boolean
   onAction?(action: AssistAction): void
+  onIntent?(intent: string): void
+  intentMessage?: string | null
   busy?: boolean
 }
 
-export function SelectionToolbar({ editorState, rangeRect, hidden, onAction, busy }: SelectionToolbarProps) {
+export function SelectionToolbar({
+  editorState,
+  rangeRect,
+  hidden,
+  onAction,
+  onIntent,
+  intentMessage,
+  busy,
+}: SelectionToolbarProps) {
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
+  const [intentOpen, setIntentOpen] = useState(false)
+  const [intentText, setIntentText] = useState('')
 
   const selection = editorState?.selection
 
@@ -85,6 +97,15 @@ export function SelectionToolbar({ editorState, rangeRect, hidden, onAction, bus
     }
   }, [position])
 
+  // the intent panel resets whenever the toolbar hides or the selection
+  // moves elsewhere — leftover draft text must not leak into the next ask
+  useEffect(() => {
+    if (!selection || selection.empty || hidden || !position) {
+      setIntentOpen(false)
+      setIntentText('')
+    }
+  }, [selection, hidden, position])
+
   if (!selection || selection.empty || hidden || !position) {
     return null
   }
@@ -118,6 +139,55 @@ export function SelectionToolbar({ editorState, rangeRect, hidden, onAction, bus
           {label}
         </button>
       ))}
+      <button
+        type="button"
+        className={styles.pillButton}
+        data-testid="intent-toggle"
+        onMouseDown={event => event.preventDefault()}
+        aria-label="说说怎么改"
+        onClick={() => setIntentOpen(previous => !previous)}
+      >
+        说说怎么改
+      </button>
+      {intentOpen && (
+        <form
+          data-testid="intent-panel"
+          className={styles.intentPanel}
+          onSubmit={event => {
+            event.preventDefault()
+            const text = intentText.trim()
+            if (!text || busy) return
+            onIntent?.(text)
+            setIntentText('')
+          }}
+        >
+          <input
+            autoFocus
+            type="text"
+            className={styles.intentInput}
+            placeholder="例如：换个更生活化的例子"
+            maxLength={200}
+            value={intentText}
+            onChange={event => setIntentText(event.target.value)}
+            onMouseDown={event => event.stopPropagation()}
+            aria-label="描述你想怎么改这句话"
+            data-testid="intent-input"
+          />
+          <button
+            type="submit"
+            className={styles.intentSubmit}
+            disabled={busy || !intentText.trim()}
+            data-testid="intent-submit"
+          >
+            {busy ? '生成中…' : '生成'}
+          </button>
+        </form>
+      )}
+      {intentMessage && (
+        <p className={styles.intentMessage} role="status" data-testid="intent-message">
+          {intentMessage}
+        </p>
+      )}
     </div>,
     document.body,
   )

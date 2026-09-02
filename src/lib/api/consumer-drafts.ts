@@ -72,6 +72,43 @@ export async function acceptConsumerSuggestion(input: {
   )
 }
 
+export interface IntentProposal {
+  status: 'proposed' | 'refused'
+  reason?: 'unsupported_intent' | 'content_guard'
+  message?: string
+  supported_actions?: string[]
+  suggestion_id?: string
+  action?: string
+  suggested_text?: string
+}
+
+export async function proposeConsumerIntent(input: {
+  projectId: string
+  intent: string
+  selectedText: string
+  blockId: string
+  startOffset: number
+  endOffset: number
+  baseRevision: number
+  idempotencyKey: string
+}): Promise<IntentProposal> {
+  return brandFlowRequest<IntentProposal>(
+    `/api/v1/consumer/projects/${input.projectId}/suggestions/intent`,
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': input.idempotencyKey },
+      body: JSON.stringify({
+        intent: input.intent,
+        selectedText: input.selectedText,
+        blockId: input.blockId,
+        startOffset: input.startOffset,
+        endOffset: input.endOffset,
+        baseRevision: input.baseRevision,
+      }),
+    },
+  )
+}
+
 export interface DraftCandidate {
   content_version_id: string
   task_id: string

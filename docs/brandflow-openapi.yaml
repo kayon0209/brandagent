@@ -1619,6 +1619,74 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/projects/{task_id}/suggestions/intent:
+    post:
+      summary: Propose Suggestion From Free Intent
+      description: Bounded intent panel. The user's free-text rewrite intent is classified into exactly one of the three supported actions (expand / replace_example / shorten) by one model call, then re-enters the anchored propose path (offset anchor verification, excerpt-only facts, numeric-claim guard). Intents outside the palette are a normal 200 refusal (status=refused) with the supported actions listed - never a silent guess. Requires Idempotency-Key like every model-costing endpoint.
+      operationId: propose_suggestion_from_intent_api_v1_consumer_projects__task_id__suggestions_intent_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [intent, selectedText, blockId, baseRevision, startOffset, endOffset]
+              properties:
+                intent:
+                  type: string
+                  maxLength: 200
+                  description: Free-text description of the rewrite the user wants
+                selectedText:
+                  type: string
+                blockId:
+                  type: string
+                baseRevision:
+                  type: integer
+                startOffset:
+                  type: integer
+                endOffset:
+                  type: integer
+      responses:
+        '200':
+          description: Proposed (status=proposed with suggestion fields) or refused (status=refused with reason and supported_actions)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '409':
+          description: SELECTION_STALE or QUOTA_EXCEEDED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error (missing anchor fields or empty intent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '502':
+          description: Assist provider unavailable; the draft is unchanged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
   /api/v1/consumer/projects/{task_id}/suggestions/{suggestion_id}/accept:
     post:
       summary: Accept Selection Suggestion

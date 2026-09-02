@@ -162,6 +162,19 @@ class ConsumerAssist(Protocol):
         start_offset: int,
         end_offset: int,
     ) -> dict | None: ...
+    async def propose_from_intent(
+        self,
+        principal: Principal,
+        task_id: str,
+        *,
+        intent: str,
+        selected_text: str,
+        block_id: str,
+        base_revision: int,
+        start_offset: int,
+        end_offset: int,
+        usage_out: dict | None = None,
+    ) -> dict: ...
     async def accept(self, principal: Principal, task_id: str, suggestion_id: str, *, base_revision: int) -> dict: ...
 
 
@@ -534,6 +547,128 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
             "base_revision": suggestion["base_revision"],
             "selected_text_hash": suggestion["selected_text_hash"],
             "status": suggestion["status"],
+        }
+        return {"success": True, "data": payload}
+
+    @router.post("/{task_id}/suggestions/intent")
+    async def propose_suggestion_from_intent(
+        task_id: str,
+        body: dict,
+        actor: Principal = Depends(principal),
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ):
+        """Free-intent panel: classify the user's words into one of the three
+        supported actions (or refuse), then reuse the anchored propose path.
+        A refusal is a normal 200 outcome (status=refused), not an error —
+        the user simply described something outside the bounded palette."""
+        from agent_api.application.editorial_assist import (
+            ActionNotSupported,
+            MissingAnchor,
+            SelectionStale,
+            validate_selection_anchor,
+        )
+        from agent_api.application.usage import ledgered_call
+        from agent_api.domain.errors import ApplicationError, NotFoundError
+
+        intent = str(body.get("intent", ""))
+        block_id = str(body.get("blockId", ""))
+        start_offset = body.get("startOffset")
+        end_offset = body.get("endOffset")
+        base_revision = body.get("baseRevision")
+        try:
+            selected_text = validate_selection_anchor(
+                selected_text=body.get("selectedText"),
+                block_id=block_id,
+                base_revision=base_revision,
+                start_offset=start_offset,
+                end_offset=end_offset,
+            )
+        except ValueError as error:
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": str(error)}},
+            )
+        if not intent.strip():
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": "请描述你想怎么改这句话"}},
+            )
+
+        request_id = idempotency_key
+        try:
+            async with ledgered_call(apps.usage_ledger, actor, request_id=request_id, operation="suggestion", estimated_tokens=900) as outcome:
+                if outcome.get("replayed"):
+                    return JSONResponse(
+                        status_code=200,
+                        content={"success": True, "data": {"replayed": True}},
+                    )
+                result = await apps.assist.propose_from_intent(
+                    actor,
+                    task_id,
+                    intent=intent,
+                    selected_text=selected_text,
+                    block_id=block_id,
+                    base_revision=base_revision,
+                    start_offset=start_offset,
+                    end_offset=end_offset,
+                    usage_out=outcome,
+                )
+        except ActionNotSupported:
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": "不支持的改写动作"}},
+            )
+        except MissingAnchor as error:
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": str(error)}},
+            )
+        except SelectionStale:
+            return JSONResponse(
+                status_code=409,
+                content={"success": False, "error": {"code": "SELECTION_STALE", "message": "选区已过期，请重新选择"}},
+            )
+        except ValueError as error:
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": str(error)}},
+            )
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="Draft not found") from None
+        except ApplicationError as error:
+            if error.code == "QUOTA_EXCEEDED":
+                return JSONResponse(
+                    status_code=409,
+                    content={"success": False, "error": {"code": "QUOTA_EXCEEDED", "message": str(error)}},
+                )
+            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+        except RuntimeError:
+            return JSONResponse(
+                status_code=502,
+                content={"success": False, "error": {"code": "ASSIST_UNAVAILABLE", "message": "AI 助手暂时不可用，稿件未做任何改动"}},
+            )
+
+        if result.get("status") == "refused":
+            reason = result.get("reason", "unsupported_intent")
+            message = (
+                "这个改法我帮不了：只能展开、换个说法或精简。试试用这三个方向描述？"
+                if reason == "unsupported_intent"
+                else "这句话里出现了我没法核实的新事实，已拒绝改写。"
+            )
+            return {
+                "success": True,
+                "data": {"status": "refused", "reason": reason, "message": message, "supported_actions": result.get("supported_actions", [])},
+            }
+        suggestion = result["suggestion"]
+        payload = {
+            "status": "proposed",
+            "suggestion_id": suggestion["suggestion_id"],
+            "action": suggestion["action"],
+            "suggested_text": suggestion.get("suggested_text", suggestion.get("proposal_text", "")),
+            "block_id": suggestion["block_id"],
+            "base_revision": suggestion["base_revision"],
+            "selected_text_hash": suggestion["selected_text_hash"],
+            "status_field": suggestion["status"],
         }
         return {"success": True, "data": payload}
 

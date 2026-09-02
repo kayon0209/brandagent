@@ -39,6 +39,22 @@ _ACTION_INSTRUCTIONS = {
 _CONTEXT_RADIUS = 120
 _NUMERIC_CLAIM = re.compile(r"\d+%|\d+(?:\.\d+)?[万亿倍]")
 
+# Free-intent panel (agentization P1): the user describes a rewrite intent
+# in their own words; ONE classifier call maps it to one of the three
+# supported actions — or refuses. Nothing outside the anchored pipeline can
+# happen this way: a classified action re-enters the exact propose() path
+# (anchor check, excerpt-only facts, numeric guard, suggestion row).
+INTENT_SYSTEM_PROMPT = (
+    "你是一个意图分类器。用户会给出对选中句子的改写意图。"
+    "你必须且只能输出下面四个词之一，不要输出其他任何内容：\n"
+    "expand — 用户想把句子写得更充实、更具体、补充细节\n"
+    "replace_example — 用户想换一种说法、换个例子、换个表达方式\n"
+    "shorten — 用户想精简、压缩、缩短句子\n"
+    "refuse — 意图不属于以上任何一种（例如要求翻译、续写新内容、改变事实、删除全部内容等）"
+)
+
+INTENT_PROMPT_VERSION = "editorial-assist:intent:v1"
+
 
 class ActionNotSupported(ValueError):
     def __init__(self, action: str) -> None:
@@ -226,6 +242,82 @@ class EditorialAssistService:
                 "created_by_type": "model",
             }
         )
+
+    # ------------------------------------------------------------------
+    # free-intent propose (agentization P1: bounded intent panel)
+    # ------------------------------------------------------------------
+
+    async def propose_from_intent(
+        self,
+        principal: Principal,
+        task_id: str,
+        *,
+        intent: str,
+        selected_text: str,
+        block_id: str,
+        base_revision: int,
+        start_offset: int | None = None,
+        end_offset: int | None = None,
+        usage_out: dict | None = None,
+    ) -> dict:
+        """Free-text rewrite intent -> one classified action -> propose().
+
+        The classifier is deliberately strict: any intent that is not
+        clearly one of the three supported rewrites is refused. A refused
+        result carries the supported actions so the UI can guide the user
+        back to the fixed palette instead of a dead end.
+        """
+        if not intent or not intent.strip():
+            raise ValueError("intent is required")
+        if len(intent) > 200:
+            raise ValueError("intent 过长，请用一句话描述你想怎么改")
+
+        intent_usage: dict = {}
+        classified = await self._provider.generate(
+            system=INTENT_SYSTEM_PROMPT,
+            prompt=f"用户的改写意图：{intent.strip()}\n\n只输出 expand / replace_example / shorten / refuse 之一。",
+            prompt_version=INTENT_PROMPT_VERSION,
+        )
+        if usage_out is not None:
+            intent_usage = {
+                "input_tokens": classified.input_tokens,
+                "output_tokens": classified.output_tokens,
+                "model": classified.model,
+            }
+
+        verdict = (classified.content or "").strip().lower()
+        # tolerate tiny model format drift ("expand。", "intent: expand")
+        verdict = verdict.removeprefix("intent:").strip(".。 \t")
+        if verdict not in ACTIONS:
+            return {
+                "status": "refused",
+                "reason": "unsupported_intent",
+                "supported_actions": list(ACTIONS),
+                "intent_verdict": verdict[:40] or "empty",
+                "usage": intent_usage,
+            }
+
+        suggestion = await self.propose(
+            principal,
+            task_id,
+            action=verdict,
+            selected_text=selected_text,
+            block_id=block_id,
+            base_revision=base_revision,
+            start_offset=start_offset,
+            end_offset=end_offset,
+            usage_out=usage_out,
+        )
+        if suggestion is None:
+            # propose() refused (e.g. unsupported numeric claim): surface as
+            # refused, not a silent empty success
+            return {
+                "status": "refused",
+                "reason": "content_guard",
+                "supported_actions": list(ACTIONS),
+                "usage": intent_usage,
+            }
+        return {"status": "proposed", "suggestion": suggestion, "usage": intent_usage}
 
     # ------------------------------------------------------------------
     # accept

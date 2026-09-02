@@ -135,6 +135,11 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
   const [selectionInfo, setSelectionInfo] = useState<{ from: number; to: number; empty: boolean; text: string } | null>(null)
   const [suggesting, setSuggesting] = useState<AssistAction | null>(null)
   const [suggestion, setSuggestion] = useState<{ text: string; suggestionId: string } | null>(null)
+  // free-intent panel (agentization P1): refused intents surface as spoken
+  // guidance; proposed ones reuse the suggestion popover flow
+  const [intentBusy, setIntentBusy] = useState(false)
+  const [intentMessage, setIntentMessage] = useState<string | null>(null)
+  const [intentLabel, setIntentLabel] = useState<string | null>(null)
   const [selectionRect, setSelectionRect] = useState<{ getBoundingClientRect(): DOMRect } | null>(null)
   const editorRef = useRef<Editor | null>(null)
   const seededSeedRef = useRef(-1)
@@ -291,8 +296,58 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
     } finally {
       setSuggestion(null)
       setSuggesting(null)
+      setIntentLabel(null)
     }
   }, [api, draft, projectId, suggestion])
+
+  // Free-intent propose: classify -> anchored propose -> suggestion
+  // popover; refusals are normal outcomes shown as guidance in the panel
+  const handleIntentAction = useCallback(
+    async (intent: string) => {
+      if (!selectionInfo || selectionInfo.empty || !selectionInfo.text) return
+      const editor = editorRef.current
+      if (!editor) return
+      const anchor = resolveSelectionAnchor(editor, selectionInfo.from, selectionInfo.to)
+      if (!anchor) return
+      setIntentBusy(true)
+      setIntentMessage(null)
+      // one intent ask = one idempotency key (P1-2 contract)
+      const idempotencyKey = newIdempotencyKey()
+      try {
+        const { proposeConsumerIntent } = await import('@/lib/api/consumer-drafts')
+        const result = await proposeConsumerIntent({
+          projectId,
+          intent,
+          selectedText: selectionInfo.text,
+          blockId: anchor.blockId,
+          startOffset: anchor.startOffset,
+          endOffset: anchor.endOffset,
+          baseRevision: draft.revision,
+          idempotencyKey,
+        })
+        if (result.status === 'proposed' && result.suggested_text) {
+          setSuggesting('expand') // keeps the popover busy-label slot non-empty
+          setIntentLabel('按你的想法')
+          setSuggestion({ text: result.suggested_text, suggestionId: result.suggestion_id ?? '' })
+        } else {
+          setSuggestion(null)
+          setSuggesting(null)
+          setIntentMessage(
+            result.message ??
+              '这个改法我帮不了：只能展开、换个说法或精简。试试用这三个方向描述？'
+          )
+        }
+      } catch {
+        // AI failures never modify the draft; guide the user to retry
+        setSuggestion(null)
+        setSuggesting(null)
+        setIntentMessage('这次生成没成功，你的稿子没有任何改动。可以再试一次。')
+      } finally {
+        setIntentBusy(false)
+      }
+    },
+    [draft.revision, projectId, selectionInfo],
+  )
 
   // adopt uses the REAL post-flush revision (review P0 fix): draft.revision
   // is React state captured when this closure was built — after flush() it
@@ -331,12 +386,14 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
         rangeRect={selectionRect ?? undefined}
         hidden={toolbarHidden}
         onAction={handleToolbarAction}
-        busy={suggesting !== null}
+        onIntent={intent => void handleIntentAction(intent)}
+        intentMessage={intentMessage}
+        busy={suggesting !== null || intentBusy}
       />
 
       {suggestion && popoverPosition && (
         <SuggestionPopover
-          actionLabel={suggesting ? ACTION_LABELS[suggesting] : ''}
+          actionLabel={intentLabel ?? (suggesting ? ACTION_LABELS[suggesting] : '')}
           suggestedText={suggestion.text}
           busy={false}
           position={popoverPosition}
@@ -344,6 +401,7 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
           onDismiss={() => {
             setSuggestion(null)
             setSuggesting(null)
+            setIntentLabel(null)
           }}
         />
       )}

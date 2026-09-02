@@ -484,3 +484,65 @@
 .topbarBackLink:hover {
   color: var(--ink);
 }
+
+/* free-intent panel (agentization P1): one-line ask under the fixed
+   palette; refusals render here as guidance, never as raw errors */
+.intentPanel {
+  display: flex;
+  gap: 6px;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 264px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--paper, #fff);
+  box-shadow: 0 8px 24px rgba(15, 15, 15, 0.14);
+  z-index: 20;
+}
+
+.intentInput {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid rgba(15, 15, 15, 0.16);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  background: #fff;
+  color: inherit;
+}
+
+.intentInput:focus {
+  outline: 2px solid rgba(59, 130, 246, 0.35);
+  outline-offset: 1px;
+}
+
+.intentSubmit {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  background: var(--ink, #1f2937);
+  color: #fff;
+  cursor: pointer;
+}
+
+.intentSubmit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.intentMessage {
+  position: absolute;
+  top: calc(100% + 44px);
+  left: 0;
+  margin: 0;
+  width: 264px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-soft, #6b7280);
+  background: var(--paper, #fff);
+  border-radius: 8px;
+  padding: 6px 8px;
+  box-shadow: 0 4px 14px rgba(15, 15, 15, 0.1);
+}
