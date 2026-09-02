@@ -27,4 +27,6 @@ tsconfig.tsbuildinfo
 # 实验区（Prompt 测试、临时脚本）——不进生产
 _sandbox/
 test-results/
-research_runs/
+# research 实验运行产物（Codex 原规则 research_runs/ 与实际目录 research/runs/ 不匹配，修正）
+**/research/runs/
+.next.bak.*/

@@ -1,4 +1,4 @@
-# CLAUDE.md — ai-blog-assistant 项目规范
+# CLAUDE.md — BrandAgent 项目规范
 > 中间层约束文档（项目级）
 > 继承自：~/.claude/rules/common/ 全局规范
 > 优先级：项目级规则 > 全局规则（具体覆盖一般）
@@ -7,46 +7,52 @@
 
 ## 1. 项目身份
 
-**产品名**：AI写作助手（ai-blog-assistant）
-**定位**：帮助博主/营销人员从0快速生成中文博客，克服写作启动难。
-**技术栈**：Next.js 14 + TailwindCSS + Shadcn/UI + Anthropic Claude API + Supabase + Clerk + Vercel
-**商业模式**：Freemium（Free 5篇/月 | Pro ¥39/月 | Team ¥99/月）
+**产品名**：BrandAgent（仓库前身 ai-blog-assistant，package.json name 仍为 ai-blog-assistant）
+**定位**：面向个人创作者的品牌写作工作台（素材 → 核心观点 → 稿纸编辑 → 平台预览）；企业版 BrandFlow 审批工作台（`/brandflow`）在兼容窗口内保留，不承载 C 端新功能
+**技术栈**：Next.js 15.5（App Router）+ React 19 + TailwindCSS 4 + Tiptap 3 编辑器 + FastAPI/LangGraph（`services/agent-api`）+ MCP 工具服务（`services/brand-tools-mcp`）+ PostgreSQL 16（RLS 强制行级安全）+ Clerk 认证 + 智谱 GLM 兼容网关（OpenAI-compatible，经 `GLM_BASE_URL` 可切换）
+**商业模式**：Freemium，C 端以 token 计量（Free 30000 tokens/月，`src/types/index.ts:48-57`），未接支付（仅有意向收集 `src/app/api/upgrade-intent/route.ts`）
 
 ---
 
 ## 2. 目录结构（规范，不得随意新增顶层目录）
 
 ```
-ai-blog-assistant/
+brandagent/
 ├── CLAUDE.md              # 本文件，项目规范（必读）
-├── src/
-│   ├── app/               # Next.js App Router 页面
-│   │   ├── (auth)/        # 认证相关路由组
-│   │   ├── (dashboard)/   # 登录后主界面路由组
-│   │   ├── api/           # API Route Handlers
-│   │   └── page.tsx       # Landing Page
+├── src/                   # Next.js 业务代码（仅放这里）
+│   ├── app/
+│   │   ├── (consumer)/    # C 端创作链路（/app 首页、materials 素材库、write/[projectId] 稿纸）
+│   │   ├── (dashboard)/   # 旧博客助手（冻结，不新增功能）
+│   │   ├── brandflow/     # B 端审批工作台（兼容窗口保留）
+│   │   ├── api/           # Route Handlers（含 brandagent/[...path] BFF 代理）
+│   │   ├── sign-in|sign-up/  # Clerk 认证页
+│   │   └── page.tsx       # 入口分发（NEXT_PUBLIC_DEFAULT_ENTRY 可回滚）
 │   ├── components/
-│   │   ├── editor/        # 编辑器核心组件（WorkspaceEditor, OutlineEditor 等）
-│   │   ├── ui/            # 通用UI组件（从 shadcn/ui 扩展）
-│   │   └── layout/        # 布局组件（Header, Sidebar, Footer）
+│   │   ├── consumer/      # C 端组件（editor/ materials/ preview/）
+│   │   ├── editor/        # B 端工作区组件（BrandFlowTaskWorkspace 等）
+│   │   └── ui/            # 通用UI组件
 │   ├── lib/
-│   │   ├── prompts/       # AI Prompt 模板（每个功能一个文件）
-│   │   ├── api/           # 外部 API 封装（anthropic.ts, supabase.ts）
-│   │   └── utils.ts       # 通用工具函数
-│   ├── hooks/             # 自定义 React Hooks
-│   ├── types/             # TypeScript 类型定义（全局类型放 index.ts）
-│   └── styles/            # 全局 CSS（globals.css）
-├── docs/                  # 项目文档（PRD、架构图、会议记录）
-│   ├── PRD-ai-blog-assistant.md
-│   └── architecture.md
-├── _sandbox/              # 实验区（Prompt 测试、临时脚本）不进生产
-├── public/                # 静态资源
+│   │   ├── api/           # BFF 客户端（brandflow.ts SSE / consumer.ts / anthropic.ts GLM 客户端）
+│   │   └── prompts/       # 旧链路 Prompt 模板（C 端 prompt 在 Python 侧）
+│   ├── hooks/             # 自定义 React Hooks（useConsumerDraft 等）
+│   └── types/             # 类型定义（index.ts / consumer.types.ts / generated/）
+├── services/
+│   ├── agent-api/         # FastAPI + LangGraph 服务（Python，业务代码仅放 src/agent_api/）
+│   └── brand-tools-mcp/   # MCP server：九项品牌工具与高风险审批门禁（8100 端口）
+├── docs/
+│   ├── MASTER_PLAN.md     # 阶段与门禁权威索引
+│   ├── PRD-v2.md          # 产品需求
+│   ├── brandflow-openapi.yaml  # API 权威契约（OpenAPI 3.1）
+│   ├── migrations/        # 只增不删的 SQL migration（001–005）
+│   └── deployment/        # 运维手册
+├── _sandbox/              # 实验区，不进生产
+├── scripts/               # 本地启动/验收脚本（node .mjs）
 ├── tests/
-│   ├── unit/              # 单元测试（Jest + Testing Library）
-│   └── e2e/               # 端到端测试（Playwright）
-├── .env.local             # 本地环境变量（不提交 Git）
-├── .env.example           # 环境变量模板（提交 Git）
-└── package.json
+│   ├── unit/              # 契约测试（node --test）+ Jest 单元/组件
+│   └── e2e/               # Playwright（mock/real 分层纪律）
+├── .env.local             # 本地环境变量（不提交）
+├── .env.example           # 环境变量模板（提交）
+└── package.json           # pnpm 单包工作区
 ```
 
 ---
@@ -66,6 +72,8 @@ ai-blog-assistant/
 ---
 
 ## 4. 核心业务类型定义（权威来源：`src/types/index.ts`）
+
+> 以下为旧博客链路类型（`/dashboard`，冻结）。C 端现行 view model 见 `src/types/consumer.types.ts`（明确不泄漏 task/workflow/approval 词汇）；B 端契约类型由 `docs/brandflow-openapi.yaml` 经 openapi-typescript 生成（`src/types/generated/brandflow-api.ts`）。
 
 ```typescript
 // 文章创作流程状态机
@@ -110,7 +118,7 @@ interface OutlineSection {
 错误码规范：
 - `AUTH_REQUIRED` — 未登录
 - `QUOTA_EXCEEDED` — 免费额度耗尽
-- `AI_ERROR` — Claude API 调用失败
+- `AI_ERROR` — 模型网关调用失败
 - `VALIDATION_ERROR` — 入参校验失败
 
 ---
@@ -136,12 +144,17 @@ export function buildTitlePrompt(topic: string, audience: string): string {
 必须在 `.env.example` 中声明所有变量（无值），在 `.env.local` 中填值（不提交）。
 
 ```
-ANTHROPIC_API_KEY=         # 必填，Claude API Key
+GLM_API_KEY=              # 必填，模型网关 Key（OpenAI-compatible）
+GLM_MODEL=                # 模型名（如 glm-4.7，或网关提供的模型）
+GLM_BASE_URL=             # 模型网关地址（默认智谱 open.bigmodel.cn）
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=  # 必填，Clerk 公钥
-CLERK_SECRET_KEY=          # 必填，Clerk 私钥
-NEXT_PUBLIC_SUPABASE_URL=  # 必填，Supabase 项目 URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY=  # 必填，Supabase 匿名密钥
-SUPABASE_SERVICE_ROLE_KEY= # 必填，Supabase 服务密钥（仅服务端）
+CLERK_SECRET_KEY=         # 必填，Clerk 私钥
+CLERK_JWKS_URL= / CLERK_ISSUER=     # 必填，Clerk JWKS 与 Issuer
+AGENT_DATABASE_URL=       # 必填，业务库（brandflow_app 角色）
+AGENT_CHECKPOINT_DATABASE_URL=      # 必填，LangGraph checkpoint 库（brandflow_checkpoint 角色）
+BRAND_MCP_URL= / BRAND_MCP_DATABASE_URL= / BRAND_MCP_SERVICE_TOKEN=  # 必填，MCP 服务
+TAVILY_API_KEY=           # 仅 Phase 6 研究实验用（搜索 provider）
+NEXT_PUBLIC_SUPABASE_URL= # 可选，旧链路遗留（新链路走 FastAPI + PostgreSQL）
 ```
 
 ---
@@ -171,11 +184,11 @@ SUPABASE_SERVICE_ROLE_KEY= # 必填，Supabase 服务密钥（仅服务端）
 
 ## 10. 当前阶段
 
-**阶段**：P0 项目初始化
-**下一步**：技术框架搭建（Next.js 初始化 → Claude API 接入 → 核心编辑器）
-**PRD**：见 `docs/PRD-ai-blog-assistant.md`
+**阶段**：Consumer Upgrade Phase 0–5 已交付（验收基线见 ACCEPTANCE.md）；Phase 6（深度调研与受限多 Agent 取证）为候选，仅在 Phase 5 门禁通过后单独立项
+**下一步**：按 `docs/MASTER_PLAN.md` 逐 Phase 推进；每 Phase 门禁全绿且用户明确回复「继续」后才进入下一 Phase
+**权威计划**：`docs/MASTER_PLAN.md`；升级规格全文见 `docs/superpowers/plans/2026-08-28-consumer-brandagent-upgrade.md`
 
 ---
 
-_最后更新：2026-04-14 | 维护人：李凯盟_
+_最后更新：2026-09-03 | 维护人：李凯盟_
 _修改本文件需通知相关开发者，规则变更先改文档再改代码。_

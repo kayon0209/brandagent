@@ -9,8 +9,8 @@
 
 **产品名**：BrandAgent（仓库前身 ai-blog-assistant）
 **定位**：面向个人创作者的品牌写作工作台（素材 → 核心观点 → 稿纸编辑 → 平台预览）；企业版 BrandFlow 审批工作台（`/brandflow`）在兼容窗口内保留，不承载 C 端新功能。
-**技术栈**：Next.js 14 + TailwindCSS + Shadcn/UI + Anthropic Codex API + Supabase + Clerk + Vercel
-**商业模式**：Freemium（Free 5篇/月 | Pro ¥39/月 | Team ¥99/月）
+**技术栈**：Next.js 15.5（App Router）+ React 19 + TailwindCSS 4 + Tiptap 3 + FastAPI/LangGraph（`services/agent-api`）+ MCP 工具服务（`services/brand-tools-mcp`）+ PostgreSQL 16（RLS）+ Clerk + 智谱 GLM 兼容网关（OpenAI-compatible，`GLM_BASE_URL` 可切换）
+**商业模式**：Freemium，C 端以 token 计量（Free 30000 tokens/月，`src/types/index.ts:48-57`）；未接支付，仅有意向收集（`src/app/api/upgrade-intent/route.ts`）
 
 ---
 

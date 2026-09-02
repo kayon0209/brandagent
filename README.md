@@ -6,11 +6,11 @@
 
 素材 → 核心观点 → 稿纸 → 平台预览，一次写完，处处像你。
 
-[![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-15.5-black?logo=next.js)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org)
 [![LangGraph](https://img.shields.io/badge/LangGraph-workflow-00A98F)](https://github.com/langchain-ai/langgraph)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![MCP](https://img.shields.io/badge/MCP-Tools-8A2BE2)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
@@ -152,7 +152,7 @@ AI 建议：只看选区 + 上下文句 + 核心观点 + 已关联摘录
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Next.js 14 (src/app/(consumer)/app)               │
+│  Next.js 15.5 (src/app/(consumer)/app)              │
 │  稿纸 · Tiptap 选区锚定 · SSE 状态流                 │
 └───────────────┬─────────────────────────────────────┘
                 │ 同源 BFF（/api/brandagent，注入 Clerk token）
