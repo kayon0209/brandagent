@@ -4,10 +4,35 @@ import asyncio
 
 from .client import RealMCPClient
 
+# The C-end product surface is three built-in preview tabs; the MCP spec
+# table may extend it per workspace (agentization P2-3). This tuple is the
+# FALLBACK when the MCP service is unreachable - channel listing is a
+# product feature, not a security boundary, so a degraded answer (the
+# built-ins) beats an unavailable one.
+FALLBACK_CONSUMER_CHANNELS = ("wechat_website", "xiaohongshu", "video_script_60s")
+
 
 class MCPChannelValidator:
     def __init__(self, client: RealMCPClient) -> None:
         self._client = client
+
+    async def supported_consumer_channels(self, *, workspace_id: str) -> tuple[str, ...]:
+        """Workspace-usable channels for the C-end: built-in previews plus
+        any custom channel that has an active spec row (P2-3). Falls back
+        to the built-ins when the MCP service is unavailable."""
+        try:
+            client = self._client.for_task(
+                workspace_id=workspace_id,
+                task_id="discovery",
+                workflow_node="list_channels",
+            )
+            result = await client.call("supported_channels", {"workspace_id": workspace_id})
+            channels = [str(channel) for channel in result.get("data", {}).get("channels", [])]
+            if channels:
+                return tuple(channels)
+        except Exception:  # noqa: BLE001 — degraded listing, see fallback note
+            pass
+        return FALLBACK_CONSUMER_CHANNELS
 
     async def validate(
         self, *, workspace_id: str, task_id: str, product_id: str,

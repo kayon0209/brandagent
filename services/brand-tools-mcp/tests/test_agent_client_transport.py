@@ -37,7 +37,7 @@ async def test_agent_client_uses_real_transport_and_sanitized_log() -> None:
         http_client_factory=client_factory,
     )
     async with app.router.lifespan_context(app):
-        assert len(await client.discover()) == 9
+        assert len(await client.discover()) == 10  # 9 original tools + supported_channels (P2-3)
         result = await client.call(
             "get_product_facts",
             {"workspace_id": "workspace-1", "product_id": "product-1", "secret": "must-not-log"},

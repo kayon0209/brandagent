@@ -87,6 +87,18 @@ class ProjectsApp:
         return [e for e in EVENTS if e["event_id"] > after_event_id][:limit]
 
 
+class ChannelListingStub:
+    """P2-3: workspace channel listing stub (defined before Apps uses it)."""
+
+    def __init__(self, channels: tuple[str, ...] = ("wechat_website", "xiaohongshu", "video_script_60s")) -> None:
+        self.channels = channels
+        self.calls: list[str] = []
+
+    async def supported_consumer_channels(self, *, workspace_id: str) -> tuple[str, ...]:
+        self.calls.append(workspace_id)
+        return self.channels
+
+
 class Apps:
     projects = ProjectsApp()
     drafts = None
@@ -94,6 +106,7 @@ class Apps:
     assist = None
     variants = None
     usage_ledger = None
+    channel_validator = ChannelListingStub()
 
     class usage:  # noqa: N801
         @staticmethod
@@ -175,3 +188,4 @@ def test_events_require_auth():
     client = make_client()
     response = client.get(f"/api/v1/consumer/projects/{TASK_ID}/events", params={"follow": "false"})
     assert response.status_code in (401, 403)
+

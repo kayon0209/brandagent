@@ -42,6 +42,7 @@ READ_TOOLS = (
     "get_product_facts",
     "get_brand_guidelines",
     "get_channel_spec",
+    "supported_channels",
 )
 
 
@@ -111,6 +112,11 @@ def create_public_mcp(repository: BrandToolsRepository, *, host: str = "0.0.0.0"
             raise ToolRejected("Unsupported channel")
         specification = await repository.channel_spec(workspace_id, channel)
         return envelope("get_channel_spec", specification or {}, degraded=specification is None)
+
+    @mcp.tool(description="List the channels usable in this workspace.", structured_output=True)
+    async def supported_channels(workspace_id: str) -> dict[str, object]:
+        channels = sorted(await repository.supported_channels(workspace_id))
+        return envelope("supported_channels", {"channels": channels})
 
     return mcp
 

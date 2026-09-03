@@ -12,6 +12,7 @@ TOOL_CAPABILITIES = {
     "get_product_facts": Capability.READ,
     "get_brand_guidelines": Capability.READ,
     "get_channel_spec": Capability.READ,
+    "supported_channels": Capability.READ,
     "validate_marketing_claims": Capability.READ,
     "validate_channel_content": Capability.READ,
     "save_content_version": Capability.WRITE,

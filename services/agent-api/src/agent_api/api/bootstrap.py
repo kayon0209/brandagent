@@ -124,7 +124,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
     class ConsumerApps:
         """ConsumerProjectsApp protocol bundle wired into create_app."""
 
-        def __init__(self) -> None:
+        def __init__(self, *, channel_validator) -> None:
             self.projects = consumer_projects
             self.drafts = consumer_drafts
             self.generation = consumer_generation
@@ -132,8 +132,11 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             self.variants = consumer_variants
             self.usage = consumer_usage
             self.usage_ledger = consumer_usage
+            # P2-3: workspace-usable channel listing (custom channels via
+            # the MCP spec table); falls back to the built-in previews
+            # when the MCP service is unreachable
+            self.channel_validator = channel_validator
 
-    consumer_apps = ConsumerApps()
     mcp_client = RealMCPClient(
         mcp_url,
         workflow_repository,
@@ -143,6 +146,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
         service_token=settings.require_mcp_service_token(),
         timeout_seconds=settings.brand_mcp_timeout_seconds,
     )
+    consumer_apps = ConsumerApps(channel_validator=MCPChannelValidator(mcp_client))
     mcp_context = MCPContextGateway(mcp_client)
     runtime = RuntimeTasks()
 

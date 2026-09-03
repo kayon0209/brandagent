@@ -17,6 +17,7 @@ REQUIRED_TOOLS = {
     "get_product_facts",
     "get_brand_guidelines",
     "get_channel_spec",
+    "supported_channels",
     "validate_marketing_claims",
     "validate_channel_content",
     "save_content_version",

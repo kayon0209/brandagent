@@ -173,3 +173,56 @@ describe('PrimaryActionBar', () => {
     expect(screen.getByRole('button', { name: '准备发布' })).toBeInTheDocument()
   })
 })
+
+describe('PlatformPreview dynamic channels (P2-3)', () => {
+  it('renders a custom channel tab from supportedChannels with the generic previewer', () => {
+    render(
+      <PlatformPreview
+        state={{
+          status: 'ready',
+          channels: {
+            custom_zhihu: { content: '自定义渠道的第一版内容' },
+          },
+        }}
+        supportedChannels={['wechat_website', 'xiaohongshu', 'video_script_60s', 'custom_zhihu']}
+        onGenerate={jest.fn()}
+        onRegenerate={jest.fn()}
+        onAdopt={jest.fn()}
+      />,
+    )
+    // the custom tab exists and is first (channels WITH content sort first)
+    const tab = screen.getByRole('tab', { name: '知乎' })
+    expect(tab).toBeInTheDocument()
+    // the generic previewer shows the real content, honestly labeled
+    expect(screen.getByTestId('generic-preview-custom_zhihu')).toBeInTheDocument()
+    expect(screen.getByText('自定义渠道的第一版内容')).toBeInTheDocument()
+  })
+
+  it('keeps the built-in three when supportedChannels is not provided', () => {
+    render(
+      <PlatformPreview
+        state={{ status: 'ready', channels: { wechat_website: { content: '公众号内容' } } }}
+        onGenerate={jest.fn()}
+        onRegenerate={jest.fn()}
+        onAdopt={jest.fn()}
+      />,
+    )
+    expect(screen.getByRole('tab', { name: '公众号' })).toBeInTheDocument()
+    expect(screen.getByText('公众号内容')).toBeInTheDocument()
+  })
+
+  it('shows a channel version even if it is no longer in supportedChannels (spec lapsed)', () => {
+    render(
+      <PlatformPreview
+        state={{ status: 'ready', channels: { video_script_60s: { content: '口播稿' } } }}
+        supportedChannels={['wechat_website']}
+        onGenerate={jest.fn()}
+        onRegenerate={jest.fn()}
+        onAdopt={jest.fn()}
+      />,
+    )
+    // the lapsed channel keeps a tab (existing versions are never hidden)
+    expect(screen.getByRole('tab', { name: '口播' })).toBeInTheDocument()
+    expect(screen.getByText('口播稿')).toBeInTheDocument()
+  })
+})

@@ -24,6 +24,8 @@ export interface VariantsState {
   channels: Record<string, ChannelVariantState | undefined>
   failedChannels: Record<string, { retryable: boolean } | undefined>
   reviewBubbles: { kind: 'needs_fix' | 'blocking' | 'hint'; text: string }[]
+  /** P2-3: workspace-usable channels (built-ins plus custom spec rows) */
+  supportedChannels?: string[]
   error?: { code: string; message: string }
 }
 
@@ -49,6 +51,7 @@ export function usePlatformVariants(projectId: string) {
         requires_approval: boolean
         master_content_version_id: string | null
         channels: Record<string, ChannelVariantState>
+        supported_channels?: string[]
         review?: { bubbles: { kind: 'needs_fix' | 'blocking' | 'hint'; text: string }[] }
       }>(`/api/v1/consumer/projects/${projectId}/variants/preview`)
       setState({
@@ -56,6 +59,7 @@ export function usePlatformVariants(projectId: string) {
         channels: data.channels ?? {},
         failedChannels: {},
         reviewBubbles: data.review?.bubbles ?? [],
+        supportedChannels: data.supported_channels,
       })
     } catch (error) {
       // honest error state; a transport failure is NOT "no master"

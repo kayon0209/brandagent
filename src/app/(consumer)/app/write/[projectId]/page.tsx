@@ -309,6 +309,7 @@ export default function ProjectWritePage() {
           <div className={styles.railInner}>
             <PlatformPreview
               state={variants.state}
+              supportedChannels={variants.state.supportedChannels}
               onGenerate={() => void variants.generate()}
               onRegenerate={channel => void variants.regenerate(channel)}
               onAdopt={() => void handleAdopt()}

@@ -97,6 +97,12 @@ def create_mcp(repository: BrandToolStore, *, require_trusted_scope: bool = True
         specification = await repository.channel_spec(workspace_id, channel)
         return envelope("get_channel_spec", specification or {}, degraded=specification is None)
 
+    @mcp.tool(description="List the channels usable in this workspace (built-in defaults plus any custom channel with an active spec).", structured_output=True)
+    async def supported_channels(workspace_id: str) -> dict[str, object]:
+        authorize(workspace_id)
+        channels = sorted(await repository.supported_channels(workspace_id))
+        return envelope("supported_channels", {"channels": channels})
+
     @mcp.tool(description="Validate marketing claims against authoritative product facts.", structured_output=True)
     async def validate_marketing_claims(workspace_id: str, product_id: str, claims: list[str]) -> dict[str, object]:
         authorize(workspace_id)

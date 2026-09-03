@@ -1741,7 +1741,7 @@ paths:
   /api/v1/consumer/projects/{task_id}/variants/preview:
     get:
       summary: Preview Platform Variants
-      description: Safe C-end preview for the default channels; requires NO approval. Empty before generation; no master snapshot means the UI asks the user to adopt the draft first.
+      description: Safe C-end preview; requires NO approval. Empty before generation; no master snapshot means the UI asks the user to adopt the draft first. The response carries `supported_channels` (P2-3) - the workspace-usable channel list (built-in previews plus any custom channel with an active spec row); the tab set in the UI is data-driven from it.
       operationId: variants_preview_api_v1_consumer_projects__task_id__variants_preview_get
       security:
       - HTTPBearer: []

@@ -147,6 +147,13 @@ class ConsumerProjectsApp(Protocol):
     variants: ConsumerVariants
     usage: ConsumerUsage
     usage_ledger: ConsumerUsageLedger
+    channel_validator: "ChannelListing"
+
+
+class ChannelListing(Protocol):
+    """P2-3: workspace-usable channels (built-ins plus custom spec rows)."""
+
+    async def supported_consumer_channels(self, *, workspace_id: str) -> tuple[str, ...]: ...
 
 
 class ConsumerAssist(Protocol):
@@ -702,11 +709,15 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
         from agent_api.domain.errors import ApplicationError, NotFoundError
 
         try:
-            return {"success": True, "data": await apps.variants.preview(actor, task_id)}
+            data = await apps.variants.preview(actor, task_id)
         except NotFoundError:
             raise HTTPException(status_code=404, detail="Project not found") from None
         except ApplicationError as error:
             raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+        # P2-3: the tab set is data, not a hardcoded enum — custom channels
+        # with an active spec row appear alongside the built-in previews
+        data = {**data, "supported_channels": list(await apps.channel_validator.supported_consumer_channels(workspace_id=actor.workspace_id))}
+        return {"success": True, "data": data}
 
     @router.post("/{task_id}/variants/generate")
     async def variants_generate(
@@ -750,14 +761,15 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
         # P1-2: model-costing call — the client key is the ledger request id
         idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=128),
     ):
-        from agent_api.application.platform_variants import (
-            ALLOWED_CONSUMER_CHANNELS,
-            VariantGenerationError,
-        )
+        from agent_api.application.platform_variants import VariantGenerationError
         from agent_api.application.usage import ledgered_call
         from agent_api.domain.errors import ApplicationError, NotFoundError
 
-        if channel not in ALLOWED_CONSUMER_CHANNELS:
+        # P2-3: channel support is workspace data (built-ins plus custom
+        # spec rows); unsupported ids stay 404 — they do not reveal which
+        # custom channels exist for other workspaces
+        supported = await apps.channel_validator.supported_consumer_channels(workspace_id=actor.workspace_id)
+        if channel not in supported:
             raise HTTPException(status_code=404, detail=f"不支持的渠道：{channel}")
 
         request_id = idempotency_key
