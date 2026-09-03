@@ -1,0 +1,79 @@
+{
+  "recorded_at": "2026-09-03T15:04:52.492689+00:00",
+  "dataset_sha256": "6cee2586c7d650324b946d9192f5548d6e70735b0cf40facfdd98eab8b154d80",
+  "model": "GLM-5.3-Flash via Gitee AI gateway (uniform one-retry; 300s research timeout on retry passes)",
+  "method": {
+    "main_batch": "runs_2026-09-02T175153 (180 tuples, GLM-5.3-Flash, 180s timeout)",
+    "targeted_retries": [
+      "runs_2026-09-03T083800 (serial, 300s timeout)",
+      "runs_2026-09-03T110121.parallel-killed (serial remnant)",
+      "runs_2026-09-03T111952 (3 parallel by-strategy processes, 300s timeout)"
+    ],
+    "exclusion_rule": "completed rows carrying search:* infrastructure errors are DEGRADED (Tavily quota exhausted mid-retry; empty-evidence synthesis is not a valid S1/S2 sample) and excluded from metrics",
+    "cross_model_batches": "runs_2026-09-03T142059 (qwen3.8-flash) EXCLUDED entirely: model switch breaks the same-provider discipline; its 12 S2 rows are Tavily-degraded anyway",
+    "merge_rule": "per (strategy, question_id, seed): clean completed row wins over any failed/degraded row"
+  },
+  "n_tuples": 180,
+  "failed_remaining": {
+    "S0": 19,
+    "S1": 25,
+    "S2": 25
+  },
+  "strategies": {
+    "S0": {
+      "n": 41,
+      "coverage": 0,
+      "coverage_sd": 0.0,
+      "valid_citation_rate": 0.0,
+      "duplication_rate": 0.0,
+      "unsupported_claim_rate": 0.0,
+      "contradiction_reported_rate": 0,
+      "search_calls": 0,
+      "model_calls": 1,
+      "input_tokens": 73,
+      "output_tokens": 4984,
+      "latency_ms": 121411
+    },
+    "S1": {
+      "n": 35,
+      "coverage": 17.8,
+      "coverage_sd": 2.3111,
+      "valid_citation_rate": 1.0,
+      "duplication_rate": 0.0,
+      "unsupported_claim_rate": 0.0,
+      "contradiction_reported_rate": 1,
+      "search_calls": 4,
+      "model_calls": 2,
+      "input_tokens": 6144,
+      "output_tokens": 6638,
+      "latency_ms": 151248
+    },
+    "S2": {
+      "n": 35,
+      "coverage": 18.8,
+      "coverage_sd": 1.7954,
+      "valid_citation_rate": 1.0,
+      "duplication_rate": 0.0,
+      "unsupported_claim_rate": 0.0,
+      "contradiction_reported_rate": 1,
+      "search_calls": 10,
+      "model_calls": 2,
+      "input_tokens": 6485,
+      "output_tokens": 6640,
+      "latency_ms": 157423
+    }
+  },
+  "paired_s2_vs_s1": {
+    "n_pairs": 29,
+    "coverage_diff_mean": 1.3103,
+    "coverage_diff_se": 0.2584,
+    "ci95": [
+      0.8039,
+      1.8168
+    ],
+    "s2_wins": 21,
+    "s1_wins": 4,
+    "ties": 4
+  },
+  "gate_decision": "PENDING_USER_CONFIRMATION: paired coverage +1.31 (95%CI [0.80, 1.82], CI excludes zero) and 21/29 wins favor S2; BUT cost is 2.5x search (10.0 vs 4.0 calls/question) and 14 S2 tuples remain unrecoverable this cycle (Tavily quota); per MASTER_PLAN Phase 6 the gate also demands reproducibility - a second cycle should replicate before productization"
+}
