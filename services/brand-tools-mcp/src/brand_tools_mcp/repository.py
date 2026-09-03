@@ -102,6 +102,23 @@ class BrandToolsRepository:
             row = await cursor.fetchone()
             return {**row, "channel_spec_version_id": str(row["channel_spec_version_id"])} if row else None
 
+    async def supported_channels(self, workspace_id: str) -> set[str]:
+        """Channels this workspace can use: active DB specs UNION the built-in
+        defaults (agentization P2-2 - channel support is spec-table driven,
+        not a hardcoded enum). A workspace that inserts a custom channel
+        spec row immediately gets a usable channel; the four defaults keep
+        working without any seeding step."""
+        async with self._require_pool().connection() as connection:
+            await self._scope(connection, workspace_id)
+            cursor = await connection.execute(
+                "SELECT DISTINCT channel FROM channel_spec_versions WHERE workspace_id=%s AND active=TRUE",
+                (workspace_id,),
+            )
+            rows = await cursor.fetchall()
+        from .default_specs import DEFAULT_CHANNEL_SPECS
+
+        return {row["channel"] for row in rows} | set(DEFAULT_CHANNEL_SPECS)
+
     async def save_version(
         self,
         workspace_id: str,

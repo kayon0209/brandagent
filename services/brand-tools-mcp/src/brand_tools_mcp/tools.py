@@ -18,6 +18,7 @@ class BrandToolStore(Protocol):
     async def product_facts(self, workspace_id: str, product_id: str) -> list[dict]: ...
     async def brand_guidelines(self, workspace_id: str, brand_id: str) -> dict | None: ...
     async def channel_spec(self, workspace_id: str, channel: str) -> dict | None: ...
+    async def supported_channels(self, workspace_id: str) -> set[str]: ...
     async def save_version(self, workspace_id: str, task_id: str, content_type: str, content: str, parent_version_id: str | None, actor_id: str, idempotency_key: str, channel: str | None, master_content_version_id: str | None) -> tuple[dict, bool]: ...
     async def authorized_package(self, *, workspace_id: str, task_id: str, actor_id: str, decision_id: str, target_snapshot_hash: str, idempotency_key: str, action: str, allowed_types: tuple[str, ...], formats: list[str]) -> tuple[dict, bool]: ...
 
@@ -89,7 +90,9 @@ def create_mcp(repository: BrandToolStore, *, require_trusted_scope: bool = True
     @mcp.tool(description="Get the active specification for a supported channel.", structured_output=True)
     async def get_channel_spec(workspace_id: str, channel: str) -> dict[str, object]:
         authorize(workspace_id)
-        if channel not in CHANNELS:
+        # P2-2: support is spec-table driven - a channel with an active
+        # spec (custom or built-in default) is supported for THIS workspace
+        if channel not in await repository.supported_channels(workspace_id):
             raise ToolRejected("Unsupported channel")
         specification = await repository.channel_spec(workspace_id, channel)
         return envelope("get_channel_spec", specification or {}, degraded=specification is None)
@@ -110,7 +113,7 @@ def create_mcp(repository: BrandToolStore, *, require_trusted_scope: bool = True
     @mcp.tool(description="Validate channel content against the active channel specification.", structured_output=True)
     async def validate_channel_content(workspace_id: str, channel: str, content: str) -> dict[str, object]:
         authorize(workspace_id)
-        if channel not in CHANNELS:
+        if channel not in await repository.supported_channels(workspace_id):
             raise ToolRejected("Unsupported channel")
         specification = await repository.channel_spec(workspace_id, channel)
         if specification is None:
@@ -140,7 +143,9 @@ def create_mcp(repository: BrandToolStore, *, require_trusted_scope: bool = True
         try:
             if content_type not in {"master_draft", "master_revised", "channel_draft", "channel_revised"}:
                 raise ToolRejected("Unsupported writable content type")
-            if content_type.startswith("channel_") and (channel not in CHANNELS or not master_content_version_id):
+            if content_type.startswith("channel_") and (
+                channel not in await repository.supported_channels(workspace_id) or not master_content_version_id
+            ):
                 raise ToolRejected("Channel versions require a supported channel and canonical master version")
             if content_type.startswith("master_") and (channel is not None or master_content_version_id is not None):
                 raise ToolRejected("Master versions cannot declare a channel lineage target")

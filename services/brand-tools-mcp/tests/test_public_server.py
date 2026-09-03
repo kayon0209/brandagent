@@ -34,6 +34,12 @@ class _StubRepository:
     async def channel_spec(self, workspace_id, channel):
         return {"version": "2", "length_rules": {"max": 800}}
 
+    async def supported_channels(self, workspace_id):
+        # defaults + one custom channel, mirroring the spec-table rule
+        from brand_tools_mcp.default_specs import DEFAULT_CHANNEL_SPECS
+
+        return set(DEFAULT_CHANNEL_SPECS) | {"custom_zhihu"}
+
 
 def _registered_names(mcp) -> set:
     return {tool.name for tool in mcp._tool_manager.list_tools()}

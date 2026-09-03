@@ -4,7 +4,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 from brand_tools_mcp.contracts import TOOL_CAPABILITIES
-from brand_tools_mcp.tools import create_mcp
+from brand_tools_mcp.tools import CHANNELS, create_mcp
 
 
 class FakeStore:
@@ -14,6 +14,7 @@ class FakeStore:
     async def product_facts(self, workspace_id, product_id): return [{"fact_id": "fact-1", "fact_content": "Verified capability", "source_document_id": "doc-1"}]
     async def brand_guidelines(self, workspace_id, brand_id): return {"guideline_version_id": "g1", "version": "v1"}
     async def channel_spec(self, workspace_id, channel): return {"channel_spec_version_id": "c1", "channel": channel, "version": "v1", "length_rules": {}, "forbidden_patterns": []}
+    async def supported_channels(self, workspace_id): return set(CHANNELS)
     async def save_version(self, *args): return {"content_version_id": "v1", "immutable_hash": "a" * 64, "version_number": 1}
     async def verify_high_risk(self, *args): return {"decision_id": "d1"}
     async def content_package(self, workspace_id, task_id): return {"task_id": task_id, "versions": []}

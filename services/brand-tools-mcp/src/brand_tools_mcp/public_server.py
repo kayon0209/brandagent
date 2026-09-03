@@ -71,7 +71,7 @@ def load_public_tokens(path: str) -> dict[str, str]:
 
 
 def create_public_mcp(repository: BrandToolsRepository, *, host: str = "0.0.0.0", port: int = 8200) -> FastMCP:
-    from .tools import CHANNELS, envelope
+    from .tools import envelope
 
     mcp = FastMCP(
         "brandagent-public-brand-tools",
@@ -105,7 +105,7 @@ def create_public_mcp(repository: BrandToolsRepository, *, host: str = "0.0.0.0"
 
     @mcp.tool(description="Get the active specification for a supported channel.", structured_output=True)
     async def get_channel_spec(workspace_id: str, channel: str) -> dict[str, object]:
-        if channel not in CHANNELS:
+        if channel not in await repository.supported_channels(workspace_id):
             from .repository import ToolRejected
 
             raise ToolRejected("Unsupported channel")
