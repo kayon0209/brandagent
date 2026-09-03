@@ -147,6 +147,7 @@ async def run_experiment(
     glm_model: str,
     tavily_key: str,
     seeds: tuple[int, ...] = (11, 22, 33),
+    only_keys: set[tuple[str, str, int]] | None = None,
 ) -> dict:
     from agent_api.providers.zhipu import ZhipuProvider
     from pydantic import SecretStr
@@ -170,12 +171,14 @@ async def run_experiment(
     out_dir.mkdir(parents=True, exist_ok=True)
     runfile = out_dir / f"runs_{now_iso().replace(':', '')}.jsonl"
 
-    total = len(strategies) * len(dataset) * len(seeds)
+    total = len(strategies) * len(dataset) * len(seeds) if only_keys is None else len(only_keys)
     done = 0
     with runfile.open("a", encoding="utf-8") as sink:
         for item in dataset:
             for strategy in strategies:
                 for seed in seeds:
+                    if only_keys is not None and (strategy, item["id"], seed) not in only_keys:
+                        continue  # targeted retry pass: only the failed tuples run
                     done += 1
                     run = StrategyRun(
                         strategy=strategy,
@@ -316,6 +319,13 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=DEFAULT_OUTDIR)
     parser.add_argument("--cap-dollars", type=float, default=SEARCH_COST_CAP_DOLLARS)
     parser.add_argument("--questions", type=int, default=0, help=">0: only first N questions (pilot)")
+    parser.add_argument(
+        "--retry-failed",
+        type=Path,
+        default=None,
+        help="Path to a previous runs_*.jsonl: re-execute ONLY the (strategy, question_id, seed) "
+        "tuples recorded there as not completed. Targeted retries never re-run green rows.",
+    )
     args = parser.parse_args()
 
     env = _env()
@@ -328,6 +338,27 @@ def main() -> int:
     if needs_tavily and not tavily:
         print("TAVILY_API_KEY missing — required for S1/S2", file=sys.stderr)
         return 2
+
+    only_keys: set[tuple[str, str, int]] | None = None
+    if args.retry_failed is not None:
+        source = args.retry_failed
+        if not source.exists():
+            print(f"--retry-failed file not found: {source}", file=sys.stderr)
+            return 2
+        failed_rows = [
+            json.loads(line)
+            for line in source.read_text(encoding="utf8").splitlines()
+            if line.strip()
+        ]
+        only_keys = {
+            (row["strategy"], row["question_id"], row["seed"])
+            for row in failed_rows
+            if not row.get("completed")
+        }
+        if not only_keys:
+            print("no failed rows in the source file — nothing to retry")
+            return 0
+        print(f"targeted retry: {len(only_keys)} failed tuples from {source.name}")
 
     dataset_path = args.dataset
     if args.questions > 0:
@@ -352,6 +383,7 @@ def main() -> int:
                 glm_base_url=env.get("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
                 glm_model=env.get("GLM_MODEL", "glm-4.7"),
                 tavily_key=tavily,
+                only_keys=only_keys,
             )
         )
     finally:
