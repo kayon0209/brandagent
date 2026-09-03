@@ -4,19 +4,47 @@
 // 在正式接入支付前，记录想升级的用户信息
 // ============================================================
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { z } from 'zod'
 import { createSupabaseAdminClient } from '@/lib/api/supabase-server'
 
 const bodySchema = z.object({
   plan:   z.enum(['pro', 'team']),
   email:  z.string().email('请填写有效邮箱'),
-  wechat: z.string().max(64).optional().default(''),
+  wechat:  z.string().max(64).optional().default(''),
   note:   z.string().max(500).optional().default(''),
 })
 
+// S2: in-process rate limit — same email may submit once per day. The
+// upgrade-intent form used to accept unlimited anonymous writes, which
+// invited scripted spam and stored contact data without an owner.
+const DAY_MS = 24 * 60 * 60 * 1000
+const recentSubmissions = new Map<string, number>()
+
+function rateLimited(key: string): boolean {
+  const now = Date.now()
+  const last = recentSubmissions.get(key)
+  if (last && now - last < DAY_MS) return true
+  recentSubmissions.set(key, now)
+  // opportunistic cleanup so the map cannot grow unbounded
+  if (recentSubmissions.size > 1000) {
+    for (const [k, t] of recentSubmissions) {
+      if (now - t > DAY_MS) recentSubmissions.delete(k)
+    }
+  }
+  return false
+}
+
 export async function POST(req: Request) {
-  // 已移除 Clerk 认证，使用匿名用户
-  const userId = 'anonymous'
+  // S2: an upgrade intent carries the user's contact details — it must
+  // have an owner. Anonymous visitors are asked to sign in first.
+  const { userId } = await auth()
+  if (!userId) {
+    return NextResponse.json(
+      { success: false, error: { code: 'AUTH_REQUIRED', message: '登录后才能提交升级意向，这样我们也能直接在你的账户里为你开通。' } },
+      { status: 401 },
+    )
+  }
 
   let body: unknown
   try {
@@ -38,10 +66,17 @@ export async function POST(req: Request) {
 
   const { plan, email, wechat, note } = parsed.data
 
+  if (rateLimited(email) || rateLimited(userId)) {
+    return NextResponse.json(
+      { success: false, error: { code: 'RATE_LIMITED', message: '今天已经提交过了，我们会尽快通过邮箱联系你。' } },
+      { status: 429 },
+    )
+  }
+
   const admin = createSupabaseAdminClient()
 
   const { error } = await admin.from('upgrade_intents').insert({
-    clerk_user_id: userId ?? null,   // 未登录用户也允许提交
+    clerk_user_id: userId,
     plan,
     email,
     wechat: wechat || null,

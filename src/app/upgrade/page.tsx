@@ -69,7 +69,10 @@ function UpgradeForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan, email, wechat, note }),
       })
-      if (!res.ok) throw new Error('提交失败，请稍后再试')
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null
+        throw new Error(payload?.error?.message ?? '提交失败，请稍后再试')
+      }
       setSubmitted(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : '提交失败，请稍后再试')
