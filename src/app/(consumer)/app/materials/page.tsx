@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic'
  * (audit finding: import/link existed in the hook but no page called it).
  */
 
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useState } from 'react'
 
@@ -76,9 +77,9 @@ function MaterialsPageInner() {
   return (
     <div className={styles.page}>
       <nav aria-label="返回导航">
-        <a href={buildMaterialsBackLink(fromProjectId)} data-testid="materials-back">
+        <Link href={buildMaterialsBackLink(fromProjectId)} data-testid="materials-back">
           {fromProjectId ? '回到写作' : '回到我的写作'}
-        </a>
+        </Link>
       </nav>
       <h1>素材</h1>
 

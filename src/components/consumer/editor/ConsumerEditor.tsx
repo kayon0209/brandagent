@@ -270,12 +270,19 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
           idempotencyKey,
         })) as { suggestion_id?: string; suggested_text?: string }
         if (!result?.suggested_text) {
+          // X2: a guard refusal must be VISIBLE — a silent no-op after a
+          // click reads as "the button is broken"
           setSuggestion(null)
+          setIntentMessage('这句话里出现了没法核实的新事实，AI 按规则拒绝改写。换一句或先关联素材再试。')
           return
         }
+        setIntentMessage(null)
         setSuggestion({ text: result.suggested_text, suggestionId: result.suggestion_id ?? '' })
       } catch {
+        // X2: transport/provider failure is spoken, with the retry-cost
+        // promise the idempotency design already guarantees
         setSuggestion(null)
+        setIntentMessage('这次生成没成功，你的稿子没有任何改动。再点一次试试（重试不会重复计费）。')
       }
     },
     [api, draft.revision, projectId, selectionInfo],
@@ -328,13 +335,16 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
         if (result.status === 'proposed' && result.suggested_text) {
           setSuggesting('expand') // keeps the popover busy-label slot non-empty
           setIntentLabel('按你的想法')
+          setIntentMessage(null) // a later success clears earlier guidance
           setSuggestion({ text: result.suggested_text, suggestionId: result.suggestion_id ?? '' })
         } else {
           setSuggestion(null)
           setSuggesting(null)
+          // X6: refusals end with a next step, never a dead end — the
+          // panel stays open with the user's intent editable
           setIntentMessage(
             result.message ??
-              '这个改法我帮不了：只能展开、换个说法或精简。试试用这三个方向描述？'
+              '这个改法我帮不了：只能展开、换个说法或精简。改一下描述再点生成试试？'
           )
         }
       } catch {
