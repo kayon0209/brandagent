@@ -3,14 +3,17 @@
 Security contract of the public edge:
 - exactly four READ tools are registered; write/high-risk/validator tools
   are absent from the tool registry (absence is the control, not authz)
-- the token file is the only trust source; malformed/duplicate/empty
-  token files fail loudly at load
-- the ASGI gate rejects: no bearer, unknown token
-- a valid token is pinned to one workspace_id (scope["state"] carries it)
+- static tokens are one trust source (malformed/duplicate/empty token
+  files fail loudly at load); Clerk JWTs are the second (P2-1 OAuth
+  enhancement): verified against the JWKS, workspace derived with the
+  SAME uuid5 rule as agent-api, org tokens rejected on this edge
+- the ASGI gate rejects: no bearer, unknown credential
+- a valid credential is pinned to one workspace_id (scope["state"])
 """
 
 from __future__ import annotations
 
+import jwt
 import pytest
 
 from brand_tools_mcp.public_server import (
@@ -204,3 +207,173 @@ async def test_real_transport_serves_four_read_tools_and_gates_unknown_tokens() 
                     )
                     assert result.isError is False
                     assert result.structuredContent["data"]["items"][0]["document_id"] == "d1"
+
+
+# ---------------------------------------------------------------------
+# OAuth-style credential (P2-1 enhancement): Clerk JWT acceptance
+# ---------------------------------------------------------------------
+
+def _rsa_key():
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+
+class _StaticJWKClient:
+    def __init__(self, public_key):
+        self.public_key = public_key
+
+    def get_signing_key_from_jwt(self, token):
+        class _K:
+            pass
+
+        holder = _K()
+        holder.key = self.public_key
+        return holder
+
+
+def _personal_token(private_key, **overrides):
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime.now(UTC)
+    claims = {
+        "sub": "user-77",
+        "iss": "https://clerk.test",
+        "iat": now,
+        "exp": now + timedelta(minutes=5),
+        **overrides,
+    }
+    return jwt.encode(claims, private_key, algorithm="RS256")
+
+
+@pytest.mark.asyncio
+async def test_clerk_jwt_resolves_to_the_personal_workspace():
+    from brand_tools_mcp.public_clerk import PublicClerkVerifier
+    from uuid import NAMESPACE_URL, uuid5
+
+    key = _rsa_key()
+    verifier = PublicClerkVerifier(
+        jwks_url="https://unused", issuer="https://clerk.test", jwk_client=_StaticJWKClient(key.public_key())
+    )
+    workspace = await verifier.verify(_personal_token(key))
+    # SAME derivation rule as agent-api ClerkJWTVerifier.verify
+    assert workspace == str(uuid5(NAMESPACE_URL, "brandagent:personal:user-77"))
+
+
+@pytest.mark.asyncio
+async def test_gate_accepts_jwt_via_verifier_and_rejects_bad_signature():
+    from brand_tools_mcp.public_clerk import PublicClerkVerifier
+
+    key = _rsa_key()
+    verifier = PublicClerkVerifier(
+        jwks_url="https://unused", issuer="https://clerk.test", jwk_client=_StaticJWKClient(key.public_key())
+    )
+    gate = PublicAuthMiddleware(_never_app(), {"sk-static": "ws-static"}, jwt_verifier=verifier)
+
+    # valid JWT -> the SAME derived personal workspace as agent-api would mint
+    from uuid import NAMESPACE_URL, uuid5
+
+    expected = str(uuid5(NAMESPACE_URL, "brandagent:personal:user-77"))
+    state = await _run_gate(gate, {"Authorization": f"Bearer {_personal_token(key)}"})
+    assert state["public_workspace_id"] == expected
+
+    # tampered token (different signing key) -> 401
+    other_key = _rsa_key()
+    status = await _run_gate_status(gate, {"Authorization": f"Bearer {_personal_token(other_key)}"})
+    assert status == 401
+
+    # static table still works in parallel
+    state = await _run_gate(gate, {"Authorization": "Bearer sk-static"})
+    assert state["public_workspace_id"] == "ws-static"
+
+
+@pytest.mark.asyncio
+async def test_org_tokens_are_rejected_on_the_public_edge():
+    from brand_tools_mcp.public_clerk import PublicClerkVerifier
+
+    key = _rsa_key()
+    verifier = PublicClerkVerifier(
+        jwks_url="https://unused", issuer="https://clerk.test", jwk_client=_StaticJWKClient(key.public_key())
+    )
+    with pytest.raises(ValueError):
+        await verifier.verify(_personal_token(key, org_id="org-1"))
+
+
+def _never_app():
+    async def app(scope, receive, send):
+        raise AssertionError("must not reach the app unauthenticated")
+
+    return app
+
+
+async def _run_gate(gate, headers):
+    captured = {}
+
+    async def inner(scope, receive, send):
+        captured["state"] = scope.get("state")
+
+    wrapped = gate
+    # re-wrap to capture: reuse gate internals by swapping application
+    gate._application = inner
+    scope = {"type": "http", "path": "/mcp", "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()]}
+
+    async def receive():
+        return {}
+
+    async def send(message):
+        pass
+
+    await wrapped(scope, receive, send)
+    return captured["state"]
+
+
+async def _run_gate_status(gate, headers):
+    status_box = {}
+
+    async def send(message):
+        if message["type"] == "http.response.start":
+            status_box["status"] = message["status"]
+
+    scope = {"type": "http", "path": "/mcp", "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()]}
+
+    async def receive():
+        return {}
+
+    await gate(scope, receive, send)
+    return status_box.get("status")
+
+
+def test_no_credential_source_fails_loudly(monkeypatch):
+    """App factory must refuse to start with neither static tokens nor Clerk."""
+    from brand_tools_mcp import public_server
+
+    class _EmptySettings:
+        public_tokens_path = None
+        public_clerk_jwks_url = None
+        host = "127.0.0.1"
+        public_port = 8200
+
+        def require_database_url(self):
+            return "postgresql://unused"
+
+    monkeypatch.setattr(public_server, "Settings", lambda: _EmptySettings())
+    with pytest.raises(RuntimeError, match="credential source"):
+        public_server.create_public_app()
+
+
+def test_malformed_clerk_config_fails_loudly(monkeypatch):
+    from brand_tools_mcp import public_server
+
+    class _BadSettings:
+        public_tokens_path = None
+        public_clerk_jwks_url = "http://insecure.example/jwks"  # not https
+        public_clerk_issuer = "https://clerk.test"
+        host = "127.0.0.1"
+        public_port = 8200
+
+        def require_database_url(self):
+            return "postgresql://unused"
+
+    monkeypatch.setattr(public_server, "Settings", lambda: _BadSettings())
+    with pytest.raises(RuntimeError):
+        public_server.create_public_app()

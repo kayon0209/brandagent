@@ -116,21 +116,47 @@ def create_public_mcp(repository: BrandToolsRepository, *, host: str = "0.0.0.0"
 
 
 class PublicAuthMiddleware:
-    """Bearer-token gate for the public instance.
+    """Bearer gate for the public instance, two credential modes (P2-1 -> OAuth):
 
-    Unlike the internal ServiceAuthMiddleware (which binds a trusted call
-    scope from caller headers), the public edge only TRUSTS its token
-    table: the workspace_id a caller may pass to tools must match the
-    workspace bound to the presented token, verified with a constant-time
-    comparison.
+    1. STATIC TOKENS - the BRAND_MCP_PUBLIC_TOKENS table maps a literal
+       token to ONE pinned workspace. Simple, revocable by file edit.
+    2. CLERK JWT (OAuth-style) - when BRAND_MCP_PUBLIC_CLERK_JWKS_URL is
+       configured and the bearer is a JWT (three dot-separated parts),
+       it is verified against the Clerk JWKS (RS256, issuer, exp/iat),
+       and the workspace is DERIVED with the exact same uuid5 rule as
+       agent-api (brandagent:personal:{sub}) - so a creator logged into
+       BrandAgent can paste the SAME session token into Claude Desktop.
+       Custom-token templates may additionally pin org workspaces via
+       org_id claims; personal derivation is the default.
+
+    Static tokens keep working in parallel (both tables are consulted);
+    a JWT-shaped static token is rejected to avoid ambiguity.
     """
 
-    def __init__(self, application, tokens: dict[str, str]) -> None:
+    def __init__(self, application, tokens: dict[str, str], *, jwt_verifier=None) -> None:
         import hmac
 
         self._application = application
         self._tokens = tokens
+        self._jwt_verifier = jwt_verifier  # ClerkJWTVerifier-like: async verify(token) -> Principal
         self._hmac = hmac
+
+    async def _resolve_workspace(self, token: str) -> str | None:
+        """Return the ONE workspace this credential may touch, or None."""
+        if token.count(".") == 2 and self._jwt_verifier is not None:
+            try:
+                # PublicClerkVerifier.verify returns the derived personal
+                # workspace_id directly (org tokens raise inside)
+                workspace = await self._jwt_verifier.verify(token)
+            except Exception:  # noqa: BLE001 — any verify failure is a 401
+                return None
+            return str(workspace)
+        # static table (hmac-constant-time on the lookup key for parity
+        # with the internal middleware's compare discipline)
+        for known, workspace in self._tokens.items():
+            if self._hmac.compare_digest(known, token):
+                return workspace
+        return None
 
     async def __call__(self, scope, receive, send) -> None:
         if scope.get("type") != "http" or not str(scope.get("path", "")).startswith("/mcp"):
@@ -147,39 +173,65 @@ class PublicAuthMiddleware:
             await response(scope, receive, send)
             return
         token = supplied[len(expected_prefix) :]
-        bound_workspace = self._tokens.get(token)
+        bound_workspace = await self._resolve_workspace(token)
         if bound_workspace is None:
             from starlette.responses import JSONResponse
 
-            response = JSONResponse({"error": "unknown or revoked token"}, status_code=401)
+            response = JSONResponse({"error": "unknown or revoked credential"}, status_code=401)
             await response(scope, receive, send)
             return
-        # the token's workspace is the ONLY reachable workspace; tool calls
-        # passing any other id are rejected before touching the repository
+        # the credential's workspace is the ONLY reachable workspace; tool
+        # calls passing any other id are rejected before the repository
         scope["state"] = {**(scope.get("state") or {}), "public_workspace_id": bound_workspace}
         await self._application(scope, receive, send)
 
 
 def create_public_app() -> object:
-    """ASGI app factory: repository + read-only tools + token gate."""
+    """ASGI app factory: repository + read-only tools + credential gate."""
     from starlette.responses import JSONResponse
     from starlette.routing import Route
 
     settings = Settings()
-    tokens_path = settings.public_tokens_path
-    if tokens_path is None:
-        raise RuntimeError("BRAND_MCP_PUBLIC_TOKENS is required for the public instance")
-    tokens = load_public_tokens(tokens_path)
+    tokens: dict[str, str] = {}
+    if settings.public_tokens_path:
+        tokens = load_public_tokens(settings.public_tokens_path)
+
+    jwt_verifier = None
+    clerk_jwks = settings.public_clerk_jwks_url
+    if clerk_jwks:
+        if not (clerk_jwks.startswith("https://") and settings.public_clerk_issuer):
+            raise RuntimeError("public Clerk mode requires BRAND_MCP_PUBLIC_CLERK_JWKS_URL (https) and BRAND_MCP_PUBLIC_CLERK_ISSUER")
+        from .public_clerk import PublicClerkVerifier
+
+        jwt_verifier = PublicClerkVerifier(
+            jwks_url=clerk_jwks,
+            issuer=settings.public_clerk_issuer,
+            audience=settings.public_clerk_audience or None,
+            authorized_parties=[p.strip() for p in (settings.public_clerk_authorized_parties or "").split(",") if p.strip()] or None,
+        )
+
+    if not tokens and jwt_verifier is None:
+        raise RuntimeError(
+            "the public instance needs at least one credential source: "
+            "BRAND_MCP_PUBLIC_TOKENS (static table) or BRAND_MCP_PUBLIC_CLERK_JWKS_URL (OAuth-style)"
+        )
 
     repository = BrandToolsRepository(settings.require_database_url())
     mcp = create_public_mcp(repository, host=settings.host, port=settings.public_port)
     app = mcp.streamable_http_app()
 
     async def health(_request) -> JSONResponse:
-        return JSONResponse({"status": "alive", "service": "brandagent-public-brand-tools-mcp", "tools": list(READ_TOOLS)})
+        return JSONResponse(
+            {
+                "status": "alive",
+                "service": "brandagent-public-brand-tools-mcp",
+                "tools": list(READ_TOOLS),
+                "auth": {"static_tokens": bool(tokens), "clerk_jwt": jwt_verifier is not None},
+            }
+        )
 
     app.routes.insert(0, Route("/health", health, methods=["GET"]))
-    return PublicAuthMiddleware(app, tokens)
+    return PublicAuthMiddleware(app, tokens, jwt_verifier=jwt_verifier)
 
 
 if __name__ == "__main__":

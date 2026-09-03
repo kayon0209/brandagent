@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     public_tokens_path: str | None = None
     public_port: int = 8200
     public_host: str = "127.0.0.1"
+    # OAuth-style credential (P2-1 enhancement): verify Clerk JWTs against
+    # the same JWKS the agent-api uses; workspace derives from the sub claim
+    public_clerk_jwks_url: str | None = None
+    public_clerk_issuer: str | None = None
+    public_clerk_audience: str | None = None
+    public_clerk_authorized_parties: str | None = None
 
     def require_database_url(self) -> str:
         if self.database_url is None:
