@@ -19,7 +19,8 @@ export const dynamic = 'force-dynamic'
  * review bubbles come from the preview endpoint's deterministic rows.
  */
 
-import { useParams } from 'next/navigation'
+import Link from 'next/link'
+import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { buildMaterialsHref } from '@/lib/navigation/materials'
@@ -61,6 +62,7 @@ const api: ConsumerDraftApi = {
 export default function ProjectWritePage() {
   const routeParams = useParams<{ projectId: string }>()
   const projectId = routeParams?.projectId ?? ''
+  const router = useRouter()
   const editorRef = useRef<ConsumerEditorHandle>(null)
   const variants = usePlatformVariants(projectId)
   const materials = useConsumerMaterials()
@@ -76,6 +78,26 @@ export default function ProjectWritePage() {
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [status, setStatus] = useState<EditorStatusPayload | null>(null)
+  // X1/U7: honest progress narrative + success banner for first-draft
+  const [generateProgress, setGenerateProgress] = useState<string | null>(null)
+  const [generateBanner, setGenerateBanner] = useState<string | null>(null)
+  // R1: monthly quota visibility — invisible quota is quota users are
+  // afraid to spend
+  const [usage, setUsage] = useState<{ used: number; quota: number } | null>(null)
+
+  const refreshUsage = useCallback(async () => {
+    try {
+      const { fetchConsumerUsage } = await import('@/lib/consumer-usage')
+      const summary = await fetchConsumerUsage()
+      setUsage({ used: summary.used, quota: summary.quota })
+    } catch {
+      setUsage(null) // quota display is best-effort, never blocking
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshUsage()
+  }, [refreshUsage])
 
   // the project payload is the authority for the core idea
   useEffect(() => {
@@ -140,17 +162,35 @@ export default function ProjectWritePage() {
   // the empty drawer's 导入素材 navigates to the real import flow, carrying
   // this project as the return context so 素材页 can send the user back
   const importFromDrawer = useCallback(() => {
-    window.location.assign(buildMaterialsHref(projectId))
-  }, [projectId])
+    void router.push(buildMaterialsHref(projectId))
+  }, [projectId, router])
 
   const generateFirstDraft = useCallback(async () => {
     setGenerating(true)
     setGenerateError(null)
+    setGenerateProgress(null)
+    // U7: spoken progress narrative while the model reasons — the real
+    // measured clean-sample latency is 1-3 minutes, so an honest
+    // rotating copy beats a frozen button with no expectation
+    const narrative = [
+      '正在读你的核心观点和已关联素材…',
+      '正在组织文章结构…',
+      '正在写下第一段…',
+      '还在写，长文需要一点时间…',
+    ]
+    let narrativeIndex = 0
+    setGenerateProgress(narrative[0])
+    const narrativeTimer = setInterval(() => {
+      narrativeIndex = Math.min(narrativeIndex + 1, narrative.length - 1)
+      setGenerateProgress(narrative[narrativeIndex])
+    }, 20_000)
     try {
-      // bound the wait: a stuck backend must never leave the user on an
-      // eternal "生成中" (runtime audit finding)
+      // X1: the previous 60s cap misjudged normal reasoning runs (measured
+      // clean-sample mean 118-157s) as failures and burned a second model
+      // call on the retry. 180s bounds a genuinely stuck backend without
+      // racing the normal path.
       const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('TIMEOUT')), 60_000),
+        setTimeout(() => reject(new Error('TIMEOUT')), 180_000),
       )
       if (!generateKeyRef.current) generateKeyRef.current = newIdempotencyKey()
       const result = await Promise.race([
@@ -167,6 +207,7 @@ export default function ProjectWritePage() {
         await applyDraftCandidate(projectId, candidate.content_version_id, baseRevision)
         await editorRef.current?.reloadDraft()
         setDraftText('applied')
+        setGenerateBanner('初稿已生成并放入稿纸。不满意可以选中任意句子让 AI 改写。')
         generateKeyRef.current = null // completed — next click is a new action
       } else {
         // replay with no recoverable candidate (e.g. the draft was adopted
@@ -184,14 +225,18 @@ export default function ProjectWritePage() {
       } else if (message.includes('QUOTA_EXCEEDED') || message.includes('额度')) {
         setGenerateError('本月 AI 额度已用完。写作和保存不受影响，下个月再生成初稿。')
       } else if (message.includes('TIMEOUT')) {
-        setGenerateError('这次生成等得太久了，已停止等待。你的稿纸没有任何改动，可以再试一次。')
+        setGenerateError('这次生成等得太久了，已停止等待。你的稿纸没有任何改动，可以再试一次（重试不会重复计费）。')
       } else {
-        setGenerateError('初稿生成暂时不可用，你的稿纸没有任何改动。稍后再试一次。')
+        setGenerateError('初稿生成暂时不可用，你的稿纸没有任何改动。稍后再试一次（重试不会重复计费）。')
       }
       generateKeyRef.current = null // failed+refunded — retry is a new action
     } finally {
+      clearInterval(narrativeTimer)
       setGenerating(false)
+      setGenerateProgress(null)
+      void refreshUsage() // R1: the ledger moved — reflect it immediately
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
   const linkExcerpt = useCallback(
@@ -224,9 +269,14 @@ export default function ProjectWritePage() {
   const handlePrepareExport = async () => {
     try {
       await brandFlowRequest(`/api/v1/consumer/projects/${projectId}/export/prepare`, { method: 'POST' })
-      window.alert('导出快照已准备。发布前的最后检查请看右侧「发布前再看一眼」。')
+      // X5: in-page banner instead of window.alert; the fail-closed
+      // publish red line becomes SPOKEN policy, not hidden machinery
+      setGenerateBanner(
+        '导出快照已准备。真正发布到平台仍需你在渠道后台操作——BrandAgent 不会代替你发布，这是刻意的安全设计。',
+      )
+      document.querySelector('[data-testid="write-rail"]')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : '导出暂时不可用，稍后再试。')
+      setGenerateError(error instanceof Error ? error.message : '导出暂时不可用，稍后再试。')
     }
   }
 
@@ -249,9 +299,9 @@ export default function ProjectWritePage() {
           <span className={styles.brand}>BrandAgent</span>
           {/* back to the workspace list — the write page is reachable again
               without browser back (no nav islands) */}
-          <a href="/app" className={styles.topbarBackLink} data-testid="back-to-app">
+          <Link href="/app" className={styles.topbarBackLink} data-testid="back-to-app">
             我的项目
-          </a>
+          </Link>
           <button
             type="button"
             className={styles.materialsButton}
@@ -300,8 +350,22 @@ export default function ProjectWritePage() {
               >
                 {generating ? '正在写初稿…' : '生成初稿'}
               </button>
+              {generating && generateProgress && (
+                <p role="status" data-testid="generate-progress" className={materialStyles.generateProgress}>
+                  {generateProgress}
+                  <span aria-hidden> ·</span>
+                </p>
+              )}
               {generateError && <p role="alert">{generateError}</p>}
             </section>
+          )}
+          {generateBanner && !generating && (
+            <div role="status" data-testid="generate-banner" className={materialStyles.generateBanner}>
+              <p>{generateBanner}</p>
+              <button type="button" aria-label="关闭提示" onClick={() => setGenerateBanner(null)}>
+                ×
+              </button>
+            </div>
           )}
         </div>
 
@@ -340,6 +404,20 @@ export default function ProjectWritePage() {
           )}
         </span>
         <div className={styles.statusZoom}>
+          {usage && usage.quota > 0 && usage.quota < Infinity && (
+            <span
+              className={materialStyles.quotaPill}
+              data-testid="quota-pill"
+              title={`本月 AI 额度：已用 ${usage.used} / 共 ${usage.quota} tokens（写作和保存不消耗额度）`}
+            >
+              <span
+                className={materialStyles.quotaRing}
+                style={{ '--quota-pct': `${Math.min(100, (usage.used / usage.quota) * 100)}%` } as React.CSSProperties}
+                aria-hidden
+              />
+              额度 {Math.max(0, usage.quota - usage.used)}
+            </span>
+          )}
           <ZoomControl
             zoom={status?.zoom ?? 1}
             minZoom={0.75}
