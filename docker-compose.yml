@@ -45,6 +45,46 @@ services:
       timeout: 3s
       retries: 12
 
+  # Public read-only edge (agentization P2): four read tools only; write and
+  # high-risk tools are NOT REGISTERED in this process. Opt-in deployment —
+  # `docker compose --profile public-mcp up` — so the default stack stays
+  # closed to the outside.
+  # Credential sources (factory refuses to boot with neither):
+  #   a) static tokens: create brand-mcp-public-tokens.txt at the repo root
+  #      ('<token> <workspace_id>' per line) BEFORE starting this service
+  #   b) Clerk JWT: set BRAND_MCP_PUBLIC_CLERK_* — creators reuse their
+  #      BrandAgent session token in external MCP clients
+  brand-tools-mcp-public:
+    build:
+      context: .
+      dockerfile: services/brand-tools-mcp/Dockerfile
+    profiles: ["public-mcp"]
+    command: ["uvicorn", "brand_tools_mcp.public_server:create_public_app", "--app-dir", "src", "--factory", "--host", "0.0.0.0", "--port", "8200"]
+    environment:
+      BRAND_MCP_DATABASE_URL: postgresql://brandflow_app:${AGENT_DB_PASSWORD}@postgres:5432/brandflow
+      BRAND_MCP_SERVICE_TOKEN: ${BRAND_MCP_SERVICE_TOKEN:?set BRAND_MCP_SERVICE_TOKEN}
+      BRAND_MCP_PUBLIC_TOKENS: /brand-mcp-public-tokens.txt
+      BRAND_MCP_PUBLIC_CLERK_JWKS_URL: ${BRAND_MCP_PUBLIC_CLERK_JWKS_URL:-}
+      BRAND_MCP_PUBLIC_CLERK_ISSUER: ${BRAND_MCP_PUBLIC_CLERK_ISSUER:-}
+      BRAND_MCP_PUBLIC_CLERK_AUDIENCE: ${BRAND_MCP_PUBLIC_CLERK_AUDIENCE:-}
+      BRAND_MCP_PUBLIC_CLERK_AUTHORIZED_PARTIES: ${BRAND_MCP_PUBLIC_CLERK_AUTHORIZED_PARTIES:-}
+    volumes:
+      # optional static credential table (read-only); required only when the
+      # Clerk variables above are unset — the factory fail-closes otherwise
+      - ./brand-mcp-public-tokens.txt:/brand-mcp-public-tokens.txt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      # loopback-bound by default; publish wider only behind a reverse
+      # proxy with TLS (see RUNBOOK §Public read-only MCP edge)
+      - "127.0.0.1:8200:8200"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8200/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
   agent-api:
     build:
       context: .

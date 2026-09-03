@@ -1,0 +1,38 @@
+{
+  "$comment": "MCP directory manifest for the BrandAgent public read-only edge. Ready for submission to MCP directories (mcp.so / Smithery / PulseMCP). Publishing requires: (1) a public HTTPS URL via reverse proxy, (2) user's explicit release approval per red-line rules. transport: streamable HTTP (JSON responses, stateless).",
+  "name": "brandagent-brand-tools",
+  "display_name": "BrandAgent 品牌工作台",
+  "description": "让外部 AI 客户端（Claude、Cursor 等）读取你在 BrandAgent 工作台沉淀的品牌知识：品牌文档检索、权威产品事实、品牌规范与渠道规格。只读，无写入、无发布能力。",
+  "transport": "streamable-http",
+  "endpoint": "https://REPLACE_WITH_PUBLIC_HOST/mcp",
+  "auth": {
+    "type": "bearer",
+    "modes": ["static-token", "clerk-session-jwt"],
+    "$comment": "static token from the BrandAgent workspace settings (future UI); or a BrandAgent Clerk session token (same identity as the web app)"
+  },
+  "tools": [
+    {
+      "name": "search_brand_documents",
+      "description": "Search active brand documents in the caller's workspace."
+    },
+    {
+      "name": "get_product_facts",
+      "description": "Get current authoritative product facts."
+    },
+    {
+      "name": "get_brand_guidelines",
+      "description": "Get the active brand guideline version (tone, terms, positioning)."
+    },
+    {
+      "name": "get_channel_spec",
+      "description": "Get the active writing specification for a supported channel (length rules, tone, hashtags, forbidden patterns)."
+    }
+  ],
+  "security_notes": [
+    "Read-only by construction: write/export/publish tools are not registered in this process",
+    "Every credential is pinned to exactly one workspace; PostgreSQL RLS scopes every store access",
+    "Organization-bound tokens are rejected on this edge (personal workspaces only)"
+  ],
+  "repository": "https://github.com/kayon0209/brandagent",
+  "tags": ["branding", "writing", "content-creation", "knowledge-base", "chinese"]
+}

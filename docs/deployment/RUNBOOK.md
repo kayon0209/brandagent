@@ -161,3 +161,40 @@ instance:
 - Session tokens must carry the expected `azp` (authorized party) or be
   accepted by the azp-less default path (see
   `services/agent-api/tests/test_clerk_security.py`).
+
+## Public read-only MCP edge (agentization P2)
+
+An OPTIONAL second instance of brand-tools-mcp exposing exactly four read
+tools (`search_brand_documents`, `get_product_facts`, `get_brand_guidelines`,
+`get_channel_spec`) to external MCP clients. Write and high-risk tools are
+not registered in that process — absence is the control, not authorization.
+
+**Start (opt-in profile; the default stack never starts it):**
+
+```powershell
+# a) static tokens: create the table first (one '<token> <workspace_id>' per line)
+#    e.g. content of .\brand-mcp-public-tokens.txt:
+#    sk-public-0123456789abcdef 00000000-0000-0000-0000-000000000001
+docker compose --env-file .env.local --profile public-mcp up -d brand-tools-mcp-public
+
+# b) Clerk JWT mode: set BRAND_MCP_PUBLIC_CLERK_JWKS_URL / _ISSUER (and optionally
+#    _AUDIENCE / _AUTHORIZED_PARTIES) in .env.local first, create an EMPTY token
+#    file only if mixing modes; then start the same way
+```
+
+**Health:** `GET :8200/health` reports `auth.static_tokens` / `auth.clerk_jwt`
+modes (both may be true). **Fail-closed:** with no credential source configured
+the factory refuses to boot.
+
+**Revocation:** static tokens are revoked by editing the table and restarting
+the service; JWT credentials are bounded by the Clerk key rotation and session
+expiry configured on the Clerk side.
+
+**Exposure:** the published port binds to loopback by default. Expose it to the
+internet ONLY behind a TLS reverse proxy; MCP directory listing requires a
+public HTTPS URL. Publishing to a directory is a release action — needs the
+user's explicit approval per the red-line rules.
+
+**Recovery:** restart the container; it is stateless (credentials from env/
+file, data from PostgreSQL). The internal `brand-tools-mcp` (:8100) is
+unaffected by anything that happens on this edge.
