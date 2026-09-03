@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     service_token: SecretStr | None = None
     host: str = "127.0.0.1"
     port: int = 8100
+    # public read-only instance (agentization P2-1): token file + listener
+    public_tokens_path: str | None = None
+    public_port: int = 8200
+    public_host: str = "127.0.0.1"
 
     def require_database_url(self) -> str:
         if self.database_url is None:
