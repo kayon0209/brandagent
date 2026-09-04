@@ -410,3 +410,42 @@
   font-size: 15px;
   margin-bottom: 4px;
 }
+
+/* N8: card action hierarchy — primary link action, quiet trace toggle */
+.linkPrimary {
+  border: 1px solid rgba(184, 134, 11, 0.55);
+  border-radius: 8px;
+  background: rgba(184, 134, 11, 0.08);
+  color: #7a5a08;
+  font-size: 12px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.linkPrimary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.traceToggle {
+  border: none;
+  background: none;
+  color: var(--ink-soft, #6b7280);
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.traceToggle:hover {
+  color: var(--ink, #1f2937);
+}
+
+/* N14: first-run route hint under the empty manuscript */
+.firstRunHint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-soft, #6b7280);
+  border-left: 2px solid rgba(184, 134, 11, 0.4);
+  padding-left: 10px;
+}

@@ -35,7 +35,7 @@ export default function MaterialsPage() {
 }
 
 function MaterialsPageInner() {
-  const { loading, error, materials, excerpts, refresh, loadExcerpts, importText } = useConsumerMaterials()
+  const { loading, error, materials, excerpts, refresh, loadExcerpts, loadAllExcerpts, importText } = useConsumerMaterials()
   const searchParams = useSearchParams()
   const fromProjectId = searchParams?.get(MATERIALS_FROM_PARAM)
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null)
@@ -67,6 +67,12 @@ function MaterialsPageInner() {
             ? '素材已导入，可引用片段已就绪。'
             : '素材已导入，正在整理可引用片段。',
       )
+      // N1: the write-page drawer renders from `excerpts`, which only this
+      // hook loads — a doc-list refresh alone left the drawer stale after a
+      // round trip, forcing a manual page reload
+      if (result.status !== 'duplicate') {
+        await loadAllExcerpts()
+      }
     } catch (importError) {
       setImportMessage(importError instanceof Error ? importError.message : '导入失败，请重试。')
     } finally {

@@ -22,6 +22,7 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { UserButton } from '@clerk/nextjs'
 
 import { buildMaterialsHref } from '@/lib/navigation/materials'
 
@@ -143,6 +144,18 @@ export default function ProjectWritePage() {
     void materials.loadAllExcerpts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // N2: Esc closes the material drawer (WAI-ARIA drawer pattern); clicking
+  // the manuscript area dismisses it too — an open drawer must never trap
+  // the user into a second trip to the toggle button
+  useEffect(() => {
+    if (!drawerOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDrawerOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [drawerOpen])
 
   const onStatus = useCallback((payload: EditorStatusPayload) => {
     setStatus(payload)
@@ -326,10 +339,21 @@ export default function ProjectWritePage() {
           <button type="button" className={styles.preparePublish} onClick={() => void handlePrepareExport()}>
             准备发布
           </button>
+          {/* N6: account ownership — sign-out lives where the user is.
+              Clerk's UserButton ships its own menu (profile / sign out). */}
+          <UserButton afterSignOutUrl="/sign-in" />
         </div>
       </header>
 
-      <div className={styles.workspace}>
+      <div
+        className={styles.workspace}
+        onClick={() => {
+          // N2: clicking into the manuscript dismisses an open drawer; the
+          // drawer sits OUTSIDE this container so its own clicks never land
+          // here — no stopPropagation games needed
+          if (drawerOpen) setDrawerOpen(false)
+        }}
+      >
         <div className={styles.editorColumn}>
           <ConsumerEditorClient
             handleRef={editorRef}
@@ -341,7 +365,18 @@ export default function ProjectWritePage() {
           />
           {draftText === '' && (
             <section className={materialStyles.state}>
-              <p>稿纸还是空的。基于核心观点和已关联素材，先生成一版初稿试试。</p>
+              <p>
+                {materials.excerpts.length === 0
+                  ? '稿纸还是空的。直接凭核心观点生成一版就行；之后关联素材，AI 会贴着你的素材改得更准。'
+                  : '稿纸还是空的。基于核心观点和已关联素材，先生成一版初稿试试。'}
+              </p>
+              {/* N14: first-run narrative — appears only while there is
+                  nothing yet, dissolves as the user completes each step */}
+              {materials.excerpts.length === 0 && !generating && (
+                <p className={materialStyles.firstRunHint} data-testid="first-run-hint">
+                  路线：写下核心观点 → 打开「素材」抽屉挂点素材（可选）→ 生成初稿。每一步都算数。
+                </p>
+              )}
               <button
                 type="button"
                 className="consumer-primary-button"
@@ -395,6 +430,7 @@ export default function ProjectWritePage() {
               <SaveStatus
                 state={status.saveState as SaveState}
                 onResolveConflict={() => status.resolveConflict()}
+                onRetrySave={() => status.retrySave()}
               />
               <span aria-hidden>·</span>
               <span className={styles.saveText}>{status.wordCount} 字</span>
@@ -438,6 +474,7 @@ export default function ProjectWritePage() {
         onImport={importFromDrawer}
         onLink={linkExcerpt}
         linkStates={materials.linkStates}
+        projectId={projectId}
       />
     </div>
   )

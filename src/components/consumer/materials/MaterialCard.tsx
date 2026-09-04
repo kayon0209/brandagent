@@ -41,9 +41,12 @@ export function MaterialCard({ excerpt, onLink, linkState }: MaterialCardProps) 
       )}
 
       <div className={styles.actions}>
+        {/* N8: primary/secondary hierarchy — linking is the frequent
+            action (primary), tracing the source is occasional (ghost) */}
         <button
           type="button"
           aria-expanded={sourceOpen}
+          className={styles.traceToggle}
           onClick={() => setSourceOpen(open => !open)}
         >
           来源
@@ -52,6 +55,7 @@ export function MaterialCard({ excerpt, onLink, linkState }: MaterialCardProps) 
         {onLink && (
           <button
             type="button"
+            className={styles.linkPrimary}
             disabled={linkState === 'linked' || linkState === 'linking'}
             onClick={() => onLink(excerpt.excerpt_id)}
           >

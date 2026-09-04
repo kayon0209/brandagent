@@ -7,6 +7,8 @@
  * empty/processing/failed states, and never fabricates material entries.
  */
 
+import Link from 'next/link'
+
 import type { ConsumerMaterialExcerpt, MaterialLinkState } from '@/types/consumer.types'
 import { MaterialCard } from './MaterialCard'
 import styles from './consumer-materials.module.css'
@@ -21,6 +23,9 @@ interface MaterialDrawerProps {
   onRetry?: () => void
   onLink?: (excerptId: string) => void
   linkStates?: Record<string, MaterialLinkState>
+  /** N2: owner-project context for the fallback link so a cold drawer still
+      returns the user to THIS project's materials flow, not a dead end */
+  projectId?: string
 }
 
 export function MaterialDrawer({
@@ -33,6 +38,7 @@ export function MaterialDrawer({
   onRetry,
   onLink,
   linkStates = {},
+  projectId,
 }: MaterialDrawerProps) {
   return (
     <aside className={styles.drawer} data-open={open} aria-hidden={!open} data-testid="material-drawer">
@@ -64,8 +70,12 @@ export function MaterialDrawer({
                 </button>
               ) : (
                 // no dead buttons (P1-3): without an import handler the drawer
-                // points at the materials page instead of doing nothing
-                <a href="/app/materials">去素材库导入</a>
+                // points at the materials page instead of doing nothing —
+                // N2: client-side Link carrying THIS project as the return
+                // context, matching the write page's navigation contract
+                <Link href={projectId ? `/app/materials?from=${projectId}` : '/app/materials'}>
+                  去素材库导入
+                </Link>
               )}
             </div>
           )}
