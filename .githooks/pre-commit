@@ -1,0 +1,49 @@
+#!/bin/sh
+# Pre-commit secret guard (leak-history hardening, 2026-09-04)
+#
+# Byte-level scans of the full history found NO real key in git (the old
+# start_backend.bat leak was cleaned to ***REMOVED*** placeholders before
+# the public-release rewrite, and .env.local has never been tracked). This
+# hook makes sure it STAYS that way: any staged content matching known
+# credential shapes blocks the commit until the secret is removed.
+#
+# Install: git config core.hooksPath .githooks  (or copy to .git/hooks/)
+
+set -e
+
+# The guard itself is exempt: its regex literals (the very patterns it
+# blocks) must be committable, or the hook can never be updated.
+if git diff --cached --name-only | grep -qE '^\.githooks/'; then
+  # only skip when the staged set is hooks-only; mixed staging still scans
+  if [ "$(git diff --cached --name-only | grep -vcE '^\.githooks/')" = "0" ]; then
+    exit 0
+  fi
+fi
+
+PATTERNS='
+(sk|pk)-test_[A-Za-z0-9_-]{25,}
+sk-[A-Za-z0-9]{32,}
+tvly-dev-[A-Za-z0-9-]{30,}
+GLM_API_KEY=[A-Za-z0-9][A-Za-z0-9]{15,}
+TAVILY_API_KEY=tvly-[A-Za-z0-9-]{10,}
+CLERK_SECRET_KEY=[A-Za-z0-9_-]{20,}
+postgres(ql)?://[A-Za-z0-9_]+:[A-Za-z0-9_!@#$%^&*-]{8,}@
+'
+
+# staged diff only (new/modified lines), case-sensitive
+if git diff --cached --no-color -U0 | grep -aE '^\+' | grep -avE '^\+\+\+' | grep -aEn "$PATTERNS" >/dev/null 2>&1; then
+  echo "pre-commit: credential-like content staged — commit BLOCKED" >&2
+  echo "" >&2
+  echo "  Matched one of: live API keys (GLM/Tavily/Clerk secrets), long" >&2
+  echo "  bearer tokens, or DB URLs with embedded passwords." >&2
+  echo "" >&2
+  echo "  Secrets belong in .env.local (never tracked). If this is a" >&2
+  echo "  false positive (e.g. a documented placeholder), review the line" >&2
+  echo "  and bypass ONCE with: git commit --no-verify" >&2
+  echo "" >&2
+  echo "  Offending staged lines (truncated):" >&2
+  git diff --cached --no-color -U0 | grep -aE '^\+' | grep -avE '^\+\+\+' | grep -aEn "$PATTERNS" | cut -c1-120 | head -5 >&2
+  exit 1
+fi
+
+exit 0
