@@ -148,10 +148,29 @@ describe('PrePublishReview', () => {
     expect(hint.className).toMatch(/needsFix|hint/)
   })
 
-  it('shows the honest empty state instead of a fake all-passed', () => {
+  it('shows the honest empty state that says WHAT was checked instead of a fake all-passed', () => {
     render(<PrePublishReview bubbles={[]} />)
-    expect(screen.getByText(/暂未发现需要你确认的地方/)).toBeInTheDocument()
+    // N7: the empty state must prove the check RAN (length + forbidden
+    // pattern per channel spec) — 'nothing found' alone reads as
+    // 'nothing checked' to a suspicious user
+    expect(screen.getByTestId('review-empty')).toHaveTextContent('长度与禁用词检查')
     expect(screen.queryByText(/全部通过/)).toBeNull()
+  })
+
+  it('renders a source tracer when a bubble carries a grounded excerpt (N13)', () => {
+    render(
+      <PrePublishReview
+        bubbles={[
+          {
+            kind: 'needs_fix',
+            text: '这句话里的说法我们找不到来源。',
+            sourceExcerpt: '素材原文摘录：2025 年上半年起要求 AI 生成内容添加显著标识。',
+          },
+        ]}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '查看来源' }))
+    expect(screen.getByTestId('review-source')).toHaveTextContent('素材原文摘录')
   })
 })
 

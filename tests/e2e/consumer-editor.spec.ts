@@ -101,7 +101,9 @@ test('[mock] platform preview renders three structures and never asks for approv
   await expect(page.getByTestId('xiaohongshu-tags')).toBeVisible()
   await page.getByRole('tab', { name: '口播' }).click()
   await expect(page.getByTestId('video-script-lines')).toBeVisible()
-  // honest empty review, no fake all-passed
+  // honest empty review, no fake all-passed; N7 copy states WHAT was
+  // checked so it can never read as 'nothing was checked'
   await expect(page.getByText('发布前再看一眼')).toBeVisible()
-  await expect(page.getByText(/暂未发现需要你确认的地方/)).toBeVisible()
+  await expect(page.getByTestId('review-empty')).toBeVisible()
+  await expect(page.getByTestId('review-empty')).toContainText('长度与禁用词检查')
 })
