@@ -21,9 +21,12 @@ const LABELS: Record<SaveState, string> = {
 interface SaveStatusProps {
   state: SaveState
   onResolveConflict(): void
+  /** N4: an error state needs an exit — the local backup kept the text,
+      so the only missing affordance is an explicit retry */
+  onRetrySave?(): void
 }
 
-export function SaveStatus({ state, onResolveConflict }: SaveStatusProps) {
+export function SaveStatus({ state, onResolveConflict, onRetrySave }: SaveStatusProps) {
   return (
     <span className={styles.statusCopy} data-testid="save-status" data-state={state}>
       <span
@@ -38,6 +41,11 @@ export function SaveStatus({ state, onResolveConflict }: SaveStatusProps) {
       {state === 'conflict' && (
         <button type="button" className={styles.resolveButton} onClick={onResolveConflict}>
           查看最新稿
+        </button>
+      )}
+      {state === 'error' && onRetrySave && (
+        <button type="button" className={styles.resolveButton} data-testid="save-retry" onClick={onRetrySave}>
+          重试保存
         </button>
       )}
     </span>

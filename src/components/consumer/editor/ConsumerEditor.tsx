@@ -105,6 +105,8 @@ export interface EditorStatusPayload {
   wordCount: number
   zoom: number
   resolveConflict(): void
+  /** N4: surfaced so the status bar can offer an explicit save retry */
+  retrySave(): void
   changeZoom(zoom: number): void
 }
 
@@ -163,16 +165,21 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
     },
     onSelectionUpdate: ({ editor: current }: { editor: Editor }) => {
       const { from, to, empty } = current.state.selection
+      // N10: a collapsed selection accompanies EVERY keystroke — pushing it
+      // through setState re-renders the whole editor tree on each character
+      // of typing. Only REAL (non-empty) selections matter to the UI, so a
+      // collapsed selection just clears existing state once.
+      if (empty) {
+        setSelectionInfo(previous => (previous === null || !previous.empty ? null : previous))
+        setSelectionRect(null)
+        return
+      }
       const text = current.state.doc.textBetween(from, to, ' ')
       setSelectionInfo({ from, to, empty, text })
       setToolbarHidden(false)
-      if (!empty) {
-        const selection = window.getSelection()
-        if (selection && selection.rangeCount > 0) {
-          setSelectionRect(selection.getRangeAt(0).cloneRange())
-        }
-      } else {
-        setSelectionRect(null)
+      const selection = window.getSelection()
+      if (selection && selection.rangeCount > 0) {
+        setSelectionRect(selection.getRangeAt(0).cloneRange())
       }
     },
     onBlur: () => setToolbarHidden(true),
@@ -220,12 +227,15 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
   // push the live statusbar payload to the page whenever any of it moves
   const resolveConflictRef = useRef(() => {})
   resolveConflictRef.current = () => void draft.resolveConflict()
+  const retrySaveRef = useRef(() => {})
+  retrySaveRef.current = () => void draft.flush()
   useEffect(() => {
     onStatus?.({
       saveState: draft.status,
       wordCount,
       zoom,
       resolveConflict: () => resolveConflictRef.current(),
+      retrySave: () => retrySaveRef.current(),
       changeZoom,
     })
   }, [onStatus, draft.status, wordCount, zoom, changeZoom])
@@ -240,10 +250,14 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
   const popoverPosition = useMemo(() => {
     if (!selectionRect) return null
     const rect = selectionRect.getBoundingClientRect()
-    // centered on the selection, clamped into the viewport (plan L505)
+    // centered on the selection, clamped into the viewport (plan L505).
+    // N3: the lower bound is the common case — rewriting the closing
+    // sentence sits near the viewport bottom, and an unclamped popover
+    // put its action buttons out of reach
     const halfWidth = SEED_RADIUS
     const x = Math.min(Math.max(rect.left + rect.width / 2 - halfWidth, 12), window.innerWidth - SEED_RADIUS * 2 - 12)
-    const y = Math.max(rect.top - 8 - 220, 12)
+    const POPOVER_HEIGHT = 220
+    const y = Math.min(Math.max(rect.top - 8 - POPOVER_HEIGHT, 12), window.innerHeight - POPOVER_HEIGHT - 12)
     return { x, y }
   }, [selectionRect])
 
