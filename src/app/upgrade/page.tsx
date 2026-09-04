@@ -153,7 +153,7 @@ function UpgradeForm() {
           className="mb-6 text-xs"
           style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}
         >
-          早鸟价 · 正式上线后永久有效
+          早鸟价 · 内测期由我们人工为你开通（含人工调整你的账户额度）
         </p>
 
         <ul className="space-y-3 mb-10">

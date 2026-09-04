@@ -43,6 +43,9 @@ export default function ConsumerHomePage() {
   const [composerOpen, setComposerOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [coreIdea, setCoreIdea] = useState('')
+  // N12: writing_intent is a real backend field — giving it a visible home
+  // makes the data honest (previously always sent as an empty string)
+  const [intent, setIntent] = useState('')
   const [usage, setUsage] = useState<{ used: number; quota: number } | null>(null)
 
   const load = useCallback(async () => {
@@ -78,10 +81,11 @@ export default function ConsumerHomePage() {
     try {
       const created = await brandFlowRequest<{ task_id: string }>('/api/v1/consumer/projects', {
         method: 'POST',
-        body: JSON.stringify({ title, core_idea: coreIdea, writing_intent: '' }),
+        body: JSON.stringify({ title, core_idea: coreIdea, writing_intent: intent }),
       })
       setTitle('')
       setCoreIdea('')
+      setIntent('')
       // X8: client-side navigation — a full reload lands the user on a
       // blank boot instead of straight onto the manuscript
       void router.push(`/app/write/${created.task_id}`)
@@ -89,7 +93,7 @@ export default function ConsumerHomePage() {
       setError(createError instanceof Error ? createError.message : '创建失败，请重试。')
       setCreating(false)
     }
-  }, [coreIdea, router, title])
+  }, [coreIdea, intent, router, title])
 
   const openComposer = () => {
     setComposerOpen(true)
@@ -165,6 +169,16 @@ export default function ConsumerHomePage() {
             value={coreIdea}
             onChange={event => setCoreIdea(event.target.value)}
             placeholder="一句话说清这篇文章要讲什么"
+          />
+          <label htmlFor="new-project-intent" className="consumer-field-label">
+            写作意图 <span style={{ fontWeight: 400, color: 'var(--ink-soft, #6b7280)' }}>（可选，比如：公众号 / 小红书 / 口播）</span>
+          </label>
+          <input
+            id="new-project-intent"
+            className="consumer-text-input"
+            value={intent}
+            onChange={event => setIntent(event.target.value)}
+            placeholder="为哪个渠道写、给谁看"
           />
           <div className={styles.composerActions}>
             <button type="button" className="consumer-primary-button" disabled={creating || !title.trim() || !coreIdea.trim()} onClick={() => void createProject()}>

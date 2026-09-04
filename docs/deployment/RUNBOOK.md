@@ -198,3 +198,28 @@ user's explicit approval per the red-line rules.
 **Recovery:** restart the container; it is stateless (credentials from env/
 file, data from PostgreSQL). The internal `brand-tools-mcp` (:8100) is
 unaffected by anything that happens on this edge.
+
+## Production go-live checklist (UX review N15)
+
+Before pointing any public domain at this stack, walk this list — a dev-keys
+deployment is a real risk, not a hypothetical:
+
+1. **Clerk keys**: rotate from `sk_test_/pk_test_` dev keys to PRODUCTION
+   keys from a live Clerk instance; dev instances allow self-serve sign-up
+   without MFA and are not a deployment credential set.
+2. **GLM/gateway key rotation**: the GLM_API_KEY has a documented leak
+   history (once committed in plaintext to a public repo). Rotate at the
+   provider console BEFORE any public deployment, and verify the old key is
+   revoked.
+3. **TLS**: every public surface (web, public MCP edge if enabled) serves
+   behind HTTPS; the public MCP port is loopback-bound and must stay behind
+   a reverse proxy.
+4. **Secrets inventory**: `.env.local` values must never appear in CI logs
+   or container images; confirm `docker compose config` output shows
+   placeholders, not values, when piped.
+5. **Backup**: enable a daily `pg_dump` of the brandflow database to a
+   mounted volume (creators' manuscripts are user assets; recovery order
+   stays: PostgreSQL -> MCP -> Agent -> Web per the Recovery section).
+6. **Rollback**: `NEXT_PUBLIC_DEFAULT_ENTRY=brandflow` still switches the
+   default entry; the /app consumer surface and /brandflow window must both
+   be green before swap.
