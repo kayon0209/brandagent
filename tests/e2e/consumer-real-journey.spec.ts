@@ -64,9 +64,15 @@ test('real journey: create project → import material → link excerpt → edit
 
   // 4. create a fresh project on /app
   await page.goto('/app')
+  // U1 rework: the composer opens from the header action — the list owns
+  // the first screen, so the fields live behind 新建写作项目. The empty
+  // state ALSO renders one (first-run users see both); the header one is
+  // the canonical entry.
+  await page.getByRole('button', { name: '新建写作项目' }).first().click()
+  await expect(page.getByLabel('项目名称')).toBeVisible({ timeout: 15_000 })
   await page.getByLabel('项目名称').fill(`验收项目 ${stamp}`)
   await page.getByLabel('核心观点').fill(`验收核心观点 ${stamp}`)
-  await page.getByRole('button', { name: '新建写作项目' }).click()
+  await page.getByRole('button', { name: '创建并开始写作' }).click()
   await page.waitForURL(/\/app\/write\//, { timeout: 60_000 })
 
   // 5. core idea is EDITABLE and persists through the project PATCH API
