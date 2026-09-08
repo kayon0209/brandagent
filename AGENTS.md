@@ -179,8 +179,8 @@ SUPABASE_SERVICE_ROLE_KEY= # 必填，Supabase 服务密钥（仅服务端）
 
 ## 10. 当前阶段
 
-**阶段**：Phase 5 验收完成（checkout `cd1f303`：合同 33 + Jest 73 + 构建 28 页 + agent-api 252 + MCP 33 + 真实栈 E2E 4/4 全绿）；Phase 6「深度调研」已经用户 2026-09-08 单项批准进入产品化（决策记录见 docs/MASTER_PLAN.md「Phase 6 立项决定」）
-**下一步**：按 MASTER_PLAN 第 10 节规格实现 Phase 6：009 additive migration → 受限多 Agent 编排（Planner + EvidenceScout ≤4 + 引用校验 + 汇总）→ SSE 进度与取消 → /app 调研入口与候选素材卡片 → 引用校验/注入/SSRF/隔离/取消/配额测试
+**阶段**：Phase 5 验收完成（checkout `cd1f303`）；Phase 6「深度调研」已于 2026-09-08 经用户单项批准完成产品化并真实栈验收（实现 `82458a7` + 验收修复 `6946893`：009 migration、受限多 Agent 编排、SSE 进度与取消、候选素材卡片与加入素材闭环；agent-api 263 / MCP 33 / jest 77 / 真实栈 E2E 全绿，含 Tavily 配额受限时的诚实降级分支）
+**下一步**：Tavily 月度配额恢复后，在真实栈复跑 tests/e2e/consumer-deep-research.spec.ts 的 provider-healthy 分支（完整卡片 + 加入素材断言）；MASTER_PLAN Phase 6 Gate 中「S2 对照实验可复现」仍建议在配额窗口内补一轮 replication（决策记录见 docs/MASTER_PLAN.md「Phase 6 立项决定」）
 **权威计划**：`docs/MASTER_PLAN.md`（阶段与门禁索引）；升级规格全文见 `docs/superpowers/plans/2026-08-28-consumer-brandagent-upgrade.md`
 **迁移规则**：默认只新增表/列，不删除、不重命名旧表或旧列；若必须替换既有约束，须先取得用户授权，记录锁影响、兼容性与回滚边界，并在隔离的 disposable PostgreSQL 上通过迁移/RLS 验证。旧 B 端接口在兼容窗口内继续工作
 
