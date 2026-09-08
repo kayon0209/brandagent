@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from agent_api.api.main import create_app
 from agent_api.api.security import Principal
-from agent_api.providers.base import ModelCallResult
+from agent_api.providers.base import ModelCallResult, ProviderExecutionError
 
 
 AUTH = {"Authorization": "Bearer valid-token"}
@@ -66,7 +66,7 @@ class RecordingLedger:
         self._entries[request_id] = "reserved"
         return {"state": "reserved", "replayed": False}
 
-    async def settle(self, principal, *, request_id, operation, input_tokens, output_tokens, model) -> dict:
+    async def settle(self, principal, *, request_id, operation, input_tokens, output_tokens, model, minimum_total_tokens=None) -> dict:
         self.events.append((request_id, "settle"))
         self._entries[request_id] = "settled"
         return {"state": "settled", "replayed": False}
@@ -117,7 +117,7 @@ class DraftsShim:
         return self._draft
 
 
-def make_client():
+def make_client(*, intent_error: ProviderExecutionError | None = None):
     ledger = RecordingLedger()
     provider = CountingProvider()
 
@@ -149,6 +149,27 @@ def make_client():
                 "suggestion_id": "sg-1", "action": action, "suggested_text": "改写后。",
                 "block_id": block_id, "base_revision": base_revision,
                 "selected_text_hash": "h" * 64, "status": "proposed",
+            }
+
+        @staticmethod
+        async def propose_from_intent(principal, task_id, *, intent, selected_text, block_id, base_revision, start_offset, end_offset, usage_out=None):
+            result = await provider.generate(system="s", prompt="p", prompt_version="editorial-intent")
+            if usage_out is not None:
+                usage_out.update({
+                    "input_tokens": result.input_tokens,
+                    "output_tokens": result.output_tokens,
+                    "model": result.model,
+                    "model_executed": True,
+                })
+            if intent_error is not None:
+                raise intent_error
+            return {
+                "status": "proposed",
+                "suggestion": {
+                    "suggestion_id": "sg-1", "action": "shorten", "suggested_text": "改写后。",
+                    "block_id": block_id, "base_revision": base_revision,
+                    "selected_text_hash": "h" * 64, "status": "proposed",
+                },
             }
 
         @staticmethod
@@ -288,3 +309,29 @@ def test_draft_generate_replay_returns_the_existing_candidate():
     assert data["candidate"]["content_version_id"] == candidate_id
     assert data.get("replayed") is True
     assert provider.calls.count("draft-generation") == 1
+
+
+def test_free_intent_second_model_timeout_settles_the_first_call_and_reports_the_charge():
+    client, ledger, provider = make_client(
+        intent_error=ProviderExecutionError("MODEL_TIMEOUT", "The second provider call timed out.", retryable=True)
+    )
+
+    selected_text = DRAFT_DOCUMENT["document"]["blocks"][0]["text"]
+    response = client.post(
+        f"/api/v1/consumer/projects/{TASK_ID}/suggestions/intent",
+        json={
+            "intent": "精简这句话",
+            "selectedText": selected_text,
+            "blockId": "b1",
+            "baseRevision": 2,
+            "startOffset": 0,
+            "endOffset": len(selected_text) - 1,
+        },
+        headers={**AUTH, "Idempotency-Key": KEY},
+    )
+
+    assert response.status_code == 502, response.text
+    assert response.json()["error"]["message"] == "AI 助手暂时不可用，稿件未做任何改动；本次模型调用已计入额度。"
+    assert provider.calls == ["editorial-intent"]
+    assert (KEY, "settle") in ledger.events
+    assert (KEY, "refund") not in ledger.events

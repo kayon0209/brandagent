@@ -11,6 +11,15 @@ export interface ConsumerMaterialDocument {
   status: 'distilled' | 'duplicate' | 'needs_distillation' | 'needs_review' | 'processing'
 }
 
+/** round-3g D6: import kind + provenance (文字/文件/链接) */
+export type MaterialImportKind = 'text' | 'file' | 'link'
+
+export interface MaterialProvenance {
+  document_type: MaterialImportKind
+  source_url?: string | null
+  original_filename?: string | null
+}
+
 export interface ConsumerMaterialExcerpt {
   excerpt_id: string
   excerpt_type: 'quote' | 'claim' | 'example' | 'voice_sample'

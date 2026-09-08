@@ -17,8 +17,11 @@ export default function ConsumerError({
 }) {
   useEffect(() => {
     // server-side observability hook point; the message itself never
-    // reaches the UI (no raw provider/stack text for C-end users)
-    console.error('[consumer-app-error]', error.digest ?? error.message)
+    // reaches the UI (no raw provider/stack text for C-end users).
+    // Only surface locally in dev — production must not leak internals.
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[consumer-app-error]', error.digest ?? error.message)
+    }
   }, [error])
 
   return (

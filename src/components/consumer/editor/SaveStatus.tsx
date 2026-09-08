@@ -15,7 +15,9 @@ const LABELS: Record<SaveState, string> = {
   dirty: '未保存',
   saving: '正在保存…',
   conflict: '稿件在别处有更新',
-  error: '保存失败，先记在本地',
+  // round-3g A2: the badge itself is the retry affordance — one tap,
+  // spoken as the three states the spec names verbatim
+  error: '保存失败 · 点击重试',
 }
 
 interface SaveStatusProps {
@@ -47,6 +49,11 @@ export function SaveStatus({ state, onResolveConflict, onRetrySave }: SaveStatus
         <button type="button" className={styles.resolveButton} data-testid="save-retry" onClick={onRetrySave}>
           重试保存
         </button>
+      )}
+      {state === 'error' && !onRetrySave && (
+        <span className={styles.saveText} data-testid="save-error-static">
+          （重试入口随编辑器状态栏提供）
+        </span>
       )}
     </span>
   )

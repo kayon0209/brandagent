@@ -43,7 +43,7 @@ class MemoryProjectStore:
         project = self.projects.get(task_id)
         return dict(project) if project and project["workspace_id"] == workspace_id else None
 
-    async def update_project(self, workspace_id: str, task_id: str, *, title, core_idea, intent) -> dict | None:
+    async def update_project(self, workspace_id: str, task_id: str, *, title, core_idea, intent, preferred_style_report_id=None) -> dict | None:
         project = self.projects.get(task_id)
         if not project or project["workspace_id"] != workspace_id:
             return None

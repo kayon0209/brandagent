@@ -152,7 +152,7 @@ AI 建议：只看选区 + 上下文句 + 核心观点 + 已关联摘录
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Next.js 15.5 (src/app/(consumer)/app)              │
+│  Next.js 15.5 (public /app → src/app/(consumer)/workspace) │
 │  稿纸 · Tiptap 选区锚定 · SSE 状态流                 │
 └───────────────┬─────────────────────────────────────┘
                 │ 同源 BFF（/api/brandagent，注入 Clerk token）

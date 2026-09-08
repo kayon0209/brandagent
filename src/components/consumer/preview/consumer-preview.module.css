@@ -51,66 +51,168 @@
   color: var(--ink-soft);
 }
 
-/* WeChat: light paper article (tokens only, no foreign ink) */
-.wechat {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  padding: 20px 22px;
-  color: var(--ink);
+/* ============================================================
+   Round-3 WYSIWYG platform previews — mimic each platform's real
+   reading surface with tokens only (paper/ink palette stays)
+   ============================================================ */
+
+/* --- 公众号文内页 --- */
+.wechatShell {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.wechatCard {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 4px;
+  padding: 22px 18px 30px;
+  box-shadow: 0 2px 10px rgba(15, 15, 15, 0.06);
 }
 
 .wechatTitle {
-  font-size: 17px;
-  font-weight: 600;
-  margin: 0 0 14px;
-  color: var(--ink);
-  font-family: var(--serif);
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 19px;
+  line-height: 1.45;
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 10px;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.wechatMeta {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.45);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+}
+
+.wechatAuthor {
+  color: #576b95;
+}
+
+.wechatBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .wechatParagraph {
+  margin: 0;
   font-size: 15px;
-  line-height: 1.9;
-  margin: 0 0 12px;
-  color: var(--ink);
-  font-family: var(--serif);
+  line-height: 1.75;
+  letter-spacing: 0.02em;
+  color: rgba(0, 0, 0, 0.8);
+  text-align: justify;
 }
 
-/* Xiaohongshu: white card, cover block, quiet tags */
-.xiaohongshu {
-  background: #ffffff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 2px 8px rgba(67, 57, 44, 0.06);
+.wechatQuote {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid #b8860b;
+  background: rgba(184, 134, 11, 0.05);
+  font-size: 14px;
+  line-height: 1.7;
+  color: rgba(0, 0, 0, 0.65);
 }
 
-.xhsCover {
-  height: 88px;
-  background: var(--sand);
-  border-radius: 6px;
+.wechatFooter {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  color: rgba(0, 0, 0, 0.3);
+}
+
+/* --- 小红书 App 卡 --- */
+.xhsShell {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+.xhsCard {
+  width: 100%;
+  max-width: 340px;
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(15, 15, 15, 0.1);
+}
+
+.xhsCoverArea {
+  height: 150px;
+  background: linear-gradient(135deg, #ffd8e4 0%, #ffe9cf 55%, #fff5d6 100%);
+  display: flex;
+  align-items: flex-end;
+  padding: 14px;
+}
+
+.xhsCoverText {
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.4;
+  color: rgba(0, 0, 0, 0.8);
+  max-width: 90%;
+}
+
+.xhsContent {
+  padding: 12px 14px 14px;
+}
+
+.xhsAuthorRow {
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin: 0 0 12px;
-  color: var(--brown);
-  font-size: 22px;
-  font-family: var(--serif);
+  gap: 7px;
+  margin: 10px 0;
+}
+
+.xhsAvatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #b8860b, #d4a917);
+}
+
+.xhsAuthorName {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.xhsFollow {
+  margin-left: auto;
+  font-size: 11px;
+  color: #ff2442;
+  border: 1px solid #ff2442;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.xhsBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.xhsBody p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: rgba(0, 0, 0, 0.85);
 }
 
 .xiaohongshuTitle {
   font-size: 16px;
-  font-weight: 600;
-  margin: 0 0 8px;
-  color: var(--ink);
-  font-family: var(--serif);
-}
-
-.xiaohongshuBody {
-  font-size: 14px;
-  line-height: 1.8;
-  color: var(--ink-soft);
-  margin: 0 0 12px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.4;
+  color: rgba(0, 0, 0, 0.9);
 }
 
 .xiaohongshuTags {
@@ -118,183 +220,413 @@
   flex-wrap: wrap;
   gap: 6px;
   list-style: none;
-  margin: 0;
   padding: 0;
+  margin: 10px 0 0;
 }
 
 .xiaohongshuTags li {
   font-size: 12px;
-  color: #6f7891;
-  background: transparent;
-  padding: 2px 0;
-  border-radius: 0;
+  color: #125f6b;
+  background: rgba(18, 95, 107, 0.06);
+  border-radius: 6px;
+  padding: 2px 8px;
 }
 
-/* Video script: mono time grid (baseline L406-408) */
-.videoScript {
-  background: var(--paper);
-  border: 1px dashed var(--line-dark);
-  border-radius: 4px;
-  padding: 16px 18px;
+.xhsActionBar {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.5);
 }
 
-.videoDuration {
+/* --- 60s 提词器 --- */
+.teleprompter {
+  margin-top: 12px;
+  border: 1px solid rgba(15, 15, 15, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.65);
+  overflow: hidden;
+}
+
+.teleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(15, 15, 15, 0.04);
+  border-bottom: 1px solid rgba(15, 15, 15, 0.06);
+}
+
+.teleDuration {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.telePace {
   font-size: 11px;
-  color: var(--muted);
-  margin: 0 0 10px;
-  font-family: var(--mono);
+  color: var(--ink-soft, #6b7280);
 }
 
 .videoLines {
   list-style: none;
   margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  padding: 6px 0;
 }
 
 .videoLine {
-  display: grid;
-  grid-template-columns: 35px 1fr;
+  display: flex;
   gap: 10px;
+  align-items: baseline;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.videoLine:hover {
+  background: rgba(184, 134, 11, 0.05);
+}
+
+.videoLineActive {
+  background: rgba(184, 134, 11, 0.1);
+  box-shadow: inset 3px 0 0 #b8860b;
 }
 
 .videoTime {
-  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
+  color: var(--ink-soft, #6b7280);
+  flex-shrink: 0;
+  min-width: 38px;
 }
 
 .videoText {
-  font-size: 14px;
-  line-height: 1.8;
-  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.75;
 }
 
-/* Review bubbles */
-.reviewSection {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.teleFooter {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--ink-soft, #6b7280);
+  border-top: 1px solid rgba(15, 15, 15, 0.06);
 }
 
-.reviewTitle {
-  font-size: 15px;
-  color: var(--ink);
-  margin: 0;
-}
+/* ============================================================
+   Skeleton placeholders — round-3b (诉求 2 — 所见即所得)
+   Empty-platform previews use these so the right rail is never blank.
+   They mirror the platform's structural shape (title slot, paragraph
+   slots, quote slot, tag chips, script timestamps) with subtle gray
+   rectangles — the creator reads the SHAPE of the destination, not
+   yet the words.
+   ============================================================ */
 
-.needsFix {
-  padding: 10px 12px;
+/* round-3e visual fix: the static gradient + pulse animation made the
+   skeleton look like a loading state. A destination shape that never
+   stops shimmering reads as "still buffering" — especially when it sits
+   there for the entire blank-draft phase. The skeleton is now a STATIC
+   faint shape (no animation) and gets a clear "示意图 · 写完后这里会出现"
+   badge inside the card so the user understands they're looking at the
+   destination shape, not a pending load. */
+.skeletonPulse {
+  background: rgba(15, 15, 15, 0.05);
   border-radius: 4px;
-  background: var(--paper-warm);
-  border-left: 2px solid var(--accent);
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--ink-soft);
 }
 
-.blocking {
-  composes: needsFix;
-  border-left-color: var(--danger);
+@keyframes skeletonPulse {
+  /* kept for any future caller; intentionally empty */
 }
 
-.reviewEmpty {
-  padding: 10px 12px;
-  border-radius: 4px;
-  background: var(--paper-warm);
-  font-size: 13px;
-  color: var(--ink-soft);
+.wechatTitleSkeleton {
+  composes: skeletonPulse;
+  height: 22px;
+  width: 70%;
+  margin: 0 auto 10px;
 }
 
-/* Action bar: squared buttons, accent reserved for adopt */
+.wechatParagraphSkeleton {
+  composes: skeletonPulse;
+  height: 14px;
+  width: 100%;
+}
+
+.wechatQuoteSkeleton {
+  composes: skeletonPulse;
+  height: 36px;
+  margin: 4px 0;
+  border-left: 3px solid rgba(184, 134, 11, 0.35);
+  border-radius: 2px;
+}
+
+.xiaohongshuTitleSkeleton {
+  composes: skeletonPulse;
+  height: 18px;
+  width: 72%;
+  margin: 6px 0 8px;
+}
+
+.xhsParagraphSkeleton {
+  composes: skeletonPulse;
+  height: 12px;
+  width: 100%;
+}
+
+.xiaohongshuTagSkeleton {
+  composes: skeletonPulse;
+  list-style: none;
+  display: inline-block;
+  font-size: 12px;
+  color: transparent;
+  background: rgba(18, 95, 107, 0.08);
+  border-radius: 6px;
+  padding: 2px 12px;
+  min-width: 56px;
+}
+
+.videoTextSkeleton {
+  composes: skeletonPulse;
+  height: 13px;
+  display: inline-block;
+}
+
+/* ============================================================
+   PrimaryActionBar buttons (round-3c — P0: these three classes were
+   referenced by PrimaryActionBar.tsx but NEVER defined, so the action
+   bar rendered as unstyled <button>s that read as plain text).
+   Button language per the global spec: one solid primary (采用这版),
+   one outlined secondary (重新生成), one text action (准备发布).
+   ============================================================ */
+
 .actionBar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
+  padding: 2px 0 0;
 }
 
 .primaryRed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 22px;
   border: none;
-  border-radius: 3px;
-  background: var(--accent);
-  color: var(--paper);
-  font-size: 14px;
-  padding: 8px 22px;
+  border-radius: 999px;
+  background: var(--accent, #ad5641);
+  color: var(--paper, #fffdf8);
+  font-size: 13.5px;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.primaryRed:hover:not(:disabled) {
+  background: var(--accent-deep, #8f3f2f);
+}
+
+.primaryRed:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .secondary {
-  border: 1px solid var(--line-dark);
-  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 20px;
+  border: 1px solid rgba(173, 86, 65, 0.45);
+  border-radius: 999px;
   background: transparent;
-  color: var(--ink-soft);
-  font-size: 13px;
-  padding: 7px 16px;
+  color: var(--accent, #ad5641);
+  font-size: 13.5px;
+  font-weight: 500;
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 
-.secondary:hover {
-  background: #faf7f0;
+.secondary:hover:not(:disabled) {
+  background: var(--accent-soft, #f3e5df);
+}
+
+.secondary:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .inkSecondary {
-  composes: secondary;
-  border-color: var(--brown);
-  color: var(--brown);
-}
-
-.retry {
-  composes: secondary;
-  border-color: var(--sand-deep);
-  color: var(--ink-soft);
-}
-
-/* custom-channel generic previewer (P2-3): honest plain text, no fake skin */
-.genericChannelPreview {
-  margin-top: 12px;
-  padding: 16px;
-  border: 1px dashed rgba(15, 15, 15, 0.18);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.6);
-}
-
-.genericChannelPreviewNote {
-  margin: 0 0 10px;
-  font-size: 11px;
-  color: var(--ink-soft, #6b7280);
-}
-
-.genericChannelPreviewBody p {
-  margin: 0 0 10px;
-  font-size: 13px;
-  line-height: 1.8;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* N13: source tracing on review bubbles */
-.reviewSourceToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 6px;
   border: none;
-  background: none;
-  padding: 2px 0;
-  margin-top: 2px;
-  font-size: 11px;
-  color: #7a5a08;
+  background: transparent;
+  color: var(--ink-soft, #514b43);
+  font-size: 13.5px;
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
+  text-decoration-color: rgba(81, 75, 67, 0.35);
+  transition: color 0.15s ease;
 }
 
-.reviewSourceQuote {
-  margin: 6px 0 10px;
-  padding: 8px 10px;
-  border-left: 2px solid rgba(184, 134, 11, 0.4);
-  background: rgba(184, 134, 11, 0.04);
+.inkSecondary:hover {
+  color: var(--ink, #27241f);
+  text-decoration-color: currentColor;
+}
+
+/* ============================================================
+   round-3e concept split — panel header w/ mode segmented control,
+   per-tab ready dots, preview captions, polished-mode empty states.
+   ============================================================ */
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
+.modeSwitch {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--paper-warm, #f5f1e8);
+  border: 1px solid rgba(39, 36, 31, 0.08);
+}
+
+.modeTab,
+.modeActive {
+  border: none;
+  background: transparent;
+  font-size: 12.5px;
+  color: var(--ink-soft, #514b43);
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.modeActive {
+  background: var(--accent, #ad5641);
+  color: var(--paper, #fffdf8);
+  font-weight: 600;
+}
+
+.modeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.previewCaption {
+  margin: 0;
   font-size: 12px;
   line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
+  color: var(--ink-soft, #514b43);
+}
+
+.polishedEmpty {
+  margin-top: 12px;
+  padding: 18px 16px;
+  border: 1px dashed rgba(39, 36, 31, 0.18);
+  border-radius: 12px;
+  background: var(--paper-warm, #f5f1e8);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.polishedEmpty p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-soft, #514b43);
+}
+
+.primarySmall {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent, #ad5641);
+  color: var(--paper, #fffdf8);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.primarySmall:hover:not(:disabled) {
+  background: var(--accent-deep, #8f3f2f);
+}
+
+.primarySmall:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tabReadyDot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: var(--green, #657764);
+  vertical-align: middle;
+}
+
+/* round-3e visual fix — the badge that makes the empty-draft skeleton
+   unambiguously NOT a loading state. Sits at the top of every platform
+   skeleton, paired with the bottom caption. */
+.skeletonBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 auto 12px;
+  padding: 4px 12px;
+  border: 1px dashed rgba(173, 86, 65, 0.45);
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--accent, #ad5641);
+  background: rgba(255, 253, 248, 0.6);
+  text-align: center;
+}
+
+.skeletonBadge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent, #ad5641);
+  opacity: 0.5;
+}
+
+/* round-3f (P0-3): mode-aware action strip under the preview panel */
+.modeActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 2px;
 }

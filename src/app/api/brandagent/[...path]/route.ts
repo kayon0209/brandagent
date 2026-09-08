@@ -12,6 +12,21 @@ const ANONYMOUS_ENVELOPE = {
 // End-to-end request body cap (security review P2): the biggest legitimate
 // payload is a material upload (10MB) + JSON envelope headroom.
 const MAX_BODY_BYTES = 12 * 1024 * 1024
+const DEFAULT_UPSTREAM_TIMEOUT_MS = 90_000
+const MODEL_OPERATION_TIMEOUT_MS = 300_000
+
+function isLongRunningModelOperation(path: string[], method: string): boolean {
+  if (method !== 'POST') return false
+  const last = path.at(-1)
+  const penultimate = path.at(-2)
+  return (
+    last === 'generate' ||
+    last === 'regenerate' ||
+    last === 'suggestions' ||
+    (penultimate === 'suggestions' && last === 'intent') ||
+    (penultimate === 'style' && last === 'analyze')
+  )
+}
 
 async function proxy(request: NextRequest, context: RouteContext) {
   const { path } = await context.params
@@ -67,17 +82,18 @@ async function proxy(request: NextRequest, context: RouteContext) {
 
   let upstream: Response
   try {
-    // no hang: a stuck upstream must surface as GATEWAY_UNAVAILABLE in
-    // bounded time, never an infinite "生成中" (runtime audit finding).
-    // SSE streams are exempt: the connection is intentionally long-lived
-    // and aborts on client disconnect — a 90s cap would silently saw
-    // every event stream in half.
+    // Model generation has a measured long tail; its bounded window must
+    // exceed the provider's normal completion time. All other requests keep
+    // the short gateway deadline. SSE remains client-lifetime-bound.
     const isEventStream = path[path.length - 1] === 'events'
+    const timeoutMs = isLongRunningModelOperation(path, request.method)
+      ? MODEL_OPERATION_TIMEOUT_MS
+      : DEFAULT_UPSTREAM_TIMEOUT_MS
     upstream = await fetch(target, {
       method: request.method,
       headers,
       body,
-      ...(isEventStream ? {} : { signal: AbortSignal.timeout(90_000) }),
+      ...(isEventStream ? {} : { signal: AbortSignal.timeout(timeoutMs) }),
     })
   } catch {
     return NextResponse.json(

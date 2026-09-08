@@ -1,5 +1,7 @@
 # BrandAgent Consumer Upgrade Implementation Plan
 
+> **历史计划说明（2026-09-08）**：本文保留当时的实施步骤和原始路径，不能替代当前代码结构。Consumer 的公开地址仍是 `/app`，实际实现已迁至 `src/app/(consumer)/workspace/**` 并由 `src/middleware.ts` 在鉴权后内部重写。当前阶段与门禁以 `docs/MASTER_PLAN.md` 和 `AGENTS.md` 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** 把当前以 BrandFlow 企业审批工作台为主的 BrandAgent，升级为面向个人创作者的 C 端品牌写作产品；前端采用已经确认的“素材抽屉 + 核心观点 + 稿纸编辑 + 平台预览”骨架，后端复用现有证据、版本、渠道、审查、幂等与审计能力，并通过个人创作 API 门面隐藏 B 端组织流程。

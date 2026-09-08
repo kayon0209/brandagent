@@ -105,7 +105,16 @@ class RealMCPClient:
         headers["X-BrandFlow-Workspace"] = self._workspace_id
         headers["X-BrandFlow-Task"] = self._task_id
         headers["X-BrandFlow-Actor"] = self._actor_id
-        http_client = self._http_client_factory() if self._http_client_factory else httpx.AsyncClient(headers=headers, timeout=self._timeout_seconds)
+        # trust_env=False: this is a SAME-HOST service-to-service call.
+        # On developer machines with system-level proxies (TUN mode) the
+        # loopback hop to brand-tools-mcp got hijacked into a 502 from the
+        # proxy — env vars were clean, the OS-level proxy still answered.
+        # Internal topology must never traverse a proxy.
+        http_client = (
+            self._http_client_factory()
+            if self._http_client_factory
+            else httpx.AsyncClient(headers=headers, timeout=self._timeout_seconds, trust_env=False)
+        )
         transport = streamable_http_client(self._url, http_client=http_client)
         return http_client, transport
 

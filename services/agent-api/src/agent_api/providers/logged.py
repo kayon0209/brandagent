@@ -71,5 +71,6 @@ class LoggedLLMProvider(LLMProvider):
                 "MODEL_AUDIT_FAILED_AFTER_SUCCESS",
                 "The model completed, but its audit record could not be persisted. Automatic retry is disabled.",
                 retryable=False,
+                execution_confirmed=True,
             ) from error
         return result

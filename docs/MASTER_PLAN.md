@@ -7,7 +7,7 @@
 
 | 界面 | 路由 | 面向用户 | 状态 |
 |---|---|---|---|
-| 个人创作工作台 | `/app`（`src/app/(consumer)/app/*`） | 个人创作者 | 升级目标，逐 Phase 交付 |
+| 个人创作工作台 | `/app`（实现位于 `src/app/(consumer)/workspace/*`，由 middleware 受保护地内部重写） | 个人创作者 | 升级目标，逐 Phase 交付 |
 | 企业审批工作台（BrandFlow） | `/brandflow` | 品牌团队（内容运营 / 品牌审核 / 最终审批） | 兼容窗口保留，不承载 C 端新功能 |
 | 旧博客助手 | `(dashboard)`、`api/generate/*` | — | 冻结，不再新增功能；下线需单独授权 |
 

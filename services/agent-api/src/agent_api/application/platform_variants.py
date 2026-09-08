@@ -23,10 +23,20 @@ ALLOWED_CONSUMER_CHANNELS = ("wechat_website", "xiaohongshu", "video_script_60s"
 
 
 class VariantGenerationError(RuntimeError):
-    def __init__(self, code: str, message: str, *, retryable: bool) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        retryable: bool,
+        execution_unknown: bool = False,
+        execution_confirmed: bool = False,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.retryable = retryable
+        self.execution_unknown = execution_unknown
+        self.execution_confirmed = execution_confirmed
 
 
 class GenerationFailed(VariantGenerationError):
@@ -36,7 +46,7 @@ class GenerationFailed(VariantGenerationError):
 
 
 class VariantChannelGenerator(Protocol):
-    async def generate(self, *, channel: str, master_content: str, core_idea: str, usage_out: dict | None = None) -> dict: ...
+    async def generate(self, *, channel: str, master_content: str, core_idea: str, style_directives: str | None = None, usage_out: dict | None = None) -> dict: ...
 
 
 class ConsumerVariantStore(Protocol):
@@ -46,6 +56,7 @@ class ConsumerVariantStore(Protocol):
     async def latest_reviews(self, workspace_id: str, task_id: str, content_version_id: str) -> list[dict]: ...
     async def save_variant(self, **payload) -> dict: ...
     async def append_event(self, event: dict) -> None: ...
+    async def get_style_report(self, workspace_id: str, report_id: str) -> dict | None: ...
 
 
 _PROMPT_VERSION = "consumer-variant:v1"
@@ -84,32 +95,40 @@ class ConsumerChannelGeneratorAdapter:
     def __init__(self, *, provider) -> None:
         self._provider = provider
 
-    async def generate(self, *, channel: str, master_content: str, core_idea: str, usage_out: dict | None = None) -> dict:
+    async def generate(self, *, channel: str, master_content: str, core_idea: str, style_directives: str | None = None, usage_out: dict | None = None) -> dict:
         import json as _json
 
         from agent_api.providers.base import ProviderExecutionError
 
+        # 007: when the project has a bound style report, the six-layer
+        # rules ride along as a constraint section — same contract fields,
+        # prompt-only enrichment
+        payload = {"channel": channel, "master_content": master_content, "core_idea": core_idea}
+        if style_directives:
+            payload["style_directives"] = style_directives
         try:
             result = await self._provider.generate(
                 system=_SYSTEM_PROMPT,
-                prompt=_json.dumps(
-                    {"channel": channel, "master_content": master_content, "core_idea": core_idea},
-                    ensure_ascii=False,
-                ),
+                prompt=_json.dumps(payload, ensure_ascii=False),
                 prompt_version=self._PROMPT_VERSION,
             )
         except ProviderExecutionError as error:
             # never leak provider exceptions past the variant boundary
             # (live-stack audit: an unwrapped rejection surfaced as a 500)
             raise VariantGenerationError(
-                error.code if error.code in {"MODEL_CALL_FAILED", "MODEL_TIMEOUT"} else "VARIANT_PROVIDER_FAILED",
+                error.code if error.code == "MODEL_EXECUTION_UNKNOWN" else (
+                    error.code if error.code in {"MODEL_CALL_FAILED", "MODEL_TIMEOUT"} else "VARIANT_PROVIDER_FAILED"
+                ),
                 f"{channel} 版本生成暂时不可用",
                 retryable=error.retryable,
+                execution_unknown=error.code == "MODEL_EXECUTION_UNKNOWN",
+                execution_confirmed=error.execution_confirmed,
             ) from error
         if usage_out is not None:
             usage_out["input_tokens"] = (usage_out.get("input_tokens") or 0) + (result.input_tokens or 0)
             usage_out["output_tokens"] = (usage_out.get("output_tokens") or 0) + (result.output_tokens or 0)
             usage_out["model"] = result.model
+            usage_out["model_executed"] = True
         try:
             payload = _json.loads(result.content)
             content = str(payload["content"])
@@ -182,11 +201,55 @@ class PlatformVariantService:
             raise NotFoundError(f"project {task_id} not found in this workspace")
         return str(project.get("core_idea") or "")
 
+    async def _style_directives(self, principal: Principal, task_id: str) -> str | None:
+        """007: if the project binds a distilled style report, flatten its
+        six layers into one prompt constraint section. A lapsed reference
+        (report deleted; FK SET NULL) or unreadable layers read as NO
+        binding — style enrichment never blocks generation."""
+        project = await self._store.get_project(principal.workspace_id, task_id)
+        if project is None:
+            return None
+        report_id = project.get("preferred_style_report_id")
+        if not report_id:
+            return None
+        try:
+            report = await self._store.get_style_report(principal.workspace_id, str(report_id))
+        except Exception:  # noqa: BLE001 — enrichment is best-effort
+            return None
+        if report is None:
+            return None
+        layers = report.get("layers") or {}
+        sections = []
+        layer_titles = {
+            "l1_language_dna": "语言 DNA",
+            "l2_structure_template": "结构模板",
+            "l3_topic_logic": "选题逻辑",
+            "l4_evidence_strategy": "素材策略",
+            "l5_cognitive_frame": "认知框架",
+            "l6_visual_guide": "视觉风格",
+        }
+        for key, title in layer_titles.items():
+            layer = layers.get(key) or {}
+            rules = [str(rule) for rule in layer.get("rules", []) if str(rule).strip()]
+            summary = str(layer.get("summary", "")).strip()
+            # an uninferable layer has no rules — its "无法推断" note is
+            # not a constraint and must not enter the prompt
+            if not rules:
+                continue
+            lines = [f"- {rule}" for rule in rules]
+            if summary:
+                lines.append(f"- 总体：{summary}")
+            sections.append(f"【{title}】\n" + "\n".join(lines))
+        if not sections:
+            return None
+        return "写作风格规则（请遵守以下约束改写，风格优先级高于默认语气）：\n" + "\n".join(sections)
+
     async def generate_variants(self, principal: Principal, task_id: str, *, usage_out: dict | None = None) -> dict:
         """Generate variants for the default consumer channels in one call."""
 
         master = await self._master(principal, task_id)
         core_idea = await self._core_idea(principal, task_id)
+        style_directives = await self._style_directives(principal, task_id)
         channels: dict[str, dict] = {}
         for channel in self._channels:
             try:
@@ -194,6 +257,7 @@ class PlatformVariantService:
                     channel=channel,
                     master_content=master["content"],
                     core_idea=core_idea,
+                    style_directives=style_directives,
                     usage_out=usage_out,
                 )
                 saved = await self._save(principal, task_id, master, channel, result)
@@ -212,6 +276,12 @@ class PlatformVariantService:
                     }
                 )
             except VariantGenerationError as error:
+                if error.execution_unknown and usage_out is not None:
+                    # One ledger entry covers this fan-out. A lost response
+                    # for any channel means actual aggregate tokens are
+                    # unknowable, so settle the reservation estimate rather
+                    # than undercharging or refunding a possibly executed call.
+                    usage_out["execution_unknown"] = True
                 channels[channel] = {
                     "status": "failed",
                     "retryable": error.retryable,

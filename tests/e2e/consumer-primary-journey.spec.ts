@@ -73,13 +73,17 @@ async function mockAll(page: Page) {
   await page.route(`**/api/v1/consumer/projects/${TASK_ID}/draft`, route =>
     route.fulfill({ json: { success: true, data: draft } }),
   )
-  await page.route(`**/api/v1/consumer/projects/${TASK_ID}/variants/preview`, route =>
-    route.fulfill({
+  await page.route(`**/api/v1/consumer/projects/${TASK_ID}/variants/preview`, route => {
+    return route.fulfill({
       json: {
         success: true,
         data: {
           requires_approval: false,
           master_content_version_id: 'mv-1',
+          // round-3f: the preview rail derives its tab set from the
+          // server-supported channel list; without it the rail falls back
+          // to the generic channel and the wechat shape never mounts
+          supported_channels: ['wechat_website', 'xiaohongshu', 'video_script_60s'],
           channels: {
             wechat_website: { content: '第一段。\n第二段。', content_version_id: 'cv-1', master_content_version_id: 'mv-1' },
             xiaohongshu: { content: '笔记一句话。 #标签', content_version_id: 'cv-2', master_content_version_id: 'mv-1' },
@@ -87,8 +91,8 @@ async function mockAll(page: Page) {
           },
         },
       },
-    }),
-  )
+    })
+  })
   await page.route(`**/api/v1/consumer/projects/${TASK_ID}/usage`, route =>
     route.fulfill({ json: { success: true, data: { used: 1200, quota: 30000 } } }),
   )
@@ -109,7 +113,10 @@ test('[mock] full consumer journey from material import to export preparation', 
   await expect(page.getByText('平台预览')).toBeVisible()
   await expect(page.getByTestId('wechat-paragraphs')).toBeVisible()
   await expect(page.getByText('发布前再看一眼')).toBeVisible()
-  await expect(page.getByRole('button', { name: '采用这版' })).toBeVisible()
+  // round-3e+: the rail is dual-mode; the mock ships variants + a master,
+  // so the polished rail shows the refined result, not the 定稿 gate.
+  // The master action is now 重新生成 (per-channel regenerate).
+  await expect(page.getByTestId('polished-caption')).toBeVisible()
   // 准备发布 exists BOTH in the topbar and the primary action bar (v4 spec);
   // scope to the topbar to keep the locator strict.
   await expect(page.getByRole('banner').getByRole('button', { name: '准备发布' })).toBeVisible()

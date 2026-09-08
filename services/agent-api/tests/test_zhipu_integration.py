@@ -12,19 +12,23 @@ pytestmark = pytest.mark.skipif(os.getenv("RUN_ZHIPU_INTEGRATION") != "true", re
 
 
 @pytest.mark.asyncio
-async def test_glm_47_real_provider_returns_usage_without_exposing_content() -> None:
+async def test_configured_real_provider_returns_usage_without_exposing_content() -> None:
     repository_root = Path(__file__).resolve().parents[3]
     load_dotenv(repository_root / ".env.local", override=False)
     api_key = os.getenv("GLM_API_KEY")
     assert api_key, "GLM_API_KEY must be configured locally"
-    provider = ZhipuProvider(api_key=SecretStr(api_key), model=os.getenv("GLM_MODEL", "glm-4.7"))
+    provider = ZhipuProvider(
+        api_key=SecretStr(api_key),
+        model=os.getenv("GLM_MODEL", "glm-4.7"),
+        base_url=os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
+    )
     result = await provider.generate(
         system="Return one short JSON object. Do not include reasoning.",
         prompt='Return exactly: {"status":"ok"}',
         prompt_version="provider-verification-v1",
     )
     assert result.provider == "zhipu"
-    assert result.model == "glm-4.7"
+    assert result.model == os.getenv("GLM_MODEL", "glm-4.7")
     assert len(result.content) > 0
     print({
         "provider": result.provider,

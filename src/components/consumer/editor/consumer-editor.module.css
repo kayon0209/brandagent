@@ -110,9 +110,15 @@
   transition: background 0.15s ease, color 0.15s ease;
 }
 
-.preparePublish:hover {
+.preparePublish:hover:not(:disabled) {
   background: var(--brown);
   color: white;
+}
+
+/* round-3e (#3): disabled until a master + one platform variant exist */
+.preparePublish:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* ------------------------------------------------------------------ */
@@ -137,7 +143,19 @@
 
 .main {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* the editor stack (CoreIdeaBlock + manuscript paper) fills the column
+   and centers at 720px; round-3c fix: the previous `justify-content:
+   center` horizontal flex put two width:100% siblings side by side and
+   shrank them to ~620px, leaving wide gray gutters on 1100–1280 viewports */
+.main > * {
+  width: 100%;
+  max-width: 720px;
 }
 
 .manuscriptColumn {
@@ -336,6 +354,8 @@
 /* suggestion popover: paper, serif reading text */
 .suggestionPopover {
   position: fixed;
+  top: 0;
+  left: 0;
   max-width: 360px;
   background: var(--paper);
   border: 1px solid var(--line-dark);
@@ -545,4 +565,68 @@
   border-radius: 8px;
   padding: 6px 8px;
   box-shadow: 0 4px 14px rgba(15, 15, 15, 0.1);
+}
+
+/* round-3e (#4): draft-empty state + success banner live INSIDE the paper
+   column (720px), not stretched across the whole gray editor column where
+   they read like system notifications. */
+.editorExtras {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 4px 24px 0;
+}
+
+/* ===== round-3g A: manuscript micro-tab + secondary action bar ===== */
+.manuscriptMicroTab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 720px;
+  margin: 0 auto 10px;
+  padding: 6px 4px;
+}
+
+.manuscriptMicroTitle {
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--accent, #ad5641);
+}
+
+.manuscriptMicroSave {
+  font-size: 11px;
+  color: var(--accent, #ad5641);
+}
+
+.secondaryActionBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px 0;
+  max-width: 720px;
+  margin: 0 auto;
+  font-size: 12px;
+  color: var(--ink-soft, #6b7280);
+}
+
+.secondaryActionBar button {
+  border: none;
+  background: none;
+  font-size: 12.5px;
+  color: var(--ink, #1f2937);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.secondaryActionBar button:hover {
+  background: rgba(184, 134, 11, 0.07);
+  color: #7a5a08;
+}
+
+.secondaryActionBar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

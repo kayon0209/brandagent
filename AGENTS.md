@@ -38,10 +38,11 @@ ai-blog-assistant/
 │   └── styles/            # 全局 CSS（globals.css）
 ├── docs/                  # 项目文档（PRD、架构图、会议记录）
 │   ├── MASTER_PLAN.md     # 升级阶段与门禁权威索引
+│   ├── acceptance/        # 可复跑的版本化验收指南（不放一次性结果）
 │   ├── PRD-v2.md
 │   ├── architecture.md
 │   ├── brandflow-openapi.yaml  # BrandFlow V2 API 权威契约
-│   └── migrations/        # 按编号递增、只前进的 SQL migration
+│   ├── migrations/        # 按编号递增、只前进的 SQL migration
 │   └── deployment/        # 容器启动、数据库角色初始化与运维手册
 ├── _sandbox/              # 实验区（Prompt 测试、临时脚本）不进生产
 ├── public/                # 静态资源
@@ -178,12 +179,12 @@ SUPABASE_SERVICE_ROLE_KEY= # 必填，Supabase 服务密钥（仅服务端）
 
 ## 10. 当前阶段
 
-**阶段**：Consumer Upgrade Phase 0 — 规格、工具链与契约基线
-**下一步**：按 `docs/MASTER_PLAN.md` 逐 Phase 推进；每个 Phase 的验收门禁通过并经用户明确回复「继续」后，才进入下一 Phase
+**阶段**：Consumer Upgrade Phase 5 已完成实现与当前 checkout 验收；正在收口仓库、文档与可提交边界
+**下一步**：完成本轮整理并形成可审查提交集；Phase 6 仍需用户单独立项，不因 Phase 5 完成自动进入
 **权威计划**：`docs/MASTER_PLAN.md`（阶段与门禁索引）；升级规格全文见 `docs/superpowers/plans/2026-08-28-consumer-brandagent-upgrade.md`
-**迁移规则**：数据库迁移只新增表/列，不删除、不重命名旧表或旧列；旧 B 端接口在兼容窗口内继续工作
+**迁移规则**：默认只新增表/列，不删除、不重命名旧表或旧列；若必须替换既有约束，须先取得用户授权，记录锁影响、兼容性与回滚边界，并在隔离的 disposable PostgreSQL 上通过迁移/RLS 验证。旧 B 端接口在兼容窗口内继续工作
 
 ---
 
-_最后更新：2026-08-28 | 维护人：李凯盟_
+_最后更新：2026-09-08 | 维护人：李凯盟_
 _修改本文件需通知相关开发者，规则变更先改文档再改代码。_

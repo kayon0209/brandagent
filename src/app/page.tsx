@@ -30,7 +30,7 @@ export default async function HomePage() {
       <header className="landing-header">
         <span className="landing-brand">BrandAgent</span>
         <Link href="/app" className="landing-enter">
-          {userId ? '进入工作台' : '登录并开始写作'}
+          {userId ? '项目' : '登录并开始写作'}
         </Link>
       </header>
 
@@ -45,21 +45,24 @@ export default async function HomePage() {
           是每一句都还得像你自己，而且站得住。
         </p>
         <Link href="/app" className="landing-cta">
-          {userId ? '打开我的写作台' : '免费开始（每月 30000 tokens 额度）'}
+          {userId ? '继续写作' : '免费开始写作'}
         </Link>
+        {!userId && (
+          <p className="landing-cta-note">内置每月 AI 额度；写作与保存不消耗额度，无需绑定任何卡。</p>
+        )}
       </section>
 
       <section className="landing-promises" aria-label="我们的三条承诺">
         <div className="landing-promise">
-          <h2>AI 失败，绝不改你的稿子</h2>
+          <h2>始终保留你的原稿</h2>
           <p>AI 只在被要求的地方给出建议，接受前你的稿纸纹丝不动；生成失败也不会留下半截内容。</p>
         </div>
         <div className="landing-promise">
-          <h2>不代替你发布</h2>
+          <h2>发布始终由你决定</h2>
           <p>预览随便看，发布永远由你在平台后台亲手完成——这是刻意的安全设计，不是功能缺失。</p>
         </div>
         <div className="landing-promise">
-          <h2>没有来源的事实，不写</h2>
+          <h2>每个事实都能回看来源</h2>
           <p>出现无法溯源的数字或事实时，AI 宁可拒绝改写；每条可引用素材都能点开看到原文出处。</p>
         </div>
       </section>

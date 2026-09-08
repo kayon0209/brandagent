@@ -1,8 +1,8 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'AI 写作助手 · 交互演示',
-  description: 'AI 驱动的中文博客写作助手交互演示',
+  title: 'BrandAgent · 交互演示',
+  description: 'BrandAgent 个人品牌创作工作台的交互演示',
 }
 
 export default function DemoPage() {

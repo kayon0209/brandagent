@@ -93,7 +93,9 @@ class PostgresConsumerProjectStore:
                 """SELECT p.task_id, p.workspace_id,
                           t.title AS title,
                           p.core_idea, p.writing_intent,
-                          p.active_master_version_id
+                          p.active_master_version_id,
+                          p.preferred_style_report_id,
+                          p.updated_at
                    FROM consumer_projects p
                    JOIN content_tasks t ON t.task_id = p.task_id AND t.workspace_id = p.workspace_id
                    WHERE p.workspace_id=%s AND p.task_id=%s""",
@@ -130,7 +132,7 @@ class PostgresConsumerProjectStore:
                 projects.append(project)
         return projects
 
-    async def update_project(self, workspace_id: str, task_id: str, *, title: str | None, core_idea: str | None, intent: str | None) -> dict | None:
+    async def update_project(self, workspace_id: str, task_id: str, *, title: str | None, core_idea: str | None, intent: str | None, preferred_style_report_id: str | None = None) -> dict | None:
         async with self._pool.connection() as connection, connection.transaction():
             await self._scope(connection, workspace_id)
             if title is not None:
@@ -138,14 +140,18 @@ class PostgresConsumerProjectStore:
                     "UPDATE content_tasks SET title=%s WHERE workspace_id=%s AND task_id=%s",
                     (title, workspace_id, task_id),
                 )
-            if core_idea is not None or intent is not None:
+            if core_idea is not None or intent is not None or preferred_style_report_id is not None:
+                # 007: style binding is a plain column write; FK ON DELETE
+                # SET NULL means a lapsed report reference reads as None —
+                # generation then treats the project as unstyled, no error
                 await connection.execute(
                     """UPDATE consumer_projects
                        SET core_idea=COALESCE(%s, core_idea),
                            writing_intent=COALESCE(%s, writing_intent),
+                           preferred_style_report_id=COALESCE(%s, preferred_style_report_id),
                            updated_at=NOW()
                        WHERE workspace_id=%s AND task_id=%s""",
-                    (core_idea, intent, workspace_id, task_id),
+                    (core_idea, intent, preferred_style_report_id, workspace_id, task_id),
                 )
         return await self.get_project(workspace_id, task_id)
 
@@ -491,3 +497,98 @@ class PostgresConsumerProjectStore:
         if hasattr(value, "hex") and not isinstance(value, str):
             return str(value)
         return value
+
+    # ------------------------------------------------------------------
+    # style distillation reports (round-3 six-layer feature, migration 006)
+    # ------------------------------------------------------------------
+
+    async def insert_style_report(
+        self,
+        workspace_id: str,
+        form: str,
+        language: str,
+        layers: dict,
+        corpus_digest: str,
+        *,
+        corpus_stats: dict | None = None,
+        corpus_articles: list[dict] | None = None,
+    ) -> dict:
+        async with self._pool.connection() as connection:
+            await self._scope(connection, workspace_id)
+            cursor = await connection.execute(
+                """INSERT INTO style_reports
+                       (workspace_id, form, language, layers, corpus_digest, corpus_stats, corpus_articles)
+                   VALUES (%s, %s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb)
+                   RETURNING report_id, form, language, layers, corpus_digest,
+                             corpus_stats, corpus_articles, created_at""",
+                (
+                    workspace_id,
+                    form,
+                    language,
+                    json.dumps(self._jsonable(layers), ensure_ascii=False),
+                    corpus_digest,
+                    json.dumps(self._jsonable(corpus_stats or {}), ensure_ascii=False),
+                    json.dumps(self._jsonable(corpus_articles or []), ensure_ascii=False),
+                ),
+            )
+            row = await cursor.fetchone()
+            report = dict(row)
+            report["report_id"] = str(report["report_id"])
+            return report
+
+    async def list_style_reports(self, workspace_id: str) -> list[dict]:
+        async with self._pool.connection() as connection:
+            await self._scope(connection, workspace_id)
+            cursor = await connection.execute(
+                """SELECT report_id, form, language, layers, corpus_digest, corpus_stats, corpus_articles, created_at
+                   FROM style_reports WHERE workspace_id = %s
+                   ORDER BY created_at DESC LIMIT 50""",
+                (workspace_id,),
+            )
+            rows = await cursor.fetchall()
+        reports = []
+        for row in rows:
+            report = dict(row)
+            report["report_id"] = str(report["report_id"])
+            reports.append(report)
+        return reports
+
+    async def find_by_digest(self, workspace_id: str, form: str, language: str, corpus_digest: str) -> dict | None:
+        """P0-A: exact-corpus replay lookup. Same workspace + form +
+        language + digest means the model already distilled THIS corpus —
+        return the stored report instead of billing a second analysis."""
+        async with self._pool.connection() as connection:
+            await self._scope(connection, workspace_id)
+            cursor = await connection.execute(
+                """SELECT report_id, form, language, layers, corpus_digest, corpus_stats, corpus_articles, created_at
+                   FROM style_reports
+                   WHERE workspace_id=%s AND form=%s AND language=%s AND corpus_digest=%s
+                   LIMIT 1""",
+                (workspace_id, form, language, corpus_digest),
+            )
+            row = await cursor.fetchone()
+        if row is None:
+            return None
+        report = dict(row)
+        report["report_id"] = str(report["report_id"])
+        return report
+
+    async def get_style_report(self, workspace_id: str, report_id: str) -> dict | None:
+        """P0-B: single-report fetch for the apply-to-writing entry.
+        RLS scopes the read to the workspace; other workspaces' ids are
+        plain None (404 at the route, no existence leak)."""
+        async with self._pool.connection() as connection:
+            await self._scope(connection, workspace_id)
+            cursor = await connection.execute(
+                """SELECT report_id, form, language, layers, corpus_digest, corpus_stats, corpus_articles, created_at
+                   FROM style_reports
+                   WHERE workspace_id=%s AND report_id=%s
+                   LIMIT 1""",
+                (workspace_id, report_id),
+            )
+            row = await cursor.fetchone()
+        if row is None:
+            return None
+        report = dict(row)
+        report["report_id"] = str(report["report_id"])
+        return report

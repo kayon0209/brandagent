@@ -15,6 +15,8 @@ out/
 .claude/settings.local.json
 # Local Playwright authentication state. Contains session credentials and must never be committed.
 tests/e2e/.auth/
+# Local Clerk tickets are credentials, never source artifacts.
+.clerk-ticket*.tmp
 
 # WorkBuddy 项目私有记忆（工作日志/记忆，禁止进入公开仓库）
 .workbuddy/
@@ -27,6 +29,10 @@ tsconfig.tsbuildinfo
 # 实验区（Prompt 测试、临时脚本）——不进生产
 _sandbox/
 test-results/
+.tmp_research/
+# Personal career material belongs to the workspace owner, not the product repository.
+docs/resume-brandagent-ai-pm.md
 # research 实验运行产物（Codex 原规则 research_runs/ 与实际目录 research/runs/ 不匹配，修正）
 **/research/runs/
-.next.bak.*/
+# Interrupted Next builds are disposable; never keep backup trees at repo root.
+.next.*-bak.*/

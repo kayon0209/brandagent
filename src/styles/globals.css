@@ -394,7 +394,7 @@
 
 .landing-enter:hover,
 .landing-footer-enter:hover {
-  border-color: rgba(184, 134, 11, 0.55);
+  border-color: rgba(173, 86, 65, 0.55);
 }
 
 .landing-hero {
@@ -419,7 +419,7 @@
 
 .landing-cta {
   display: inline-block;
-  background: #b8860b;
+  background: var(--accent, #ad5641);
   color: #fff;
   font-size: 0.9375rem;
   padding: 12px 26px;
@@ -429,7 +429,7 @@
 }
 
 .landing-cta:hover {
-  background: #a0750a;
+  background: var(--accent-deep, #8f3f2f);
 }
 
 .landing-promises {
@@ -469,14 +469,42 @@
   margin: 0 0 16px;
 }
 
+/* round-3c: steps get a real 01/02/03/04 visual instead of a bare list —
+   scans better than a wall of text */
 .landing-flow ol {
+  list-style: none;
+  counter-reset: landing-step;
   margin: 0;
-  padding-left: 20px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
 }
 
 .landing-flow li {
+  counter-increment: landing-step;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
   font-size: 0.875rem;
-  line-height: 2.2;
+  line-height: 1.9;
+  color: var(--ink-soft, #6b7280);
+}
+
+.landing-flow li::before {
+  content: "0" counter(landing-step);
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent, #ad5641);
+  min-width: 2ch;
+}
+
+/* round-3c: the CTA sub-caption turns model-language (tokens) into a
+   plain sentence about what the user actually gets */
+.landing-cta-note {
+  margin: 12px 0 0;
+  font-size: 0.8125rem;
   color: var(--ink-soft, #6b7280);
 }
 
@@ -494,4 +522,80 @@
   font-size: 0.75rem;
   color: var(--ink-soft, #6b7280);
   margin: 0;
+}
+
+/* ============================================================
+   Consumer workspace GLOBAL utilities (round-3c, 2026-09-05)
+   Pages reference these by RAW string className — they must stay in a
+   non-module stylesheet (a .module.css silently hash-renames them and
+   every consumer-* button/input/label renders browser-default).
+   Palette: consumer-tokens.css --accent (#ad5641 焦糖).
+   Button language: primary = solid caramel pill / secondary = outline /
+   text = bare link — one primary per screen.
+   ============================================================ */
+
+.consumer-field-label {
+  display: block;
+  font-size: 13px;
+  color: var(--ink-soft, #514b43);
+  margin: 10px 0 4px;
+}
+
+.consumer-text-input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--line-dark, #beb4a6);
+  border-radius: 8px;
+  background: var(--paper, #fffdf8);
+  color: var(--ink, #27241f);
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.consumer-text-input:focus {
+  outline: none;
+  border-color: var(--accent, #ad5641);
+  box-shadow: 0 0 0 3px rgba(173, 86, 65, 0.14);
+}
+
+.consumer-primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 26px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent, #ad5641);
+  color: var(--paper, #fffdf8);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.08s ease;
+}
+
+.consumer-primary-button:hover:not(:disabled) {
+  background: var(--accent-deep, #8f3f2f);
+}
+
+.consumer-primary-button:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+.consumer-primary-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.consumer-primary-button:focus-visible {
+  outline: 2px solid var(--accent, #ad5641);
+  outline-offset: 2px;
+}
+
+.consumer-project-idea {
+  display: block;
+  font-size: 12px;
+  color: var(--muted, #8a8278);
+  margin-top: 2px;
 }

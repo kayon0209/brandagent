@@ -121,6 +121,12 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
     usage_store = PostgresUsageLedgerStore(database_url)
     consumer_usage = UsageLedgerService(store=usage_store)
 
+    # round-3: six-layer author style distillation shares the consumer
+    # project store pool (RLS-scoped reads/writes on style_reports)
+    from agent_api.application.style_distillation import StyleDistillationService
+
+    consumer_style = StyleDistillationService(store=consumer_project_store, provider=provider)
+
     class ConsumerApps:
         """ConsumerProjectsApp protocol bundle wired into create_app."""
 
@@ -136,6 +142,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             # the MCP spec table); falls back to the built-in previews
             # when the MCP service is unreachable
             self.channel_validator = channel_validator
+            self.style = consumer_style
 
     mcp_client = RealMCPClient(
         mcp_url,
@@ -174,6 +181,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             stack.push_async_callback(suggestion_store.close)
             stack.push_async_callback(variant_store.close)
             stack.push_async_callback(usage_store.close)
+            stack.push_async_callback(provider.aclose)
             await mcp_client.discover()
             saver = await stack.enter_async_context(postgres_checkpointer(checkpoint_database_url))
             runtime.delegate = TaskWorkflowService(

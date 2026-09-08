@@ -119,7 +119,7 @@ describe('SaveStatus', () => {
     ['saving', '正在保存'],
     ['saved', '已保存'],
     ['conflict', '稿件在别处有更新'],
-    ['error', '先记在本地'],
+    ['error', '保存失败 · 点击重试'],  // round-3g A2 copy
   ] as const)('renders a human state for "%s"', (state, text) => {
     render(<SaveStatus state={state} onResolveConflict={jest.fn()} />)
     expect(screen.getByText(new RegExp(text))).toBeInTheDocument()

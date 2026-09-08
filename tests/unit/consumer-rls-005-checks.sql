@@ -17,7 +17,7 @@ DECLARE table_name TEXT;
 BEGIN
   FOREACH table_name IN ARRAY ARRAY[
     'creator_profiles','consumer_projects','consumer_drafts','material_excerpts',
-    'project_material_links','editor_suggestions','usage_ledger'
+    'project_material_links','editor_suggestions','usage_ledger','style_reports'
   ] LOOP
     SELECT relrowsecurity, relforcerowsecurity INTO rls_ok, force_ok
       FROM pg_class WHERE relname = table_name;

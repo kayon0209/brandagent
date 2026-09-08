@@ -35,10 +35,18 @@ class MaterialImportRequest(ConsumerModel):
 
 @dataclass(frozen=True, slots=True)
 class ParsedMaterial:
-    """Parser output: a named body of text ready for chunking."""
+    """Parser output: a named body of text ready for chunking.
+
+    document_type/source_url/original_filename (round-3g D6): the
+    user-visible import kind (文字/文件/链接) and its provenance. Defaults
+    keep every existing call site working unchanged.
+    """
 
     name: str
     content: str
+    document_type: str = "text"
+    source_url: str | None = None
+    original_filename: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,10 +156,16 @@ _PRIVATE_PREFIXES = (
 def assert_safe_material_url(url: str) -> str:
     """Validate a user-submitted URL for material import; raise on private targets.
 
-    Returns the canonical http(s) URL. DNS-based private resolution happens at
-    fetch time; this gate rejects literal private hosts, ALL numeric IPv4
-    spellings (dotted, integer, hex, octal — inet_aton normalizes them),
-    non-http(s) schemes, and missing hosts outright.
+    Returns the canonical http(s) URL. This gate rejects literal private
+    hosts, ALL numeric IPv4 spellings (dotted, integer, hex, octal —
+    inet_aton normalizes them), non-http(s) schemes, and missing hosts
+    outright.
+
+    NOTE: this is the FIRST-hop literal-host check only. Resolving every
+    DNS record to reject private ranges, plus per-redirect-hop re-validation,
+    is performed by the application layer (``MaterialService.import_url``) —
+    not here. The old docstring claimed resolution happened "at fetch time",
+    which was false: no post-resolution IP check existed. That claim is gone.
     """
     try:
         parts = urlsplit(url)
@@ -228,6 +242,14 @@ def validate_upload(filename: str, payload: bytes, content_type: str, limits: Up
             raise MaterialValidationError("Spoofed MIME type: payload is not a PDF document")
         if b"/encrypt" in payload.lower()[:65536]:
             raise MaterialValidationError("encrypted PDFs are not supported")
+        # We cannot read a PDF's text layer from raw bytes (utf-8 replace
+        # would import garbage as content). The upload reached us fine; the
+        # media type is simply not processable here — 415, not 422.
+        from agent_api.domain.errors import UnsupportedMediaTypeError
+
+        raise UnsupportedMediaTypeError(
+            "当前版本不支持 PDF 文件导入（无法提取文本）。请改用「粘贴文字」导入正文。"
+        )
 
     # 3. DOCX family: declared DOCX must be a zip package, and never macro-enabled.
     if declared == _DOCX_MIME or extension == "docx":

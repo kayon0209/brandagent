@@ -65,16 +65,29 @@ Agent readiness fails closed when PostgreSQL checkpoint isolation, GLM configura
 - `brandflow_checkpoint` uses the separate `brandflow_checkpoint` schema and must not equal the business role.
 - Apply numbered migrations to a fresh disposable database before any shared environment.
 
-### Applying a new migration to an EXISTING stack (e.g. 005)
+### Applying missing migrations to an EXISTING stack (005–008)
 
 `docker-entrypoint-initdb.d` only runs when the persistent volume is
 FIRST initialized. For an already-running stack, apply the migration
-explicitly — 005 is idempotent (safe to re-run) and additive only:
+explicitly. Schedule a maintenance window first: 008 replaces the existing
+`source_documents.document_type` CHECK constraint, so it takes an exclusive
+table lock even though it neither deletes rows nor columns. Do not apply any
+migration merely to re-run a test.
+
+After the Compose definition containing the 005–008 mounts has been rolled
+out, apply only the migration files absent from that database, in order:
 
 ```powershell
-docker compose exec postgres psql -U postgres -d brandflow `
-  -v ON_ERROR_STOP=1 `
-  -f /docker-entrypoint-initdb.d/06-consumer-rls-force.sql
+foreach ($migration in @(
+  '06-consumer-rls-force.sql',
+  '07-style-reports.sql',
+  '08-style-report-enrichment.sql',
+  '09-consumer-material-kinds.sql'
+)) {
+  docker compose exec postgres psql -U postgres -d brandflow `
+    -v ON_ERROR_STOP=1 `
+    -f "/docker-entrypoint-initdb.d/$migration"
+}
 ```
 
 Verify after applying (owner bypass must read `closed`):
@@ -84,7 +97,7 @@ docker compose exec postgres psql -U postgres -d brandflow -t -c `
   "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='consumer_projects';"
 ```
 
-Never delete the data volume to "re-run" migrations; upgrade in place. The consumer gate (`RUN_BRANDFLOW_DB_TESTS=true pnpm test:db:consumer`) applies 001-005 and asserts the 004 RLS policies plus the 005 FORCE hardening (owner bypass closed) on a disposable container.
+Never delete the data volume to "re-run" migrations; upgrade in place. The consumer gate (`RUN_BRANDFLOW_DB_TESTS=true pnpm test:db:consumer`) applies 001–008 on a disposable container, verifies the 004 workspace policies and 005 FORCE hardening (including owner bypass closed), verifies 006 `style_reports` RLS, and proves 007/008 schema contracts.
 - Content versions, decisions, lineage and audit events are append-only. Never repair them with direct updates.
 
 ## Recovery
@@ -115,14 +128,54 @@ Export is server-gated. Confirm all required master/channel/final decisions are 
 
 ## Verification
 
+> **pytest 必须分服务目录运行**（v4 P2-2 修正）。两个服务各有独立的
+> `pyproject.toml` 与 `pythonpath`；从仓库根目录一次性传两个 `tests` 目录
+> 会因 `pythonpath` 冲突报 `ModuleNotFoundError: tests.test_editorial_assist`。
+> 正确跑法：分别进入两个目录跑。
+
 ```powershell
-.\services\agent-api\.venv\Scripts\python.exe -m pytest -p no:cacheprovider services\agent-api\tests services\brand-tools-mcp\tests
+# agent-api
+cd services/agent-api
+..\agent-api\.venv\Scripts\python.exe -m pytest -p no:cacheprovider tests
+cd ..\..
+
+# brand-tools-mcp（复用 agent-api 的 venv 解释器）
+cd services\brand-tools-mcp
+..\agent-api\.venv\Scripts\python.exe -m pytest -p no:cacheprovider tests
+cd ..\..
+
+# 真实 PostgreSQL 回归（可选，需 disposable PG + RUN_AGENT_DB_TESTS=true）
+$env:RUN_AGENT_DB_TESTS="true"
+$env:AGENT_TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:54998/postgres"
+cd services/agent-api
+..\agent-api\.venv\Scripts\python.exe -m pytest -p no:cacheprovider tests
+cd ..\..
+```
+
+前端：
+
+```powershell
 node node_modules\next\dist\bin\next lint
 node node_modules\next\dist\bin\next build
 node node_modules\@playwright\test\cli.js test --list
 ```
 
 Authenticated Playwright execution requires `BRANDFLOW_E2E_STORAGE_STATE`; live API gate coverage additionally requires `BRANDFLOW_E2E_API_TOKEN` and a disposable database. Skipped tests must not be reported as executed capabilities.
+
+## Dev backend reload rule (v4 P1-3)
+
+`scripts/start-real-agent-api.mjs` 用 `uvicorn.Server` + `SelectorEventLoop`，
+**故意不开 `--reload`**：在 Windows + SelectorEventLoop 下 reload 再加载器
+不稳，反而会让"改了没生效"更难排查。因此定为一条硬规则：
+
+> **改了 `services/agent-api/src/agent_api/application/` 或 `repositories/`
+> 下的任何文件后，必须重启 18000**：
+> `node scripts/start-real-agent-api.mjs`（先杀掉旧 18000 进程，勿动
+> 54998 / 8100 / 3000）。不要依赖"热重载"——此环境没有。
+
+这是 round-3g 用 4 小时才排查出来的坑：02:01/02:16/03:07 的改动对运行中的
+进程全部无效，验收时才被迫重启。生产启动路径（`start_backend.bat` /
+容器入口）不受影响，本规则只针对这个 dev 脚本。
 
 ## Authenticated E2E identity (real-journey suite)
 

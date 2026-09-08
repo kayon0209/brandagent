@@ -123,6 +123,7 @@ describe('useConsumerMaterials', () => {
           document_name: '第一份素材',
           excerpt_count: 2,
           status: 'distilled',
+          document_type: 'text' as const,
         },
       ],
     })

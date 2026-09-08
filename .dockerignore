@@ -3,7 +3,7 @@
 # the heavy artifacts are excluded (this was a regression: a blanket
 # `services` exclusion broke `docker compose up --build`).
 #
-# P1-6: `.next.bak.*` user backup directories MUST be excluded from the
+# User-created `.next.*-bak.*` backup directories MUST be excluded from the
 # build context (never deleted) — a multi-GB backup in the context broke
 # the legacy builder before it even reached the ignore evaluation.
 .pnpm-store
@@ -11,9 +11,12 @@ node_modules
 **/node_modules
 .git
 .next
-.next.bak.*
-.next.bak.*/
+.next.*-bak.*
+.next.*-bak.*/
 _sandbox
+.tmp_research
+docs/resume-brandagent-ai-pm.md
+.clerk-ticket*.tmp
 tests
 docs/migrations
 **/.venv

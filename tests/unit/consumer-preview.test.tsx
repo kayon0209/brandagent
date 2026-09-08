@@ -79,16 +79,28 @@ describe('PlatformPreview panel', () => {
     expect(panel.style.maxWidth).toBe('612px') // 720 * 0.85
   })
 
-  it('shows adopt-first hint when no master snapshot exists', () => {
+  it('shows the live-draft mode (版式示意) when no master snapshot exists (round-3b WYSIWYG + round-3e split)', () => {
+    // no variant → the panel opens in 当前稿预览 (live draft) mode and the
+    // platform shape renders as a structural skeleton; there is no dead-end
+    // "先采用当前稿" CTA anymore — that action lives in 平台精修版 mode.
     render(
       <PlatformPreview
         state={{ status: 'no_master', channels: {} }}
+        liveText=""
         onGenerate={jest.fn()}
         onRegenerate={jest.fn()}
         onAdopt={jest.fn()}
       />,
     )
-    expect(screen.getByText(/先采用当前稿/)).toBeInTheDocument()
+    // two explicit modes behind a segmented control
+    expect(screen.getByRole('tab', { name: '当前稿预览' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '平台精修版' })).toBeInTheDocument()
+    // the dead-end CTA must NOT be present
+    expect(screen.queryByText(/先采用当前稿/)).toBeNull()
+    // default mode renders the platform skeleton (destination shape)
+    expect(screen.getByTestId('wechat-preview')).toHaveAttribute('data-state', 'skeleton')
+    // and a spoken caption explains the live-draft empty state
+    expect(screen.getByTestId('draft-preview-empty')).toHaveTextContent(/这里会实时显示「公众号」的排版效果/)
   })
 
   it('keeps the previous version visible and non-blocking during regeneration', () => {
@@ -100,8 +112,12 @@ describe('PlatformPreview panel', () => {
         onAdopt={jest.fn()}
       />,
     )
-    expect(screen.getByText('上一版内容')).toBeInTheDocument()
-    expect(screen.getByText(/正在生成/)).toBeInTheDocument()
+    // variant exists → 平台精修版 mode keeps showing the old content
+    // dual-mode rail renders the draft panel too; scope the assertion to
+    // the polished (regenerated) side via testid-scoped query
+    expect(screen.getAllByText('上一版内容').length).toBeGreaterThan(0)
+    // non-blocking progress note above the still-visible version
+    expect(screen.getByTestId('generating-note')).toHaveTextContent(/正在生成新版本/)
   })
 
   it('keeps the last version on failure and offers retry', () => {
@@ -118,7 +134,7 @@ describe('PlatformPreview panel', () => {
         onAdopt={jest.fn()}
       />,
     )
-    expect(screen.getByText('失败前的上一版')).toBeInTheDocument()
+    expect(screen.getAllByText('失败前的上一版').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: /重试/ }))
     expect(onRegenerate).toHaveBeenCalled()
   })
@@ -174,22 +190,23 @@ describe('PrePublishReview', () => {
   })
 })
 
-describe('PrimaryActionBar', () => {
-  it('places 采用这版 as the only red primary button on the left', () => {
+describe('PrimaryActionBar (deprecated export, kept for history)', () => {
+  it('places 定稿 as the only red primary button on the left', () => {
     const onAdopt = jest.fn()
-    render(<PrimaryActionBar onAdopt={onAdopt} onRegenerate={jest.fn()} onPrepareExport={jest.fn()} />)
-    const adopt = screen.getByRole('button', { name: '采用这版' })
+    render(<PrimaryActionBar onAdopt={onAdopt} onRegenerate={jest.fn()} />)
+    const adopt = screen.getByRole('button', { name: '定稿' })
     expect(adopt).toBeInTheDocument()
     const all = screen.getAllByRole('button')
     expect(all[0]).toBe(adopt)
   })
 
-  it('puts 重新生成 as a secondary button on the right and 准备发布 as brown/ink secondary', () => {
+  it('puts 重新生成 as a secondary button on the right; 准备发布 is NOT in the rail anymore', () => {
     const onRegenerate = jest.fn()
-    const onPrepareExport = jest.fn()
-    render(<PrimaryActionBar onAdopt={jest.fn()} onRegenerate={onRegenerate} onPrepareExport={onPrepareExport} />)
+    render(<PrimaryActionBar onAdopt={jest.fn()} onRegenerate={onRegenerate} />)
     expect(screen.getByRole('button', { name: '重新生成' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '准备发布' })).toBeInTheDocument()
+    // round-3e (#3): the publish entry lives ONLY in the topbar, so the
+    // rail action bar must not duplicate it
+    expect(screen.queryByRole('button', { name: '准备发布' })).toBeNull()
   })
 })
 
@@ -227,7 +244,7 @@ describe('PlatformPreview dynamic channels (P2-3)', () => {
       />,
     )
     expect(screen.getByRole('tab', { name: '公众号' })).toBeInTheDocument()
-    expect(screen.getByText('公众号内容')).toBeInTheDocument()
+    expect(screen.getAllByText('公众号内容').length).toBeGreaterThan(0)
   })
 
   it('shows a channel version even if it is no longer in supportedChannels (spec lapsed)', () => {
@@ -242,6 +259,6 @@ describe('PlatformPreview dynamic channels (P2-3)', () => {
     )
     // the lapsed channel keeps a tab (existing versions are never hidden)
     expect(screen.getByRole('tab', { name: '口播' })).toBeInTheDocument()
-    expect(screen.getByText('口播稿')).toBeInTheDocument()
+    expect(screen.getAllByText('口播稿').length).toBeGreaterThan(0)
   })
 })

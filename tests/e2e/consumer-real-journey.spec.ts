@@ -30,16 +30,16 @@ test.skip(
 )
 
 test('real journey: create project → import material → link excerpt → edit core idea → generate draft', async ({ page }) => {
-  test.setTimeout(180_000)
+  test.setTimeout(660_000)
 
   // 1. /app loads for the signed-in test identity (no Clerk redirect loop)
   await page.goto('/app')
-  await expect(page.getByRole('heading', { name: '我的写作' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '项目', exact: true })).toBeVisible()
   // no redirect back to sign-in and no /app 404 shell
   expect(page.url()).toContain('/app')
 
   // 2. materials library is reachable through the /app entry (no typed URL)
-  await page.getByTestId('materials-entry').click()
+  await page.getByRole('link', { name: '素材库', exact: true }).click()
   // the entry is a plain <a href> hard navigation: wait for the route first
   await page.waitForURL(/\/app\/materials/, { timeout: 30_000 })
   await expect(page.getByRole('heading', { name: '素材' })).toBeVisible({ timeout: 30_000 })
@@ -51,7 +51,7 @@ test('real journey: create project → import material → link excerpt → edit
 
   // 3. import a unique text material through the real import flow
   const stamp = Date.now()
-  await page.getByRole('button', { name: '导入素材' }).click()
+  await page.getByRole('button', { name: '粘贴文字', exact: true }).click()
   const nameField = page.getByLabel('素材名称')
   await expect(nameField).toBeVisible({ timeout: 15_000 })
   await nameField.fill(`验收素材 ${stamp}`)
@@ -65,10 +65,10 @@ test('real journey: create project → import material → link excerpt → edit
   // 4. create a fresh project on /app
   await page.goto('/app')
   // U1 rework: the composer opens from the header action — the list owns
-  // the first screen, so the fields live behind 新建写作项目. The empty
+  // the first screen, so the fields live behind 新建项目. The empty
   // state ALSO renders one (first-run users see both); the header one is
   // the canonical entry.
-  await page.getByRole('button', { name: '新建写作项目' }).first().click()
+  await page.getByRole('button', { name: '新建项目', exact: true }).first().click()
   await expect(page.getByLabel('项目名称')).toBeVisible({ timeout: 15_000 })
   await page.getByLabel('项目名称').fill(`验收项目 ${stamp}`)
   await page.getByLabel('核心观点').fill(`验收核心观点 ${stamp}`)
@@ -79,7 +79,7 @@ test('real journey: create project → import material → link excerpt → edit
   const ideaField = page.getByTestId('core-idea-input')
   await expect(ideaField).toBeVisible({ timeout: 60_000 })
   await ideaField.fill(`更新后的核心观点 ${stamp}`)
-  await page.getByRole('button', { name: /保存核心观点/ }).click()
+  await page.getByRole('button', { name: '保存', exact: true }).click()
   await expect(page.getByTestId('core-idea-saved')).toBeVisible({ timeout: 60_000 })
 
   // 6. reload: the value must come back from the SERVER project data
@@ -109,36 +109,30 @@ test('real journey: create project → import material → link excerpt → edit
   await expect(page.getByTestId('selection-toolbar')).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: '短一点' }).click()
   // the suggestion popover shows the real provider rewrite
-  const popover = page.locator('[data-testid="suggestion-popover"], .suggestionPopover').first()
-  await expect(popover).toBeVisible({ timeout: 60_000 }).catch(() => {})
-  const hasSuggestion = await popover.isVisible().catch(() => false)
-  test.info().annotations.push({ type: 'note', description: `suggestion proposed: ${hasSuggestion}` })
-  if (hasSuggestion) {
-    await page.getByRole('button', { name: '接受改写' }).click({ timeout: 20_000 }).catch(() => {})
-    await page.waitForTimeout(3000)
-  }
+  const popover = page.getByTestId('suggestion-popover')
+  await expect(popover).toBeVisible({ timeout: 240_000 })
+  await expect(popover).not.toBeEmpty()
+  await page.getByRole('button', { name: '接受改写' }).click({ timeout: 20_000 })
+  await expect(popover).toBeHidden({ timeout: 30_000 })
 
-  // 9. adopt the current draft as the master snapshot
-  const adoptButton = page.getByRole('button', { name: '采用这版' }).first()
-  await adoptButton.click({ timeout: 20_000 }).catch(() => {})
-  await page.waitForTimeout(5000)
+  // 9. adopt the current draft as the master snapshot. The adoption action
+  // lives in the 平台精修版 empty state, not in the current-draft preview.
+  await page.getByRole('tab', { name: '平台精修版', exact: true }).click()
+  const adoptButton = page.getByRole('button', { name: '定稿', exact: true })
+  await expect(adoptButton).toBeVisible({ timeout: 30_000 })
+  await adoptButton.click({ timeout: 30_000 })
+  const polishedEmpty = page.getByTestId('polished-empty')
+  await expect(polishedEmpty).toBeVisible({ timeout: 60_000 })
 
-  // 10. generate the three platform variants (wechat / xiaohongshu /
-  //     video-script) through the real provider
-  const generateVariant = page.getByRole('button', { name: '生成平台版本' }).first()
-  await generateVariant.click({ timeout: 20_000 }).catch(() => {})
-  await page.waitForTimeout(20_000)
-  // the preview rail re-renders with real channel content
-  await page.waitForTimeout(10_000)
+  // 10. generate the platform variants through the real provider. A
+  // completed request without a visible generated variant is NOT a pass.
+  await polishedEmpty.getByRole('button', { name: '生成平台版本' }).click()
+  await expect(page.getByTestId('polished-caption')).toBeVisible({ timeout: 240_000 })
 
   // 11. 发布前再看一眼 renders (口语化提示区)
   await expect(page.getByText('发布前再看一眼')).toBeVisible({ timeout: 30_000 })
 
   // 12. prepare export (server-gated snapshot pin)
-  await page.getByRole('banner').getByRole('button', { name: '准备发布' }).click({ timeout: 20_000 }).catch(() => {})
-  await page.waitForTimeout(5000)
-  // either the confirm dialog or its spoken guidance appears — the exact
-  // copy depends on the provider state; the ACTION must not throw
-  const bodyText = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
-  test.info().annotations.push({ type: 'note', description: `export prepared: ${bodyText.includes('导出')}` })
+  await page.getByRole('banner').getByRole('button', { name: '准备发布' }).click({ timeout: 30_000 })
+  await expect(page.getByTestId('generate-banner')).toContainText('导出快照已准备', { timeout: 30_000 })
 })

@@ -13,8 +13,10 @@ from agent_api.api.security import Principal
 from agent_api.application.usage import (
     QuotaExceeded,
     UsageLedgerService,
+    ledgered_call,
 )
 from agent_api.domain.errors import NotFoundError
+from agent_api.providers.base import ProviderExecutionError
 
 
 def principal_for(workspace_id: str) -> Principal:
@@ -162,6 +164,211 @@ async def test_failed_model_calls_refund_the_reservation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ambiguous_provider_execution_settles_the_estimate_instead_of_refunding() -> None:
+    service, store = make_service()
+    principal = principal_for("ws-1")
+
+    with pytest.raises(ProviderExecutionError, match="response was lost"):
+        async with ledgered_call(
+            service,
+            principal,
+            request_id="req-unknown-execution",
+            operation="suggestion",
+            estimated_tokens=600,
+        ):
+            raise ProviderExecutionError(
+                "MODEL_EXECUTION_UNKNOWN",
+                "The provider may have executed the request but the response was lost.",
+                retryable=False,
+            )
+
+    entry = await _find(service, "ws-1", "req-unknown-execution")
+    assert entry is not None
+    assert entry["state"] == "settled"
+    assert entry["total_tokens"] == 600
+    assert await store.settled_total("ws-1") == 600
+
+
+@pytest.mark.asyncio
+async def test_confirmed_provider_execution_settles_the_estimate_instead_of_refunding() -> None:
+    service, _ = make_service()
+    principal = principal_for("ws-1")
+
+    with pytest.raises(ProviderExecutionError, match="invalid response"):
+        async with ledgered_call(
+            service,
+            principal,
+            request_id="req-confirmed-execution",
+            operation="suggestion",
+            estimated_tokens=600,
+        ):
+            raise ProviderExecutionError(
+                "MODEL_INVALID_RESPONSE",
+                "The provider returned an invalid response.",
+                retryable=False,
+                execution_confirmed=True,
+            )
+
+    entry = await _find(service, "ws-1", "req-confirmed-execution")
+    assert entry is not None
+    assert entry["state"] == "settled"
+    assert entry["total_tokens"] == 600
+    assert entry["usage_source"] == "estimated"
+
+
+@pytest.mark.asyncio
+async def test_second_model_response_loss_preserves_measured_usage_from_the_first_call() -> None:
+    service, _ = make_service()
+    principal = principal_for("ws-1")
+
+    with pytest.raises(ProviderExecutionError, match="response was lost"):
+        async with ledgered_call(
+            service,
+            principal,
+            request_id="req-second-call-unknown",
+            operation="suggestion",
+            estimated_tokens=900,
+        ) as outcome:
+            outcome.update(
+                {
+                    "model_executed": True,
+                    "input_tokens": 800,
+                    "output_tokens": 700,
+                    "model": "glm-test",
+                }
+            )
+            raise ProviderExecutionError(
+                "MODEL_EXECUTION_UNKNOWN",
+                "The provider response was lost after the second call.",
+                retryable=False,
+            )
+
+    entry = await _find(service, "ws-1", "req-second-call-unknown")
+    assert entry is not None
+    assert entry["state"] == "settled"
+    assert entry["total_tokens"] == 1500
+    assert entry["usage_source"] == "estimated"
+
+
+@pytest.mark.asyncio
+async def test_second_model_timeout_preserves_measured_usage_from_the_first_call() -> None:
+    """A failed follow-up must not refund a classifier call that completed."""
+
+    service, _ = make_service()
+    principal = principal_for("ws-1")
+
+    with pytest.raises(ProviderExecutionError, match="timed out"):
+        async with ledgered_call(
+            service,
+            principal,
+            request_id="req-second-call-timeout",
+            operation="suggestion",
+            estimated_tokens=900,
+        ) as outcome:
+            outcome.update(
+                {
+                    "model_executed": True,
+                    "input_tokens": 80,
+                    "output_tokens": 20,
+                    "model": "glm-test",
+                }
+            )
+            raise ProviderExecutionError("MODEL_TIMEOUT", "The second provider call timed out.", retryable=True)
+
+    entry = await _find(service, "ws-1", "req-second-call-timeout")
+    assert entry is not None
+    assert entry["state"] == "settled"
+    assert entry["total_tokens"] == 100
+    assert entry["usage_source"] == "measured"
+
+
+@pytest.mark.asyncio
+async def test_unknown_execution_marker_on_a_wrapped_error_settles_the_estimate() -> None:
+    class WrappedUnknownExecutionError(RuntimeError):
+        execution_unknown = True
+
+    service, store = make_service()
+    principal = principal_for("ws-1")
+
+    with pytest.raises(WrappedUnknownExecutionError):
+        async with ledgered_call(
+            service,
+            principal,
+            request_id="req-wrapped-unknown-execution",
+            operation="variant_generation",
+            estimated_tokens=900,
+        ):
+            raise WrappedUnknownExecutionError("a downstream adapter preserved an unknown execution")
+
+    entry = await _find(service, "ws-1", "req-wrapped-unknown-execution")
+    assert entry is not None
+    assert entry["state"] == "settled"
+    assert entry["total_tokens"] == 900
+
+
+@pytest.mark.asyncio
+async def test_partial_batch_response_loss_never_settles_below_known_measured_tokens() -> None:
+    """The earlier variant calls in a batch may report real usage before a
+    later non-idempotent request loses its response. Preserve that lower
+    bound even when the final aggregate is not fully knowable."""
+
+    service, _ = make_service()
+    principal = principal_for("ws-1")
+
+    async with ledgered_call(
+        service,
+        principal,
+        request_id="req-partial-batch-unknown",
+        operation="variants",
+        estimated_tokens=3000,
+    ) as outcome:
+        outcome.update(
+            {
+                "input_tokens": 2200,
+                "output_tokens": 3100,
+                "model": "glm-test",
+                "execution_unknown": True,
+            }
+        )
+
+    entry = await _find(service, "ws-1", "req-partial-batch-unknown")
+    assert entry is not None
+    assert entry["state"] == "settled"
+    assert entry["total_tokens"] == 5300
+    assert entry["usage_source"] == "estimated"
+
+
+@pytest.mark.asyncio
+async def test_local_rejection_after_a_confirmed_model_result_keeps_measured_usage() -> None:
+    service, _ = make_service()
+    principal = principal_for("ws-1")
+
+    with pytest.raises(ValueError, match="local validation"):
+        async with ledgered_call(
+            service,
+            principal,
+            request_id="req-confirmed-result-local-rejection",
+            operation="variants",
+            estimated_tokens=1200,
+        ) as outcome:
+            outcome.update(
+                {
+                    "model_executed": True,
+                    "input_tokens": 700,
+                    "output_tokens": 800,
+                    "model": "glm-test",
+                }
+            )
+            raise ValueError("local validation rejected the returned content")
+
+    entry = await _find(service, "ws-1", "req-confirmed-result-local-rejection")
+    assert entry is not None
+    assert entry["state"] == "settled"
+    assert entry["total_tokens"] == 1500
+    assert entry["usage_source"] == "measured"
+
+
+@pytest.mark.asyncio
 async def test_usage_summary_is_private_per_workspace() -> None:
     service, store = make_service()
     principal = principal_for("ws-1")
@@ -181,7 +388,29 @@ async def test_usage_summary_is_private_per_workspace() -> None:
 
 
 @pytest.mark.asyncio
-async def test_summary_for_unknown_workspace_is_not_found() -> None:
+async def test_summary_for_a_never_ledgered_workspace_is_zero_not_404() -> None:
+    # P1-D contract update: a workspace with no creator_profiles row is a
+    # FRESH workspace (nothing reserved yet), not a missing one. The quota
+    # pill is an always-on surface — 404 hid the quota from every new user.
     service, _ = make_service()
-    with pytest.raises(NotFoundError):
-        await service.usage_summary(principal_for("never-seen"))
+    summary = await service.usage_summary(principal_for("never-seen"))
+    assert summary["used"] == 0
+    assert summary["quota"] == 30000
+
+
+# ---------------------------------------------------------------------
+# P1-D: fresh workspaces report ZERO usage, not 404 — the quota pill is
+# an always-on surface; a brand-new user must see the full quota
+# ---------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_usage_summary_returns_zero_for_a_never_ledgered_workspace():
+    class NoProfileStore:
+        async def usage_summary(self, workspace_id):
+            return None  # no creator_profiles row for this workspace
+
+    service = UsageLedgerService(store=NoProfileStore(), quota=30000)
+    summary = await service.usage_summary(
+        Principal(user_id="u-1", workspace_id="ws-fresh", role="admin", experience="personal")
+    )
+    assert summary == {"workspace_id": "ws-fresh", "used": 0, "quota": 30000}

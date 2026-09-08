@@ -39,15 +39,21 @@ with asyncio.Runner(loop_factory=lambda: asyncio.SelectorEventLoop(selectors.Sel
       ...process.env,
       PYTHONPATH: 'src',
       ENVIRONMENT: 'development',
-      AUTH_MODE: 'dev',
-      AGENT_DATABASE_URL: 'postgresql://postgres@127.0.0.1:54398/postgres',
-      AGENT_CHECKPOINT_DATABASE_URL: 'postgresql://brandflow_app@127.0.0.1:54398/postgres?options=-csearch_path%3Dbrandflow_checkpoint',
+      // A real E2E run must verify the Clerk bearer forwarded by the BFF.
+      // Dev identity remains available only when a local operator opts in.
+      AUTH_MODE: local.AUTH_MODE || '',
+      // Match the production role split so the real journey cannot bypass
+      // RLS as postgres or write checkpoints through the business role.
+      AGENT_DATABASE_URL: 'postgresql://brandflow_app@127.0.0.1:54998/postgres',
+      AGENT_CHECKPOINT_DATABASE_URL: 'postgresql://brandflow_checkpoint@127.0.0.1:54998/postgres?options=-csearch_path%3Dbrandflow_checkpoint',
       BRAND_MCP_URL: local.BRAND_MCP_URL || '',
       BRAND_MCP_SERVICE_TOKEN: local.BRAND_MCP_SERVICE_TOKEN || '',
       GLM_API_KEY: local.GLM_API_KEY || '',
       GLM_BASE_URL: local.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
+      GLM_MODEL: local.GLM_MODEL || 'glm-4.7',
       CLERK_JWKS_URL: local.CLERK_JWKS_URL || '',
       CLERK_ISSUER: local.CLERK_ISSUER || '',
+      CLERK_AUDIENCE: local.CLERK_AUDIENCE || '',
       CLERK_AUTHORIZED_PARTIES: local.CLERK_AUTHORIZED_PARTIES || '',
     },
     stdio: ['ignore', 'inherit', 'inherit'],

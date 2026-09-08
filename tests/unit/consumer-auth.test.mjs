@@ -22,6 +22,16 @@ test('brandagent BFF forwards auth, idempotency, event cursor and request id hea
   }
 })
 
+test('brandagent BFF gives model generation a bounded timeout longer than ordinary API calls', async () => {
+  const source = await read('src/app/api/brandagent/[...path]/route.ts')
+  assert.match(source, /DEFAULT_UPSTREAM_TIMEOUT_MS\s*=\s*90_000/)
+  assert.match(source, /MODEL_OPERATION_TIMEOUT_MS\s*=\s*300_000/)
+  assert.match(source, /function isLongRunningModelOperation/)
+  assert.match(source, /last === 'suggestions'/)
+  assert.match(source, /last === 'generate'/)
+  assert.match(source, /AbortSignal\.timeout\(timeoutMs\)/)
+})
+
 test('agent API internal URL is resolved only on the server side', async () => {
   const source = await read('src/lib/api/server-agent-api.ts')
   assert.match(source, /BRANDFLOW_AGENT_INTERNAL_URL/, 'internal URL must come from env')
@@ -37,6 +47,15 @@ test('/app consumer routes are login-protected in middleware', async () => {
   const source = await read('src/middleware.ts')
   assert.match(source, /auth\.protect/, 'middleware must call auth.protect() for /app')
   assert.match(source, /'\/app\(\.\*\)'/, 'the route matcher must cover all /app pages')
+  assert.match(source, /NextResponse\.rewrite/, '/app must be internally served by the on-disk /workspace route')
+  assert.match(source, /pathname\.replace\(\/\^\\\/app/, 'the rewrite must preserve nested consumer paths')
+})
+
+test('middleware is the single owner of the consumer internal rewrite', async () => {
+  const config = await read('next.config.js')
+  const middleware = await read('src/middleware.ts')
+  assert.doesNotMatch(config, /destination:\s*['"]\/workspace/, 'next.config must not duplicate the protected route rewrite')
+  assert.match(middleware, /NextResponse\.rewrite/, 'middleware must rewrite only after Clerk protection')
 })
 
 test('the browser can no longer reach the agent API through a rewrite bypass', async () => {
@@ -79,5 +98,50 @@ test('dev auth is opt-in through BRANDFLOW_AUTH_MODE and production fails closed
     bootstrap,
     /dev_mode=\(settings\.environment/,
     'environment=development must no longer silently enable anonymous auth'
+  )
+})
+
+test('the real-stack launcher does not silently replace Clerk identity with dev auth', async () => {
+  const launcher = await read('scripts/start-real-agent-api.mjs')
+  assert.doesNotMatch(
+    launcher,
+    /AUTH_MODE:\s*['"]dev['"]/,
+    'a launcher labeled real must not force the FastAPI dev identity mode',
+  )
+  assert.match(launcher, /AUTH_MODE:\s*local\.AUTH_MODE\s*\|\|\s*['"]['"]/, 'dev auth may be selected only by an explicit local configuration value')
+  assert.match(launcher, /CLERK_AUDIENCE:\s*local\.CLERK_AUDIENCE\s*\|\|\s*['"][^'"]*['"]/, 'the real stack must forward a configured Clerk audience to the verifier')
+  assert.match(launcher, /GLM_MODEL:\s*local\.GLM_MODEL\s*\|\|\s*['"][^'"]*['"]/, 'the real stack must use the configured provider model rather than silently falling back to a different default')
+})
+
+test('the real-stack launcher uses non-superuser business and checkpoint roles', async () => {
+  const launcher = await read('scripts/start-real-agent-api.mjs')
+  assert.match(
+    launcher,
+    /AGENT_DATABASE_URL:\s*'postgresql:\/\/brandflow_app@127\.0\.0\.1:54998\/postgres'/,
+    'business routes must run as the RLS-bound brandflow_app role',
+  )
+  assert.match(
+    launcher,
+    /AGENT_CHECKPOINT_DATABASE_URL:\s*'postgresql:\/\/brandflow_checkpoint@127\.0\.0\.1:54998\/postgres\?options=-csearch_path%3Dbrandflow_checkpoint'/,
+    'workflow checkpoints must use the isolated brandflow_checkpoint role',
+  )
+})
+
+test('the real MCP launcher is also bound to the business role', async () => {
+  const launcher = await read('scripts/start-brand-mcp.mjs')
+  assert.match(
+    launcher,
+    /BRAND_MCP_DATABASE_URL:\s*'postgresql:\/\/brandflow_app@127\.0\.0\.1:54998\/postgres'/,
+    'the local MCP edge must not bypass RLS as postgres',
+  )
+  assert.match(
+    launcher,
+    /'brand_tools_mcp\.server:app'/,
+    'the local launcher must serve the authenticated ASGI app used by Docker',
+  )
+  assert.doesNotMatch(
+    launcher,
+    /\['-m', 'brand_tools_mcp\.server'\]/,
+    'running the FastMCP module directly bypasses server.app middleware and health routes',
   )
 })

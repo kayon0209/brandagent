@@ -318,8 +318,8 @@ export default function UpgradePage() {
               BrandAgent
             </Link>
             <div className="flex items-center gap-4">
-              <Link href="/#pricing" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--color-ink-muted)', textDecoration: 'none', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                ← 返回定价
+              <Link href="/" style={{ fontFamily: 'var(--font-sans)', fontSize: '0.8125rem', color: 'var(--color-ink-muted)', textDecoration: 'none' }}>
+                ← 返回首页
               </Link>
               <Link href="/app" className="btn-ghost" style={{ padding: '0.5rem 1.25rem', fontSize: '0.6875rem' }}>
                 工作台

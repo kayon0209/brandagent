@@ -148,6 +148,7 @@ class ConsumerProjectsApp(Protocol):
     usage: ConsumerUsage
     usage_ledger: ConsumerUsageLedger
     channel_validator: "ChannelListing"
+    style: ConsumerStyle
 
 
 class ChannelListing(Protocol):
@@ -213,6 +214,19 @@ class ConsumerGeneration(Protocol):
     async def latest_candidate(self, principal: Principal, task_id: str) -> dict | None: ...
 
 
+class ConsumerStyle(Protocol):
+    async def analyze(
+        self,
+        principal: Principal,
+        *,
+        articles: list[str],
+        form: str,
+        output_language: str | None = None,
+        usage_out: dict | None = None,
+    ) -> dict: ...
+    async def list_reports(self, principal: Principal) -> list[dict]: ...
+
+
 def _error_status(error) -> int:
     from agent_api.domain.errors import ApplicationError
 
@@ -264,12 +278,23 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
         title = body.get("title")
         core_idea = body.get("core_idea")
         intent = body.get("writing_intent")
+        # 007: apply-to-writing entry binds a distilled style report here
+        preferred_style_report_id = body.get("preferred_style_report_id")
+        if preferred_style_report_id is not None and not isinstance(preferred_style_report_id, str):
+            raise HTTPException(status_code=422, detail="preferred_style_report_id must be a string")
         try:
             project = await apps.projects.update_project(
-                actor, task_id, title=title, core_idea=core_idea, intent=intent
+                actor,
+                task_id,
+                title=title,
+                core_idea=core_idea,
+                intent=intent,
+                preferred_style_report_id=preferred_style_report_id,
             )
         except NotFoundError:
-            raise HTTPException(status_code=404, detail="Project not found") from None
+            # the style report may be the missing object; both cases are a
+            # plain 404 with no cross-workspace existence leak
+            raise HTTPException(status_code=404, detail="Project or style report not found") from None
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         except ApplicationError as error:
@@ -576,6 +601,7 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
         )
         from agent_api.application.usage import ledgered_call
         from agent_api.domain.errors import ApplicationError, NotFoundError
+        from agent_api.providers.base import ProviderExecutionError
 
         intent = str(body.get("intent", ""))
         block_id = str(body.get("blockId", ""))
@@ -649,6 +675,26 @@ def create_projects_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter
                     content={"success": False, "error": {"code": "QUOTA_EXCEEDED", "message": str(error)}},
                 )
             raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+        except ProviderExecutionError as error:
+            # A free-intent request can complete its classifier call before a
+            # later provider call fails. Make the user-facing billing state
+            # match the ledger without exposing transport/provider internals.
+            charged = (
+                error.code == "MODEL_EXECUTION_UNKNOWN"
+                or error.execution_confirmed
+                or bool(outcome.get("model_executed"))
+            )
+            billing_message = "本次模型调用已计入额度。" if charged else "本次调用未计入额度。"
+            return JSONResponse(
+                status_code=502,
+                content={
+                    "success": False,
+                    "error": {
+                        "code": "ASSIST_UNAVAILABLE",
+                        "message": f"AI 助手暂时不可用，稿件未做任何改动；{billing_message}",
+                    },
+                },
+            )
         except RuntimeError:
             return JSONResponse(
                 status_code=502,
@@ -884,5 +930,116 @@ def create_usage_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter:
             raise HTTPException(status_code=404, detail="Usage not found") from None
         except ApplicationError as error:
             raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+
+    return router
+
+
+def create_style_router(apps: ConsumerProjectsApp, *, principal) -> APIRouter:
+    """Six-layer author style distillation (round-3 UX feature).
+
+    L1-L6 rules from a corpus of complete articles; the language of the
+    rule file follows the corpus unless the user says otherwise. Analyze
+    is a model-costing call: Idempotency-Key required, ledger-gated like
+    every other consumer model endpoint.
+    """
+    from agent_api.application.usage import ledgered_call
+
+    router = APIRouter(prefix="/api/v1/consumer/style", tags=["consumer-style"])
+
+    @router.post("/analyze")
+    async def analyze_style(
+        body: dict,
+        actor: Principal = Depends(principal),
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ):
+        from agent_api.application.style_distillation import StyleDistillationError
+        from agent_api.domain.errors import ApplicationError
+
+        raw_articles = body.get("articles")
+        articles = [str(article) for article in raw_articles] if isinstance(raw_articles, list) else []
+        form = str(body.get("form", ""))
+        output_language = body.get("outputLanguage")
+        if output_language is not None and output_language not in ("zh", "en"):
+            return JSONResponse(
+                status_code=422,
+                content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": "输出语言只支持 zh 或 en"}},
+            )
+
+        # P0-A: digest short-circuit — the SAME corpus (same clean set,
+        # form, language) already distilled for this workspace means a
+        # timeout retry or double click must not bill a second analysis.
+        # prepare() is the canonical clean->language->digest pipeline
+        # shared with analyze(), so route and service can never disagree
+        # on what counts as 'the same corpus'.
+        try:
+            _clean, corpus_digest, language = apps.style.prepare(
+                articles=articles, form=form, output_language=output_language
+            )
+        except StyleDistillationError as error:
+            status = 422 if error.code in ("STYLE_FORM_UNSUPPORTED", "STYLE_CORPUS_TOO_SMALL") else 413
+            return JSONResponse(
+                status_code=status,
+                content={"success": False, "error": {"code": error.code, "message": str(error)}},
+            )
+        try:
+            existing = await apps.style.find_existing_report(actor, form=form, language=language, corpus_digest=corpus_digest)
+        except Exception:  # noqa: BLE001 — the short-circuit is an optimization, never a gate
+            existing = None
+        if existing is not None:
+            return {"success": True, "data": existing}
+
+        request_id = idempotency_key
+        try:
+            async with ledgered_call(
+                apps.usage_ledger, actor, request_id=request_id, operation="style_analysis", estimated_tokens=4000
+            ) as outcome:
+                if outcome.get("replayed"):
+                    return {"success": True, "data": {"replayed": True}}
+                report = await apps.style.analyze(
+                    actor,
+                    articles=articles,
+                    form=form,
+                    output_language=output_language,
+                    usage_out=outcome,
+                )
+        except StyleDistillationError as error:
+            status = 422 if error.code == "STYLE_FORM_UNSUPPORTED" else 422 if error.code == "STYLE_CORPUS_TOO_SMALL" else 413
+            return JSONResponse(
+                status_code=status,
+                content={"success": False, "error": {"code": error.code, "message": str(error)}},
+            )
+        except ApplicationError as error:
+            if error.code == "QUOTA_EXCEEDED":
+                return JSONResponse(
+                    status_code=409,
+                    content={"success": False, "error": {"code": "QUOTA_EXCEEDED", "message": str(error)}},
+                )
+            raise HTTPException(status_code=_error_status(error), detail=str(error)) from error
+        except RuntimeError:
+            return JSONResponse(
+                status_code=502,
+                content={"success": False, "error": {"code": "STYLE_ANALYSIS_UNAVAILABLE", "message": "风格分析暂时不可用；本次模型调用可能已计费，请稍后重试。"}},
+            )
+        report["report_id"] = str(report["report_id"])
+        return {"success": True, "data": report}
+
+    @router.get("/reports")
+    async def list_style_reports(actor: Principal = Depends(principal)):
+        reports = await apps.style.list_reports(actor)
+        for report in reports:
+            report["report_id"] = str(report["report_id"])
+        return {"success": True, "data": {"items": reports}}
+
+    @router.get("/reports/{report_id}")
+    async def get_style_report(report_id: str, actor: Principal = Depends(principal)):
+        """P0-B: single style report — the apply-to-writing entry
+        (/app?apply={report_id}) fetches exactly this."""
+        report = await apps.style.get_report(actor, report_id)
+        if report is None:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": {"code": "NOT_FOUND", "message": "风格报告不存在或不属于当前工作区。"}},
+            )
+        return {"success": True, "data": report}
 
     return router

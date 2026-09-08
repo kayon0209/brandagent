@@ -14,13 +14,18 @@ function loadEnvLocal() {
 const local = loadEnvLocal()
 const child = spawn(
   './.venv/Scripts/python.exe',
-  ['-m', 'brand_tools_mcp.server'],
+  [
+    '-m', 'uvicorn', 'brand_tools_mcp.server:app',
+    '--app-dir', 'src', '--host', '127.0.0.1', '--port', '8100',
+  ],
   {
     cwd: 'services/brand-tools-mcp',
     env: {
       ...process.env,
       PYTHONPATH: 'src',
-      BRAND_MCP_DATABASE_URL: 'postgresql://postgres@127.0.0.1:54398/postgres',
+      // Keep the disposable real stack on the same RLS-bound business role
+      // as production instead of bypassing policy checks through postgres.
+      BRAND_MCP_DATABASE_URL: 'postgresql://brandflow_app@127.0.0.1:54998/postgres',
       BRAND_MCP_SERVICE_TOKEN: local.BRAND_MCP_SERVICE_TOKEN || '',
       BRAND_MCP_HOST: '127.0.0.1',
       BRAND_MCP_PORT: '8100',

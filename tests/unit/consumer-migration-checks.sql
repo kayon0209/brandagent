@@ -172,4 +172,88 @@ BEGIN
   END IF;
 END $$;
 
+-- 9. Style reports are isolated consumer data and projects may bind one.
+-- 006/007 must remain compatible with the existing consumer task shape.
+INSERT INTO style_reports (
+  report_id, workspace_id, form, language, layers, corpus_digest
+) VALUES (
+  '60000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000001',
+  'article', 'zh', '{"tone":"clear"}'::jsonb, 'style-digest-a'
+);
+
+INSERT INTO consumer_projects (task_id, workspace_id, core_idea)
+VALUES (
+  '10000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000001',
+  'Style binding fixture'
+);
+
+UPDATE consumer_projects
+SET preferred_style_report_id = '60000000-0000-0000-0000-000000000001'
+WHERE task_id = '10000000-0000-0000-0000-000000000001';
+
+DO $$
+DECLARE bound_report UUID;
+BEGIN
+  SELECT preferred_style_report_id INTO bound_report
+  FROM consumer_projects
+  WHERE task_id = '10000000-0000-0000-0000-000000000001';
+  IF bound_report <> '60000000-0000-0000-0000-000000000001'::uuid THEN
+    RAISE EXCEPTION 'consumer_projects did not persist preferred_style_report_id';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'style_reports'
+      AND column_name IN ('corpus_stats', 'corpus_articles')
+  ) THEN
+    RAISE EXCEPTION '007 style report provenance columns are missing';
+  END IF;
+
+  BEGIN
+    UPDATE consumer_projects
+    SET preferred_style_report_id = '60000000-0000-0000-0000-000000000099'
+    WHERE task_id = '10000000-0000-0000-0000-000000000001';
+    RAISE EXCEPTION 'consumer_projects accepted a missing style report';
+  EXCEPTION WHEN foreign_key_violation THEN
+    NULL;
+  END;
+END $$;
+
+-- 10. 008 extends the existing document-type contract without accepting
+-- arbitrary values or invalidating legacy B-end material kinds.
+DO $$
+DECLARE kind TEXT;
+DECLARE index_value INTEGER := 2;
+BEGIN
+  FOREACH kind IN ARRAY ARRAY['text', 'file', 'link'] LOOP
+    INSERT INTO source_documents (
+      document_id, workspace_id, document_name, document_type, version,
+      authority_level, checksum, created_by
+    ) VALUES (
+      ('30000000-0000-0000-0000-00000000000' || index_value)::uuid,
+      '00000000-0000-0000-0000-000000000001',
+      'Consumer ' || kind, kind, 'v1', 'reference',
+      'checksum-consumer-' || kind, 'user-a'
+    );
+    index_value := index_value + 1;
+  END LOOP;
+
+  BEGIN
+    INSERT INTO source_documents (
+      document_id, workspace_id, document_name, document_type, version,
+      authority_level, checksum, created_by
+    ) VALUES (
+      '30000000-0000-0000-0000-000000000009',
+      '00000000-0000-0000-0000-000000000001',
+      'Invalid kind', 'untrusted_kind', 'v1', 'reference',
+      'checksum-invalid-kind', 'user-a'
+    );
+    RAISE EXCEPTION '008 accepted an unsupported document_type';
+  EXCEPTION WHEN check_violation THEN
+    NULL;
+  END;
+END $$;
+
 ROLLBACK;

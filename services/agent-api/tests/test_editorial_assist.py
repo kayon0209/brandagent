@@ -474,7 +474,7 @@ class TypeShimProjectStore:
     async def list_projects(self, workspace_id):
         return []
 
-    async def update_project(self, workspace_id, task_id, *, title, core_idea, intent):
+    async def update_project(self, workspace_id, task_id, *, title, core_idea, intent, preferred_style_report_id: str | None = None):
         return None
 
     async def link_excerpt(self, workspace_id, task_id, excerpt_id):

@@ -97,7 +97,7 @@ export default function BrandFlowLayout({ children }: { children: ReactNode }) {
         </nav>
         <div className={styles.system}>
           <CircleDot size={14} />
-          状态来自真实服务
+          连接正常
         </div>
       </aside>
       <nav className={styles.mobileNav}>

@@ -163,7 +163,7 @@ function Sidebar() {
       </nav>
       <div className={styles.system}>
         <CircleDot />
-        状态来自真实服务
+        连接正常
       </div>
     </aside>
   )

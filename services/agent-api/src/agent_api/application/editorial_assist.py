@@ -207,13 +207,10 @@ class EditorialAssistService:
             prompt_version=f"editorial-assist:{action}:v1",
         )
         if usage_out is not None:
-            usage_out.update(
-                {
-                    "input_tokens": result.input_tokens,
-                    "output_tokens": result.output_tokens,
-                    "model": result.model,
-                }
-            )
+            usage_out["input_tokens"] = (usage_out.get("input_tokens") or 0) + (result.input_tokens or 0)
+            usage_out["output_tokens"] = (usage_out.get("output_tokens") or 0) + (result.output_tokens or 0)
+            usage_out["model"] = result.model
+            usage_out["model_executed"] = True
         suggested_text = result.content.strip()
         if not suggested_text:
             return None
@@ -278,12 +275,16 @@ class EditorialAssistService:
             prompt=f"用户的改写意图：{intent.strip()}\n\n只输出 expand / replace_example / shorten / refuse 之一。",
             prompt_version=INTENT_PROMPT_VERSION,
         )
+        intent_usage = {
+            "input_tokens": classified.input_tokens,
+            "output_tokens": classified.output_tokens,
+            "model": classified.model,
+        }
         if usage_out is not None:
-            intent_usage = {
-                "input_tokens": classified.input_tokens,
-                "output_tokens": classified.output_tokens,
-                "model": classified.model,
-            }
+            usage_out["input_tokens"] = (usage_out.get("input_tokens") or 0) + (classified.input_tokens or 0)
+            usage_out["output_tokens"] = (usage_out.get("output_tokens") or 0) + (classified.output_tokens or 0)
+            usage_out["model"] = classified.model
+            usage_out["model_executed"] = True
 
         verdict = (classified.content or "").strip().lower()
         # tolerate tiny model format drift ("expand。", "intent: expand")

@@ -83,7 +83,7 @@ export function CoreIdeaBlock({ coreIdea, onSave }: CoreIdeaBlockProps) {
       className={styles.coreIdea}
       style={{ marginBottom: '32px' }}
     >
-      <p className={styles.coreIdeaLabel}>核心观点</p>
+      <p className={styles.coreIdeaLabel}>这篇内容最想让读者记住什么？</p>
       <textarea
         data-testid="core-idea-input"
         className="consumer-text-input"
@@ -104,7 +104,7 @@ export function CoreIdeaBlock({ coreIdea, onSave }: CoreIdeaBlockProps) {
           disabled={saveState === 'saving' || !dirty}
           onClick={() => void save()}
         >
-          {saveState === 'saving' ? '正在保存…' : '保存核心观点'}
+          {saveState === 'saving' ? '正在保存…' : dirty ? '保存' : '保存观点'}
         </button>
         {saveState === 'saved' && (
           <span role="status" data-testid="core-idea-saved">

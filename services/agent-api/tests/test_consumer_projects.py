@@ -52,7 +52,7 @@ class MemoryConsumerProjectStore:
     async def list_projects(self, workspace_id: str) -> list[dict]:
         return [dict(p) for p in self.projects.values() if p["workspace_id"] == workspace_id]
 
-    async def update_project(self, workspace_id: str, task_id: str, *, title: str | None, core_idea: str | None, intent: str | None) -> dict | None:
+    async def update_project(self, workspace_id: str, task_id: str, *, title: str | None, core_idea: str | None, intent: str | None, preferred_style_report_id: str | None = None) -> dict | None:
         project = self.projects.get(task_id)
         if not project or project["workspace_id"] != workspace_id:
             return None
@@ -93,6 +93,10 @@ class MemoryConsumerProjectStore:
             if e["task_id"] == task_id and e["workspace_id"] == workspace_id
         ]
         return [r for r in rows if r["event_id"] > after_event_id][:limit]
+
+
+    async def get_style_report(self, workspace_id: str, report_id: str) -> dict | None:
+        return None
 
 
 def make_service() -> tuple[ConsumerProjectService, MemoryConsumerProjectStore]:

@@ -198,6 +198,18 @@
   gap: 16px;
 }
 
+/* round-3e (#5): the workspace home (项目列表) gets a wider reading column;
+   detail pages (素材/风格) keep the narrow 720px article width. */
+.pageWide {
+  max-width: 1040px;
+}
+
+@media (max-width: 760px) {
+  .pageWide {
+    max-width: 720px;
+  }
+}
+
 .page h1 {
   font-size: 20px;
   color: var(--ink, #27241f);
@@ -229,46 +241,12 @@
   border-color: rgba(173, 86, 65, 0.4);
 }
 
-/* consumer home (/app) forms */
-.consumer-field-label {
-  display: block;
-  font-size: 13px;
-  color: var(--ink-soft, #514b43);
-  margin: 10px 0 4px;
-}
-
-.consumer-text-input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--line-dark, #beb4a6);
-  border-radius: 4px;
-  background: var(--paper, #fffdf8);
-  color: var(--ink, #27241f);
-  font-size: 14px;
-}
-
-.consumer-primary-button {
-  margin-top: 12px;
-  border: none;
-  border-radius: 3px;
-  background: var(--accent, #ad5641);
-  color: var(--paper, #fffdf8);
-  font-size: 14px;
-  padding: 9px 22px;
-  cursor: pointer;
-}
-
-.consumer-primary-button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.consumer-project-idea {
-  display: block;
-  font-size: 12px;
-  color: var(--muted, #8a8278);
-  margin-top: 2px;
-}
+/* NOTE (round-3c, 2026-09-05): the four `consumer-*` utility classes below
+   were moved to src/styles/globals.css — pages reference them by their RAW
+   string className (not through CSS Modules' styles.map), so defining them
+   inside a *.module.css silently hash-renamed them and every button/input/
+   label in the consumer workspace rendered with browser-default styles.
+   Keep them global from now on; do NOT re-add them to a .module.css. */
 
 /* X1/U7: spoken progress while the first draft reasons (1-3 minutes real) */
 .generateProgress {
@@ -401,7 +379,7 @@
 }
 
 .projectCard:hover {
-  border-color: rgba(184, 134, 11, 0.45);
+  border-color: rgba(173, 86, 65, 0.45);
   box-shadow: 0 4px 14px rgba(15, 15, 15, 0.06);
 }
 
@@ -448,4 +426,1213 @@
   color: var(--ink-soft, #6b7280);
   border-left: 2px solid rgba(184, 134, 11, 0.4);
   padding-left: 10px;
+}
+
+/* ===== round-3 workspace home modules ===== */
+.homeSubtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--ink-soft, #6b7280);
+}
+
+.firstRunTitle {
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 1.25rem;
+  margin: 0 0 10px;
+}
+
+.firstRunCopy {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-soft, #6b7280);
+}
+
+.firstRunSteps {
+  margin: 0 0 18px;
+  padding-left: 20px;
+}
+
+.firstRunSteps li {
+  font-size: 13px;
+  line-height: 2;
+  color: var(--ink-soft, #6b7280);
+}
+
+.firstRunAlt {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #7a5a08;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sectionTitle {
+  font-size: 0.875rem;
+  margin: 6px 0 10px;
+  color: var(--ink-soft, #6b7280);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.projectCardMeta {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-soft, #6b7280);
+  margin-bottom: 4px;
+}
+
+.statsStrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.statCell {
+  border: 1px solid rgba(15, 15, 15, 0.08);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.statNumber {
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.statLabel {
+  font-size: 11px;
+  color: var(--ink-soft, #6b7280);
+}
+
+/* ===== style lab (round-3 six-layer distillation) =====
+   round-3f (P0-1): label ABOVE each select in two side-by-side fields —
+   the old single-row flex crushed the labels into vertical single chars. */
+.styleControls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 12px 0 4px;
+}
+
+@media (max-width: 640px) {
+  .styleControls {
+    grid-template-columns: 1fr;
+  }
+}
+
+.styleField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.styleField .consumer-field-label {
+  margin: 0;
+}
+
+.styleControls select,
+.styleField select {
+  min-width: 0;
+  width: 100%;
+}
+
+.styleReportTabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.styleTab,
+.styleTabActive {
+  border: 1px solid rgba(15, 15, 15, 0.12);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.styleTabActive {
+  border-color: #b8860b;
+  color: #7a5a08;
+  background: rgba(184, 134, 11, 0.07);
+}
+
+.styleReport {
+  border: 1px solid rgba(15, 15, 15, 0.1);
+  border-radius: 14px;
+  padding: 6px 18px 18px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.styleLayer {
+  padding: 14px 0;
+  border-bottom: 1px dashed rgba(15, 15, 15, 0.08);
+}
+
+.styleLayer:last-of-type {
+  border-bottom: none;
+}
+
+.styleLayerHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.styleLayerGroup {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: #7a5a08;
+  border: 1px solid rgba(184, 134, 11, 0.35);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.styleLayerHeader h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.styleLayerSummary {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  color: var(--ink-soft, #6b7280);
+  line-height: 1.7;
+}
+
+.styleRules {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.styleRules li {
+  font-size: 12.5px;
+  line-height: 1.9;
+}
+
+.styleRulesEmpty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-soft, #6b7280);
+  font-style: italic;
+}
+
+.styleReportFooter {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--ink-soft, #6b7280);
+  text-align: center;
+}
+
+/* ============================================================
+   /app 工作台首页扩展 — first-screen value density
+   （诉求 1：空态不再是一张孤零零的状态卡，而是「快速开始 /
+   三步路线 / 写作节奏」三个有信号的模块）
+   ============================================================ */
+
+.workspaceIntro {
+  margin: 8px 0 4px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-soft, #514b43);
+  font-family: var(--serif, "Iowan Old Style", "Noto Serif CJK SC", serif);
+}
+
+.quickStart {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 8px 0 4px;
+}
+
+@media (max-width: 960px) {
+  .quickStart {
+    grid-template-columns: 1fr;
+  }
+}
+
+.quickStartCard {
+  position: relative;
+  padding: 16px 18px 18px;
+  border-radius: 14px;
+  background: var(--paper, #fffdf8);
+  border: 1px solid rgba(39, 36, 31, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.quickStartCard:hover,
+.quickStartCard:focus-within {
+  border-color: rgba(173, 86, 65, 0.45);
+  transform: translateY(-1px);
+}
+
+.quickStartCard[data-emphasis='true'] {
+  border-color: rgba(173, 86, 65, 0.4);
+  box-shadow: 0 1px 0 rgba(173, 86, 65, 0.08);
+}
+
+.quickStartCardTag {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--accent, #ad5641);
+}
+
+.quickStartCardTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink, #27241f);
+}
+
+.quickStartCardBody {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-soft, #514b43);
+  min-height: 44px;
+}
+
+.quickStartCardAction {
+  align-self: flex-start;
+  margin-top: auto;
+  border: 1px solid rgba(173, 86, 65, 0.35);
+  border-radius: 999px;
+  background: var(--paper, #fffdf8);
+  color: var(--accent, #ad5641);
+  padding: 6px 14px;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.quickStartCardAction:hover {
+  background: var(--accent-soft, #f3e5df);
+}
+
+.routeSteps {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--paper-warm, #f5f1e8);
+  border: 1px solid rgba(39, 36, 31, 0.06);
+  margin: 4px 0 4px;
+}
+
+.routeStepsItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.routeStepsIndex {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--accent, #ad5641);
+}
+
+.routeStepsLabel {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink, #27241f);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.routeStepsHint {
+  font-size: 12px;
+  color: var(--ink-soft, #514b43);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.routeStepsArrow {
+  color: rgba(39, 36, 31, 0.32);
+  font-size: 18px;
+  line-height: 1;
+}
+
+@media (max-width: 720px) {
+  .routeSteps {
+    grid-template-columns: 1fr;
+  }
+  .routeStepsArrow {
+    transform: rotate(90deg);
+    justify-self: center;
+  }
+}
+
+.rhythmStrip {
+  margin: 4px 0 12px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: var(--paper, #fffdf8);
+  border: 1px dashed rgba(39, 36, 31, 0.12);
+  display: grid;
+  /* round-3e (#6): grid adapts when a metric row is not shown */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 18px;
+}
+
+@media (max-width: 720px) {
+  .rhythmStrip {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rhythmItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rhythmValue {
+  font-size: 18px;
+  font-weight: 600;
+  font-feature-settings: 'tnum' 1;
+  color: var(--ink, #27241f);
+}
+
+.rhythmLabel {
+  font-size: 12px;
+  color: var(--ink-soft, #514b43);
+}
+
+.rhythmSkeleton {
+  height: 22px;
+  width: 56%;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(39, 36, 31, 0.06) 0%,
+    rgba(39, 36, 31, 0.1) 50%,
+    rgba(39, 36, 31, 0.06) 100%
+  );
+  background-size: 200% 100%;
+  animation: rhythmPulse 1.6s linear infinite;
+}
+
+@keyframes rhythmPulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.homeUserArea {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.homeFilters {
+  display: inline-flex;
+  gap: 6px;
+  margin: 6px 0 14px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--paper, #fffdf8);
+  border: 1px solid rgba(39, 36, 31, 0.08);
+  width: fit-content;
+}
+
+.homeFilters button {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft, #514b43);
+  font-size: 12.5px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.homeFilters button[data-active='true'] {
+  background: var(--accent, #ad5641);
+  color: var(--paper, #fffdf8);
+}
+
+.styleSummaryCard {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--accent-soft, #f3e5df);
+  border: 1px solid rgba(173, 86, 65, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.styleSummaryHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.styleSummaryTitle {
+  font-size: 12.5px;
+  color: var(--accent, #ad5641);
+  letter-spacing: 0.04em;
+}
+
+.styleSummaryBody {
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink, #27241f);
+  font-family: var(--serif, "Iowan Old Style", "Noto Serif CJK SC", serif);
+}
+
+.styleSummaryLink {
+  font-size: 12.5px;
+  color: var(--accent, #ad5641);
+  text-decoration: none;
+}
+
+.styleSummaryLink:hover {
+  text-decoration: underline;
+}
+
+.sectionTitle {
+  margin: 24px 0 10px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft, #514b43);
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   /app/style 风格实验室扩展 — round-3b (诉求 3 — 深化)
+   示例报告折叠、按组导入、复制 / 下载规则文件、应用入口。
+   ============================================================ */
+
+.styleExampleCard {
+  margin: 0 0 14px;
+  border-radius: 12px;
+  border: 1px dashed rgba(173, 86, 65, 0.4);
+  background: var(--paper, #fffdf8);
+  padding: 12px 16px;
+}
+
+.styleExampleToggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.styleExampleTag {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--accent, #ad5641);
+  border: 1px solid rgba(173, 86, 65, 0.4);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.styleExampleHint {
+  font-size: 12.5px;
+  color: var(--ink-soft, #514b43);
+}
+
+.styleExampleBody {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.styleExampleIntro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-soft, #514b43);
+}
+
+.styleExampleRules {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink, #27241f);
+}
+
+.styleExampleFormLabel {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-soft, #514b43);
+  letter-spacing: 0.04em;
+}
+
+.styleWhyHint {
+  margin: -2px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-soft, #514b43);
+  font-style: italic;
+}
+
+.styleReportHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(39, 36, 31, 0.08);
+}
+
+.styleReportMeta {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--accent, #ad5641);
+}
+
+.styleReportHeading {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink, #27241f);
+}
+
+.styleReportActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.styleReportAction {
+  border: 1px solid rgba(39, 36, 31, 0.18);
+  border-radius: 999px;
+  background: var(--paper, #fffdf8);
+  color: var(--ink, #27241f);
+  font-size: 12.5px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.styleReportAction:hover {
+  background: var(--paper-warm, #f5f1e8);
+}
+
+.styleReportActionPrimary {
+  composes: styleReportAction;
+  border-color: rgba(173, 86, 65, 0.45);
+  color: var(--accent, #ad5641);
+  text-decoration: none;
+}
+
+.styleReportActionPrimary:hover {
+  background: var(--accent-soft, #f3e5df);
+}
+
+.styleLayerQuestion {
+  margin-left: 6px;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--ink-soft, #6b7280);
+}
+
+/* ============================================================
+   Empty-state conversion hero (round-3c #G) — centered module on top
+   of the quick-start cards; one strong primary action + starters.
+   ============================================================ */
+
+.emptyHero {
+  margin: 26px 0 8px;
+  padding: 42px 28px 34px;
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 160% at 12% 0%, rgba(173, 86, 65, 0.07) 0%, rgba(173, 86, 65, 0) 46%),
+    var(--paper, #fffdf8);
+  border: 1px solid rgba(39, 36, 31, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.emptyHeroTitle {
+  margin: 0;
+  font-family: var(--serif, "Iowan Old Style", "Noto Serif CJK SC", serif);
+  font-size: 26px;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--ink, #27241f);
+}
+
+.emptyHeroBody {
+  margin: 0 auto;
+  max-width: 46ch;
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--ink-soft, #514b43);
+}
+
+.emptyHero button.consumer-primary-button {
+  margin-top: 12px;
+}
+
+.emptyHeroStarters {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.emptyHeroStartersLabel {
+  font-size: 12.5px;
+  color: var(--ink-soft, #514b43);
+}
+
+.emptyHeroStartersRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.emptyHeroStarter {
+  border: 1px solid rgba(173, 86, 65, 0.32);
+  border-radius: 999px;
+  background: var(--paper, #fffdf8);
+  color: var(--accent, #ad5641);
+  font-size: 13px;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.emptyHeroStarter:hover {
+  background: var(--accent-soft, #f3e5df);
+  border-color: rgba(173, 86, 65, 0.55);
+}
+
+/* round-3e (#5): on wide viewports the project cards form a two-column
+   grid so the widened home page doesn't stretch one card per 1000px row. */
+@media (min-width: 900px) {
+  .pageWide .documentList {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-items: stretch;
+  }
+}
+
+.projectCard {
+  height: 100%;
+}
+
+/* round-3e (#5): an explicit arrow affordance on each card; whole card is
+   already a link, the arrow confirms clickability. */
+.projectCardArrow {
+  float: right;
+  margin-left: 8px;
+  color: var(--muted, #8a8278);
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* round-3f (P0-2): export dropdown on style report header */
+.exportWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.exportMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 140px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--paper, #fffdf8);
+  border: 1px solid rgba(39, 36, 31, 0.12);
+  box-shadow: 0 10px 28px rgba(39, 36, 31, 0.14);
+  display: flex;
+  flex-direction: column;
+}
+
+.exportMenu button {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--ink, #27241f);
+  cursor: pointer;
+}
+
+.exportMenu button:hover {
+  background: var(--accent-soft, #f3e5df);
+}
+
+/* ============================================================
+   round-3f (P0-4): unified app navigation — every /app/* page carries
+   BrandAgent 项目 素材库 风格实验室 + account.
+   ============================================================ */
+
+.consumerNav {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  width: 100%;
+  padding: 2px 0 14px;
+  border-bottom: 1px solid rgba(39, 36, 31, 0.08);
+  margin-bottom: 18px;
+}
+
+.consumerNavBrand {
+  font-family: var(--serif, "Iowan Old Style", "Noto Serif CJK SC", serif);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink, #27241f);
+  text-decoration: none;
+  letter-spacing: 0.01em;
+}
+
+.consumerNavLinks {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.consumerNavLink {
+  font-size: 13px;
+  color: var(--ink-soft, #514b43);
+  text-decoration: none;
+  padding: 7px 12px;
+  border-radius: 999px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.consumerNavLink:hover {
+  background: var(--paper-warm, #f5f1e8);
+  color: var(--ink, #27241f);
+}
+
+.consumerNavLink[data-active='true'] {
+  background: var(--accent-soft, #f3e5df);
+  color: var(--accent, #ad5641);
+  font-weight: 600;
+}
+
+.consumerNavAccount {
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .consumerNav {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .consumerNavLink {
+    padding: 6px 9px;
+    font-size: 12.5px;
+  }
+}
+
+/* round-3f (素材页重做): empty-state hero + trust points + import panel */
+.materialsBackInline {
+  align-self: flex-start;
+  font-size: 13px;
+  color: var(--ink-soft, #514b43);
+  text-decoration: none;
+}
+
+.materialsBackInline:hover {
+  color: var(--ink, #27241f);
+}
+
+.materialEmpty {
+  padding: 34px 26px;
+  border-radius: 14px;
+  background: var(--paper, #fffdf8);
+  border: 1px solid rgba(39, 36, 31, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.materialEmptyTitle {
+  margin: 0;
+  font-family: var(--serif, "Iowan Old Style", "Noto Serif CJK SC", serif);
+  font-size: 22px;
+  color: var(--ink, #27241f);
+}
+
+.materialEmptyBody {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--ink-soft, #514b43);
+}
+
+.materialTrust {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink-soft, #514b43);
+}
+
+.materialTrust li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.materialTrust li::before {
+  content: '✓';
+  color: var(--accent, #ad5641);
+  font-weight: 600;
+}
+
+.materialImportPanel {
+  margin-top: 6px;
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* round-3g A4: quota urgency — caramel at >=80%, red-brown at 100% */
+.quotaPillUrgent {
+  background: rgba(184, 134, 11, 0.14);
+  color: #7a5a08;
+  font-weight: 600;
+}
+
+.quotaPillExhausted {
+  background: rgba(143, 63, 47, 0.12);
+  color: #8f3f2f;
+  font-weight: 700;
+}
+
+/* ===== round-3g B: style archive detail view ===== */
+.archiveSerial {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85rem;
+  color: #7a5a08;
+  border: 1px solid rgba(184, 134, 11, 0.4);
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.archiveTagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 4px;
+}
+
+.archiveTagRow li {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(15, 15, 15, 0.1);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.6);
+  min-width: 150px;
+  flex: 1 1 180px;
+}
+
+.archiveTagRow strong {
+  font-size: 11px;
+  color: #7a5a08;
+}
+
+.archiveTagRow span {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink, #1f2937);
+}
+
+.archiveGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 18px;
+  margin-top: 12px;
+}
+
+@media (max-width: 1000px) {
+  .archiveGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.archiveCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.archiveCard {
+  border: 1px solid rgba(15, 15, 15, 0.1);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.archiveCard h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.archiveSeeSample {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #7a5a08;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.archiveWatchRail {
+  position: sticky;
+  top: 84px;
+  align-self: start;
+  border: 1px solid rgba(184, 134, 11, 0.28);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: rgba(184, 134, 11, 0.05);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.archiveWatchRail h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #7a5a08;
+}
+
+.archiveWatchRail ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.archiveWatchRail li {
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.archiveWatchRail strong {
+  color: var(--ink, #1f2937);
+}
+
+.archiveWatchNote {
+  margin: 12px 0 0;
+  font-size: 11px;
+  color: var(--ink-soft, #6b7280);
+}
+
+.archiveBasis {
+  margin-top: 18px;
+  border-top: 1px dashed rgba(15, 15, 15, 0.12);
+  padding-top: 14px;
+}
+
+.archiveBasis ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.archiveBasis li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12.5px;
+}
+
+.archiveBasisTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archiveBasisMeta {
+  font-size: 11px;
+  color: var(--ink-soft, #6b7280);
+  flex-shrink: 0;
+}
+
+/* ===== round-3g C: material rich cards + import entries ===== */
+.materialImportRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+.materialImportAlt {
+  border: 1px solid rgba(184, 134, 11, 0.5);
+  border-radius: 999px;
+  background: rgba(184, 134, 11, 0.06);
+  color: #7a5a08;
+  font-size: 13px;
+  padding: 10px 20px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.materialFilterRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+.materialCardGrid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+@media (min-width: 900px) {
+  .materialCardGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.materialRichCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  width: 100%;
+  border: 1px solid rgba(15, 15, 15, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 16px 44px 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.materialRichCard:hover {
+  border-color: rgba(184, 134, 11, 0.45);
+  box-shadow: 0 4px 14px rgba(15, 15, 15, 0.06);
+}
+
+.materialCardNumber {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft, #6b7280);
+}
+
+.materialKindChip {
+  align-self: flex-start;
+  font-size: 10.5px;
+  border-radius: 5px;
+  padding: 2px 8px;
+  background: rgba(15, 15, 15, 0.05);
+  color: var(--ink-soft, #6b7280);
+}
+
+.materialKindChip[data-kind='file'] {
+  background: rgba(18, 95, 107, 0.1);
+  color: #125f6b;
+}
+
+.materialKindChip[data-kind='link'] {
+  background: rgba(184, 134, 11, 0.12);
+  color: #7a5a08;
+}
+
+.materialCardTitle {
+  font-size: 14px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.materialCardSource {
+  font-size: 11px;
+  color: var(--ink-soft, #6b7280);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* v4 P1-1: verbatim first-120-chars preview, clamped to 3 lines */
+.materialCardExcerpt {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft, #6b7280);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.materialCardMetaRow {
+  font-size: 11px;
+  color: var(--ink-soft, #6b7280);
+}
+
+.materialCardOpen {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  font-size: 16px;
+  color: var(--ink-soft, #6b7280);
 }

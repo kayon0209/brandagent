@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent_api.providers.base import ModelCallResult
+from agent_api.providers.base import ModelCallResult, ProviderExecutionError
 from agent_api.workflow.consumer_graph import (
     GeneratedDraft,
     GraphCandidateGenerator,
@@ -38,6 +38,25 @@ class StubProvider:
 
     async def generate(self, *, system: str, prompt: str, prompt_version: str) -> ModelCallResult:
         return _result(self.text)
+
+
+class UnknownExecutionProvider:
+    async def generate(self, *, system: str, prompt: str, prompt_version: str) -> ModelCallResult:
+        raise ProviderExecutionError(
+            "MODEL_EXECUTION_UNKNOWN",
+            "The provider may have executed the request but its response was lost.",
+            retryable=False,
+        )
+
+
+class ConfirmedExecutionProvider:
+    async def generate(self, *, system: str, prompt: str, prompt_version: str) -> ModelCallResult:
+        raise ProviderExecutionError(
+            "MODEL_INVALID_RESPONSE",
+            "The provider returned a malformed success response.",
+            retryable=False,
+            execution_confirmed=True,
+        )
 
 
 CANDIDATE_TEXT = "品牌不是自动化出来的，而是一个人持续做判断的结果。工具替你完成句子，观点的代价仍在你身上。"
@@ -86,13 +105,49 @@ async def test_full_graph_invoke_produces_candidate_and_usage() -> None:
 @pytest.mark.asyncio
 async def test_short_output_is_rejected_by_the_deterministic_review() -> None:
     generator = GraphCandidateGenerator(provider=StubProvider("太短"))
+    usage: dict = {}
     with pytest.raises(RuntimeError, match="CANDIDATE_REJECTED"):
         await generator.generate(
             core_idea="品牌靠判断",
             intent="",
             excerpts=[],
             base_revision=1,
+            usage_out=usage,
         )
+    assert usage == {
+        "input_tokens": 10,
+        "output_tokens": 10,
+        "model": "stub",
+        "model_executed": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_response_loss_preserves_the_execution_unknown_semantic_for_usage() -> None:
+    generator = GraphCandidateGenerator(provider=UnknownExecutionProvider())
+    with pytest.raises(ProviderExecutionError) as caught:
+        await generator.generate(
+            core_idea="品牌靠判断",
+            intent="",
+            excerpts=[],
+            base_revision=1,
+        )
+    assert caught.value.code == "MODEL_EXECUTION_UNKNOWN"
+    assert caught.value.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_confirmed_provider_execution_is_not_downgraded_by_the_graph() -> None:
+    generator = GraphCandidateGenerator(provider=ConfirmedExecutionProvider())
+    with pytest.raises(ProviderExecutionError) as caught:
+        await generator.generate(
+            core_idea="品牌靠判断",
+            intent="",
+            excerpts=[],
+            base_revision=1,
+        )
+    assert caught.value.code == "MODEL_INVALID_RESPONSE"
+    assert caught.value.execution_confirmed is True
 
 
 def test_generated_draft_accepts_only_substantive_text() -> None:

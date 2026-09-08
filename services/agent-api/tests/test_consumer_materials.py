@@ -8,6 +8,8 @@ traceability, and cross-workspace isolation.
 
 from __future__ import annotations
 
+import socket
+
 import pytest
 
 from agent_api.api.security import Principal
@@ -50,7 +52,11 @@ class MemoryMaterialStore:
             "document_id": document_id,
             "workspace_id": workspace_id,
             "document_name": document.name,
-            "document_type": "external_reference",
+            # round-3g D6: the memory store mirrors the REAL repo — the
+            # import kind is data, source_url/original_filename ride along
+            "document_type": getattr(document, "document_type", "text"),
+            "source_url": getattr(document, "source_url", None),
+            "original_filename": getattr(document, "original_filename", None),
             "version": "v1",
             "authority_level": "reference",
             "checksum": checksum,
@@ -330,3 +336,159 @@ def test_material_detail_returns_404_for_cross_workspace_ids() -> None:
     )
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "NOT_FOUND"
+
+
+# ---------------------------------------------------------------------
+# round-3g D6: import kinds are real data (text / file / link)
+# ---------------------------------------------------------------------
+
+def test_import_text_marks_document_type_text() -> None:
+    import asyncio
+
+    principal = make_principal()
+
+    service, _store = make_service()
+    result = asyncio.run(
+        service.import_text(principal, MaterialImportRequest(text="一段文字素材内容。", name="n"))
+    )
+    document_id = result["document_id"]
+    documents = asyncio.run(service.list_documents(principal))
+    match = next(d for d in documents if d["document_id"] == document_id)
+    assert match["document_type"] == "text"
+    assert match.get("source_url") is None
+
+
+def test_upload_file_marks_document_type_file_with_filename() -> None:
+    import asyncio
+
+    principal = make_principal()
+
+    service, _store = make_service()
+    result = asyncio.run(
+        service.upload_file(principal, "笔记.txt", "文件正文内容。".encode("utf-8"), content_type="text/plain", request_id="up-typed-1")
+    )
+    documents = asyncio.run(service.list_documents(principal))
+    match = next(d for d in documents if d["document_id"] == result["document_id"])
+    assert match["document_type"] == "file"
+    assert match.get("original_filename") == "笔记.txt"
+
+
+def test_upload_pdf_is_rejected_with_honest_error() -> None:
+    import asyncio
+
+    principal = make_principal()
+
+    service, _store = make_service()
+    try:
+        asyncio.run(
+            service.upload_file(
+                principal,
+                "加密扫描.pdf",
+                b"%PDF-1.4 fake binary payload",
+                content_type="application/pdf",
+                request_id="up-pdf-1",
+            )
+        )
+        raise AssertionError("PDF upload must not succeed")
+    except ValueError as error:
+        # the honest failure surfaces at the extension gate first (MVP
+        # allowlist = txt/md); the message is truthful, never a fake success
+        assert "Unsupported file type" in str(error) or "无法提取文本" in str(error)
+
+
+def test_import_url_extracts_readable_text_and_marks_link() -> None:
+    import asyncio
+    from unittest.mock import patch
+
+    from agent_api.api.security import Principal
+
+    principal = Principal(user_id="consumer-1", workspace_id="ws-1", role="admin", experience="personal")
+
+    class _FakeResponse:
+        status_code = 200
+        headers = {"content-type": "text/html; charset=utf-8"}
+        encoding = "utf-8"
+        _html = "<html><head><title>文章标题</title></head><body><p>第一段正文。</p><p>第二段内容。</p></body></html>"
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def aiter_bytes(self, chunk_size=8192):
+            yield self._html.encode("utf-8")
+
+    class _FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        def stream(self, method, url):
+            return _FakeResponse()
+
+    import agent_api.application.materials as materials_module
+
+    original = materials_module.httpx.AsyncClient
+    materials_module.httpx.AsyncClient = _FakeClient
+    # v4 P0-1: import_url resolves the host and rejects private ranges; patch
+    # DNS so the assertion is deterministic and network-independent.
+    _public_addr = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 443))]
+    try:
+        with patch("socket.getaddrinfo", return_value=_public_addr):
+            service, _store = make_service()
+            result = asyncio.run(service.import_url(principal, "https://example.com/post/1", request_id="url-real-1"))
+    finally:
+        materials_module.httpx.AsyncClient = original
+    assert result["status"] == "distilled"
+    documents = asyncio.run(service.list_documents(principal))
+    match = next(d for d in documents if d["document_id"] == result["document_id"])
+    assert match["document_type"] == "link"
+    assert match["source_url"] == "https://example.com/post/1"
+    assert match["document_name"] == "文章标题"
+
+
+def test_import_url_gives_honest_error_on_fetch_failure() -> None:
+    import asyncio
+    from unittest.mock import patch
+
+    import httpx
+    from agent_api.api.security import Principal
+
+    principal = Principal(user_id="consumer-1", workspace_id="ws-1", role="admin", experience="personal")
+
+    class _BoomClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        def stream(self, method, url):
+            # v4 P0-1/P0-2: import_url uses client.stream(...), not .get(.text).
+            # The connection itself fails -> httpx.HTTPError -> honest ValueError.
+            raise httpx.ConnectError("network down")
+
+    import agent_api.application.materials as materials_module
+
+    original = materials_module.httpx.AsyncClient
+    materials_module.httpx.AsyncClient = _BoomClient
+    _public_addr = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 443))]
+    try:
+        with patch("socket.getaddrinfo", return_value=_public_addr):
+            service, _store = make_service()
+            try:
+                asyncio.run(service.import_url(principal, "https://example.com/x", request_id="url-fail-1"))
+                raise AssertionError("failed fetch must raise, not import")
+            except ValueError as error:
+                assert "链接抓取失败" in str(error)
+    finally:
+        materials_module.httpx.AsyncClient = original

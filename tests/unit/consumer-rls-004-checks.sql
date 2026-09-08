@@ -13,14 +13,18 @@ DECLARE
 BEGIN
   FOREACH table_name IN ARRAY ARRAY[
     'creator_profiles','consumer_projects','consumer_drafts','material_excerpts',
-    'project_material_links','editor_suggestions','usage_ledger'
+    'project_material_links','editor_suggestions','usage_ledger','style_reports'
   ] LOOP
     SELECT relrowsecurity INTO rls_ok FROM pg_class WHERE relname = table_name;
     IF NOT rls_ok THEN
       RAISE EXCEPTION 'RLS not enabled on %', table_name;
     END IF;
     SELECT COUNT(*) > 0 INTO policy_ok FROM pg_policies
-      WHERE tablename = table_name AND policyname = 'brandflow_consumer_workspace_scope';
+      WHERE tablename = table_name
+        AND policyname = CASE table_name
+          WHEN 'style_reports' THEN 'style_reports_workspace_isolation'
+          ELSE 'brandflow_consumer_workspace_scope'
+        END;
     IF NOT policy_ok THEN
       RAISE EXCEPTION 'workspace policy missing on %', table_name;
     END IF;

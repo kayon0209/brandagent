@@ -1835,6 +1835,82 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+  /api/v1/consumer/style/analyze:
+    post:
+      summary: Analyze Author Style (Six Layers)
+      description: Distills a corpus of complete articles by one author into six reusable rule layers — L1 surface language (语言 DNA), L2 article structure (结构模板), L3 topic logic (选题逻辑), L4 evidence strategy (素材策略), L5 cognitive frame (认知框架), L6 visual guide (视觉指南). L1-L2 answer how-to-write, L3-L5 how-to-think, L6 how-to-present. The rule file language follows the corpus (CJK ratio) unless outputLanguage is explicitly set. Requires 2-20 complete articles; model-costing endpoint (Idempotency-Key, ledger-gated).
+      operationId: analyze_style_api_v1_consumer_style_analyze_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [articles, form]
+              properties:
+                articles:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 2
+                  maxItems: 20
+                  description: Complete articles by the same author (the corpus)
+                form:
+                  type: string
+                  enum: [long_form, wechat_article, blog, newsletter, xiaohongshu_note]
+                outputLanguage:
+                  type: string
+                  enum: [zh, en]
+                  description: Optional override; defaults to the corpus's dominant language
+      responses:
+        '200':
+          description: The distilled six-layer report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '409':
+          description: QUOTA_EXCEEDED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '413':
+          description: Corpus too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '422':
+          description: Validation Error (unsupported form / corpus under 2 articles / bad language)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/consumer/style/reports:
+    get:
+      summary: List Style Reports
+      description: Previously distilled six-layer style reports for this workspace, newest first.
+      operationId: list_style_reports_api_v1_consumer_style_reports_get
+      security:
+      - HTTPBearer: []
+      responses:
+        '200':
+          description: Style report list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
   /api/v1/consumer/projects/{task_id}/events:
     get:
       summary: Project Events

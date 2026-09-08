@@ -9,12 +9,23 @@ import type {
   ConsumerMaterialDocument,
   ConsumerMaterialDocumentView,
   ConsumerMaterialExcerpt,
+  MaterialImportKind,
 } from '@/types/consumer.types'
 import { BrandFlowApiError, brandFlowRequest } from '@/lib/api/brandflow'
 
 export interface MaterialListItem extends ConsumerMaterialDocument {
   excerpt_count: number
   created_at?: string
+  /** round-3g D6: import kind + provenance */
+  document_type: MaterialImportKind
+  source_url?: string | null
+  original_filename?: string | null
+  /** round-3g D6: last time an excerpt of this material was linked to a project */
+  last_used_at?: string | null
+  /** v4 P1-1: first 120 chars of the first chunk, verbatim — for the card preview */
+  excerpt_preview?: string | null
+  /** v4 P1-1: number of distinct projects that have linked an excerpt of this doc */
+  linked_projects_count?: number
 }
 
 export interface MaterialImportResult {
@@ -32,6 +43,13 @@ export async function listMaterials(): Promise<{ items: MaterialListItem[] }> {
       status: string
       checksum?: string
       created_at?: string
+      excerpt_count?: number
+      last_used_at?: string | null
+      document_type?: MaterialImportKind
+      source_url?: string | null
+      original_filename?: string | null
+      excerpt_preview?: string | null
+      linked_projects_count?: number
     }>
   }>('/api/v1/consumer/materials')
 
@@ -40,8 +58,18 @@ export async function listMaterials(): Promise<{ items: MaterialListItem[] }> {
       document_id: document.document_id,
       document_name: document.document_name,
       status: document.status as MaterialListItem['status'], // real server status passthrough
-      excerpt_count: 0, // excerpt count arrives with the per-document view
+      // round-3g D6: excerpt_count / last_used_at are derived server-side
+      // from the project_material_links join — never faked on the client
+      excerpt_count: document.excerpt_count ?? 0,
+      last_used_at: document.last_used_at ?? null,
       created_at: document.created_at,
+      // round-3g D6: import kind + provenance passthrough (legacy rows read as text)
+      document_type: (document.document_type ?? 'text') as MaterialImportKind,
+      source_url: document.source_url ?? null,
+      original_filename: document.original_filename ?? null,
+      // v4 P1-1: card preview + linkage — derived server-side, never faked
+      excerpt_preview: document.excerpt_preview ?? null,
+      linked_projects_count: document.linked_projects_count ?? 0,
     })),
   }
 }
@@ -67,6 +95,35 @@ export async function importMaterialText(
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
     body: JSON.stringify({ text, name }),
+  })
+}
+
+/** round-3g D6: file import — multipart to the /upload endpoint; the
+ * server stamps document_type=file with original_filename provenance. */
+export async function importMaterialFile(
+  filename: string,
+  content: string,
+  idempotencyKey: string
+): Promise<MaterialImportResult> {
+  const form = new FormData()
+  form.append('file', new Blob([content], { type: 'text/plain' }), filename)
+  return brandFlowRequest<MaterialImportResult>('/api/v1/consumer/materials/upload', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: form,
+  })
+}
+
+/** round-3g D6: save-a-link — the server fetches the page and stores the
+ * readable text with the URL as provenance; failures are honest errors. */
+export async function importMaterialUrl(
+  url: string,
+  idempotencyKey: string
+): Promise<MaterialImportResult> {
+  return brandFlowRequest<MaterialImportResult>('/api/v1/consumer/materials/url', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ url }),
   })
 }
 

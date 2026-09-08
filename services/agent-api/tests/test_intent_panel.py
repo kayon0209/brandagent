@@ -154,6 +154,8 @@ async def test_usage_of_both_calls_is_reported() -> None:
         principal_for("ws-1"), "task-1", intent="展开说说", usage_out=usage, **_anchor_kwargs()
     )
     assert result["status"] == "proposed"
-    # usage_out carries the rewrite call (settle), result carries classifier
-    assert usage.get("output_tokens") == 5
+    # The ledger must charge BOTH executed calls; response data still exposes
+    # the classifier usage separately for UI diagnostics.
+    assert usage.get("output_tokens") == 10
+    assert usage.get("model_executed") is True
     assert result["usage"]["output_tokens"] == 5

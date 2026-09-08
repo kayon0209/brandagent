@@ -20,6 +20,7 @@ from typing import Protocol
 
 from agent_api.api.security import Principal
 from agent_api.domain.errors import ConflictError, NotFoundError
+from agent_api.providers.base import ProviderExecutionError
 
 
 class QuotaExceeded(ConflictError):
@@ -100,8 +101,15 @@ class UsageLedgerService:
         input_tokens: int | None,
         output_tokens: int | None,
         model: str | None,
+        minimum_total_tokens: int | None = None,
     ) -> dict:
-        """Settle a reservation with real (or estimated) usage. Idempotent."""
+        """Settle a reservation with real (or estimated) usage. Idempotent.
+
+        ``minimum_total_tokens`` is a conservative lower bound for a
+        partially measured operation. It is used when a batch has known
+        completed calls but a later non-idempotent call lost its response:
+        charge no less than the reservation or those known calls.
+        """
 
         await self._require_workspace(principal)
         entry = await self._store.find_entry(principal.workspace_id, request_id)
@@ -125,6 +133,12 @@ class UsageLedgerService:
             usage_source = "measured"
         else:
             total_tokens = int(entry.get("estimated_tokens") or 0)
+            usage_source = "estimated"
+
+        if minimum_total_tokens is not None:
+            total_tokens = max(total_tokens, int(minimum_total_tokens))
+            # The complete batch usage is not observable after a response
+            # loss, even if earlier calls returned token counts.
             usage_source = "estimated"
 
         updated = await self._store.update_entry(
@@ -158,11 +172,16 @@ class UsageLedgerService:
         return {**updated, "replayed": False}
 
     async def usage_summary(self, principal: Principal) -> dict:
-        """Per-workspace usage. Cross-workspace reads are impossible by scoping."""
+        """Per-workspace usage. Cross-workspace reads are impossible by scoping.
+
+        P1-D: a workspace with NO creator_profiles row is simply a fresh
+        workspace that never reserved anything — its usage is zero, not a
+        404. The quota pill is an always-on UI surface; a brand-new user
+        must see the full quota, not an error."""
 
         summary = await self._store.usage_summary(principal.workspace_id)
         if summary is None:
-            raise NotFoundError(f"workspace {principal.workspace_id} not found")
+            return {"workspace_id": principal.workspace_id, "used": 0, "quota": self._quota}
         return summary
 
 
@@ -187,7 +206,9 @@ async def ledgered_call(
       re-book ledger rows, or re-generate candidates/variants;
     - success settles with the reservation estimate unless the caller
       wrote real provider tokens into `outcome`;
-    - any exception refunds the reservation.
+    - ordinary failures refund the reservation;
+    - a provider response-loss failure settles the estimate because the
+      non-idempotent provider POST may already have been executed.
     """
 
     reserved = await ledger.reserve(
@@ -204,9 +225,78 @@ async def ledgered_call(
         return
     try:
         yield outcome
-    except Exception:
-        await ledger.refund(principal, request_id=request_id, reason="CALL_FAILED")
+    except ProviderExecutionError as error:
+        if error.code == "MODEL_EXECUTION_UNKNOWN" or error.execution_confirmed:
+            await ledger.settle(
+                principal,
+                request_id=request_id,
+                operation=operation,
+                input_tokens=outcome.get("input_tokens"),
+                output_tokens=outcome.get("output_tokens"),
+                model=outcome.get("model"),
+                # A prior model call in this same ledgered operation may
+                # have returned real usage before this call became unknown
+                # or confirmed-but-unparseable. Never replace that lower
+                # bound with a smaller fixed reservation estimate.
+                minimum_total_tokens=estimated_tokens,
+            )
+        elif outcome.get("model_executed"):
+            # A multi-step operation (for example, free-intent classify then
+            # rewrite) may fail on a later provider call. The first call has
+            # already run and reported measured usage, so refunding the whole
+            # operation would make that completed model call free.
+            await ledger.settle(
+                principal,
+                request_id=request_id,
+                operation=operation,
+                input_tokens=outcome.get("input_tokens"),
+                output_tokens=outcome.get("output_tokens"),
+                model=outcome.get("model"),
+            )
+        else:
+            await ledger.refund(principal, request_id=request_id, reason="CALL_FAILED")
         raise
+    except Exception as error:
+        # Application adapters can preserve this semantic without importing
+        # the provider-layer exception type (for example, variant generation
+        # returns a public VariantGenerationError). The provider POST may
+        # already have run, so refunding would make a paid call free.
+        if getattr(error, "execution_unknown", False):
+            await ledger.settle(
+                principal,
+                request_id=request_id,
+                operation=operation,
+                input_tokens=None,
+                output_tokens=None,
+                model=None,
+            )
+        elif getattr(error, "execution_confirmed", False) or outcome.get("model_executed"):
+            # The provider returned normally and a later local parser,
+            # validator, or persistence operation rejected the result. The
+            # invocation is already billable; keep its measured tokens (or
+            # reservation estimate when the provider omitted usage fields).
+            await ledger.settle(
+                principal,
+                request_id=request_id,
+                operation=operation,
+                input_tokens=outcome.get("input_tokens"),
+                output_tokens=outcome.get("output_tokens"),
+                model=outcome.get("model"),
+            )
+        else:
+            await ledger.refund(principal, request_id=request_id, reason="CALL_FAILED")
+        raise
+    if outcome.get("execution_unknown"):
+        await ledger.settle(
+            principal,
+            request_id=request_id,
+            operation=operation,
+            input_tokens=outcome.get("input_tokens"),
+            output_tokens=outcome.get("output_tokens"),
+            model=outcome.get("model"),
+            minimum_total_tokens=estimated_tokens,
+        )
+        return
     await ledger.settle(
         principal,
         request_id=request_id,

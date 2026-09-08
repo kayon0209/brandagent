@@ -108,9 +108,23 @@ def build_consumer_graph(*, provider: LLMProvider, core_idea: str, intent: str, 
                 },
             }
         except ProviderExecutionError as error:
-            return {"raw_text": "", "error": {"code": "PROVIDER_FAILED", "message": str(error), "retryable": error.retryable}}
+            return {
+                "raw_text": "",
+                "error": {
+                    "code": error.code,
+                    "message": str(error),
+                    "retryable": error.retryable,
+                    "execution_confirmed": error.execution_confirmed,
+                },
+            }
 
     async def review(state: ConsumerGraphState) -> dict:
+        # Do not turn a provider failure into the unrelated deterministic
+        # "candidate-too-short" verdict. In particular, a lost provider
+        # response may already have charged the user and must reach the
+        # usage ledger as MODEL_EXECUTION_UNKNOWN.
+        if state.error:
+            return {"candidate": None, "error": state.error}
         blocks = [
             {"block_id": f"b{index + 1}", "block_type": "paragraph", "text": paragraph}
             for index, paragraph in enumerate(state.raw_text.split("\n"))
@@ -157,12 +171,22 @@ class GraphCandidateGenerator:
                 base_revision=base_revision,
             ).model_dump()
         )
+        # The provider result is billable even if deterministic review rejects
+        # it below; record it before examining graph errors/candidate shape.
+        if usage_out is not None and isinstance(result.get("usage"), dict):
+            usage_out.update(result["usage"])
+            usage_out["model_executed"] = True
         if result.get("error"):
             error = result["error"]
+            if error["code"] == "MODEL_EXECUTION_UNKNOWN" or error.get("execution_confirmed"):
+                raise ProviderExecutionError(
+                    error["code"],
+                    error["message"],
+                    retryable=bool(error.get("retryable")),
+                    execution_confirmed=bool(error.get("execution_confirmed")),
+                )
             raise RuntimeError(f"candidate generation failed: {error['code']} {error['message']}")
         candidate = result["candidate"]
         if candidate is None:
             raise RuntimeError("candidate generation failed: no candidate produced")
-        if usage_out is not None and isinstance(result.get("usage"), dict):
-            usage_out.update(result["usage"])
         return candidate

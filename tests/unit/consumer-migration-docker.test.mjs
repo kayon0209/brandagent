@@ -8,6 +8,8 @@ import test from 'node:test'
 
 const enabled = process.env.RUN_BRANDFLOW_DB_TESTS === 'true'
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const composePath = path.join(repositoryRoot, 'docker-compose.yml')
+const dockerignorePath = path.join(repositoryRoot, '.dockerignore')
 const migrationPath = path.join(repositoryRoot, 'docs', 'migrations', '003_consumer_experience.sql')
 const checkPath = path.join(repositoryRoot, 'tests', 'unit', 'consumer-migration-checks.sql')
 const rlsCheckPath = path.join(repositoryRoot, 'tests', 'unit', 'consumer-rls-004-checks.sql')
@@ -22,6 +24,40 @@ test('003_consumer_experience.sql exists and stays additive', () => {
       new RegExp(`\\b${banned}\\b`, 'i'),
       `the consumer migration must never contain ${banned}`
     )
+  }
+})
+
+test('fresh Compose initialization applies every numbered migration before grants', () => {
+  const compose = readFileSync(composePath, 'utf8')
+  const mounts = [
+    '001_init.sql:/docker-entrypoint-initdb.d/02-legacy.sql',
+    '002_brandflow_v2_foundation.sql:/docker-entrypoint-initdb.d/03-brandflow.sql',
+    '003_consumer_experience.sql:/docker-entrypoint-initdb.d/04-consumer.sql',
+    '004_consumer_rls.sql:/docker-entrypoint-initdb.d/05-consumer-rls.sql',
+    '005_consumer_rls_hardening.sql:/docker-entrypoint-initdb.d/06-consumer-rls-force.sql',
+    '006_style_reports.sql:/docker-entrypoint-initdb.d/07-style-reports.sql',
+    '007_style_report_enrichment.sql:/docker-entrypoint-initdb.d/08-style-report-enrichment.sql',
+    '008_consumer_material_kinds.sql:/docker-entrypoint-initdb.d/09-consumer-material-kinds.sql',
+    'postgres-grants.sql:/docker-entrypoint-initdb.d/10-grants.sql',
+  ]
+  let previous = -1
+  for (const mount of mounts) {
+    const position = compose.indexOf(mount)
+    assert.ok(position > previous, `expected Compose initialization mount in order: ${mount}`)
+    previous = position
+  }
+})
+
+test('Docker context excludes retained local backups and sensitive scratch artifacts', () => {
+  const dockerignore = readFileSync(dockerignorePath, 'utf8')
+  for (const pattern of [
+    '.next.*-bak.*',
+    '.next.*-bak.*/',
+    '.tmp_research',
+    'docs/resume-brandagent-ai-pm.md',
+    '.clerk-ticket*.tmp',
+  ]) {
+    assert.match(dockerignore, new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'))
   }
 })
 
@@ -59,6 +95,9 @@ test('fresh PostgreSQL applies legacy, BrandFlow and consumer migrations with ch
       '003_consumer_experience.sql',
       '004_consumer_rls.sql',
       '005_consumer_rls_hardening.sql',
+      '006_style_reports.sql',
+      '007_style_report_enrichment.sql',
+      '008_consumer_material_kinds.sql',
     ]) {
       docker(['exec', container, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-f', `/migrations/${file}`])
     }

@@ -69,51 +69,137 @@ class PostgresMaterialStore:
             )
             return await cursor.fetchone()
 
+
+
+    @staticmethod
+    def _public_document(row) -> dict:
+        """Flatten the storage row into the API's document view: source_url
+        / original_filename out of metadata, document_type normalized to
+        the three user-visible kinds (legacy rows keep their tag)."""
+        import json as _json
+
+        document = dict(row)
+        metadata = document.pop("metadata", None)
+        if isinstance(metadata, str):
+            try:
+                metadata = _json.loads(metadata)
+            except (TypeError, ValueError):
+                metadata = {}
+        metadata = metadata or {}
+        document["source_url"] = metadata.get("source_url")
+        document["original_filename"] = metadata.get("original_filename")
+        document_type = str(document.get("document_type") or "text")
+        if document_type not in ("text", "file", "link"):
+            document_type = "text"  # legacy 'external_reference' rows read as 文字
+        document["document_type"] = document_type
+        # round-3g D6: excerpt_count / last_used_at are derived in the list /
+        # detail SQL; rows read through other paths default to honest zeroes.
+        document["excerpt_count"] = int(document.get("excerpt_count") or 0)
+        document["last_used_at"] = document.get("last_used_at")
+        # v4 P1-1: card text preview + distinct-project linkage, derived in
+        # the same SQL. excerpt_preview is the first 120 chars of the first
+        # chunk, verbatim (no rewrite). linked_projects_count counts distinct
+        # tasks that have linked an excerpt of this document.
+        document["excerpt_preview"] = document.get("excerpt_preview") or None
+        document["linked_projects_count"] = int(document.get("linked_projects_count") or 0)
+        return document
+
     async def insert_document(self, workspace_id: str, material: ParsedMaterial, checksum: str, request_id: str) -> dict:
         async with self._pool.connection() as connection:
             await self._scope(connection, workspace_id)
             await self._ensure_workspace(connection, workspace_id)
+            # round-3g D6: the import KIND is real data (text/file/link), not
+            # a fixed tag; source_url / original_filename ride in metadata
+            # JSONB so the schema stays untouched (additive rule)
+            import json as _json
+            metadata = {}
+            if getattr(material, "source_url", None):
+                metadata["source_url"] = material.source_url
+            if getattr(material, "original_filename", None):
+                metadata["original_filename"] = material.original_filename
             cursor = await connection.execute(
                 """INSERT INTO source_documents
                        (workspace_id, document_name, document_type, version,
-                        authority_level, status, checksum, created_by)
-                   VALUES (%s, %s, 'external_reference', 'v1',
-                           'reference', 'active', %s, %s)
+                        authority_level, status, checksum, created_by, metadata)
+                   VALUES (%s, %s, %s, 'v1',
+                           'reference', 'active', %s, %s, %s::jsonb)
                    ON CONFLICT (workspace_id, checksum) DO NOTHING
                    RETURNING document_id, workspace_id, document_name,
                              document_type, version, authority_level,
-                             checksum, status""",
-                (workspace_id, material.name, checksum, "consumer-material"),
+                             checksum, status, metadata, created_at""",
+                (
+                    workspace_id,
+                    material.name,
+                    getattr(material, "document_type", "text"),
+                    checksum,
+                    "consumer-material",
+                    _json.dumps(metadata, ensure_ascii=False),
+                ),
             )
             row = await cursor.fetchone()
             if row is None:  # concurrent duplicate import: read the existing row
                 row = await self.find_document_by_checksum(workspace_id, checksum)
-            return row
+            return self._public_document(row)
 
     async def get_document(self, workspace_id: str, document_id: str) -> dict | None:
         async with self._pool.connection() as connection:
             await self._scope(connection, workspace_id)
             cursor = await connection.execute(
-                """SELECT document_id, workspace_id, document_name, document_type,
-                          version, authority_level, checksum, status
-                   FROM source_documents
-                   WHERE workspace_id=%s AND document_id=%s""",
+                """SELECT d.document_id, d.workspace_id, d.document_name, d.document_type,
+                          d.version, d.authority_level, d.checksum, d.status,
+                          d.metadata, d.created_at,
+                          (SELECT count(*)::int FROM project_material_links l
+                             JOIN material_excerpts e ON e.excerpt_id = l.excerpt_id
+                            WHERE e.workspace_id = d.workspace_id
+                              AND e.document_id = d.document_id) AS excerpt_count,
+                          (SELECT max(l.created_at) FROM project_material_links l
+                             JOIN material_excerpts e ON e.excerpt_id = l.excerpt_id
+                            WHERE e.workspace_id = d.workspace_id
+                              AND e.document_id = d.document_id) AS last_used_at,
+                          (SELECT left(c.content, 120) FROM source_chunks c
+                            WHERE c.workspace_id = d.workspace_id AND c.document_id = d.document_id
+                            ORDER BY c.chunk_index LIMIT 1) AS excerpt_preview,
+                          (SELECT count(DISTINCT l.task_id) FROM project_material_links l
+                             JOIN material_excerpts e ON e.excerpt_id = l.excerpt_id
+                            WHERE e.workspace_id = d.workspace_id AND e.document_id = d.document_id) AS linked_projects_count
+                   FROM source_documents d
+                   WHERE d.workspace_id=%s AND d.document_id=%s""",
                 (workspace_id, document_id),
             )
-            return await cursor.fetchone()
+            row = await cursor.fetchone()
+            # RLS intentionally makes a foreign workspace's document
+            # indistinguishable from an absent id. Preserve that fail-closed
+            # contract instead of turning the hidden row into a 500.
+            return self._public_document(row) if row is not None else None
 
     async def list_documents(self, workspace_id: str) -> list[dict]:
         async with self._pool.connection() as connection:
             await self._scope(connection, workspace_id)
             cursor = await connection.execute(
-                """SELECT document_id, workspace_id, document_name, document_type,
-                          version, authority_level, checksum, status, created_at
-                   FROM source_documents
-                   WHERE workspace_id=%s AND document_type='external_reference'
-                   ORDER BY created_at DESC""",
+                """SELECT d.document_id, d.workspace_id, d.document_name, d.document_type,
+                          d.version, d.authority_level, d.checksum, d.status,
+                          d.metadata, d.created_at,
+                          (SELECT count(*)::int FROM project_material_links l
+                             JOIN material_excerpts e ON e.excerpt_id = l.excerpt_id
+                            WHERE e.workspace_id = d.workspace_id
+                              AND e.document_id = d.document_id) AS excerpt_count,
+                          (SELECT max(l.created_at) FROM project_material_links l
+                             JOIN material_excerpts e ON e.excerpt_id = l.excerpt_id
+                            WHERE e.workspace_id = d.workspace_id
+                              AND e.document_id = d.document_id) AS last_used_at,
+                          (SELECT left(c.content, 120) FROM source_chunks c
+                            WHERE c.workspace_id = d.workspace_id AND c.document_id = d.document_id
+                            ORDER BY c.chunk_index LIMIT 1) AS excerpt_preview,
+                          (SELECT count(DISTINCT l.task_id) FROM project_material_links l
+                             JOIN material_excerpts e ON e.excerpt_id = l.excerpt_id
+                            WHERE e.workspace_id = d.workspace_id AND e.document_id = d.document_id) AS linked_projects_count
+                   FROM source_documents d
+                   WHERE d.workspace_id=%s AND d.document_type IN ('text','file','link','external_reference')
+                   ORDER BY d.created_at DESC""",
                 (workspace_id,),
             )
-            return list(await cursor.fetchall())
+            rows = await cursor.fetchall()
+            return [self._public_document(row) for row in rows]
 
     # ------------------------------------------------------------------
     # Chunks

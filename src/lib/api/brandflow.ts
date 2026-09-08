@@ -23,10 +23,15 @@ export async function brandFlowRequest<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
+  // FormData bodies must keep the browser-generated multipart Content-Type
+  // (with its boundary); forcing application/json here made every file
+  // upload 422 on the upstream (round-3g audit fix).
+  const isFormData =
+    typeof FormData !== 'undefined' && typeof Blob !== 'undefined' && init?.body instanceof FormData
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...init?.headers,
     },
   })

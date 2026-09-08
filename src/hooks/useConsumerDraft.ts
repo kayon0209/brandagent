@@ -38,7 +38,7 @@ export interface ConsumerDraftApi {
   acceptSuggestion(...args: unknown[]): Promise<unknown>
 }
 
-const DEBOUNCE_MS = 800
+const DEBOUNCE_MS = 1200
 const BACKUP_KEY = 'brandagent:draft-backup:'
 
 interface BackupEntry {

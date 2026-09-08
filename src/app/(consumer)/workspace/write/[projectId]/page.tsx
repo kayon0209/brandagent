@@ -33,7 +33,6 @@ import { ZoomControl } from '@/components/consumer/editor/ZoomControl'
 import { MaterialDrawer } from '@/components/consumer/materials/MaterialDrawer'
 import { PlatformPreview } from '@/components/consumer/preview/PlatformPreview'
 import { PrePublishReview, type ReviewBubble } from '@/components/consumer/preview/PrePublishReview'
-import { PrimaryActionBar } from '@/components/consumer/preview/PrimaryActionBar'
 import { getConsumerProject, updateConsumerProject } from '@/lib/api/consumer'
 import {
   acceptConsumerSuggestion,
@@ -79,9 +78,27 @@ export default function ProjectWritePage() {
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [status, setStatus] = useState<EditorStatusPayload | null>(null)
+  // 诉求 2 (WYSIWYG, round-3b): the live draft text from the editor, so the
+  // platform preview rail renders the creator's writing in real time
+  // without waiting for "adopt → generate".
+  const [liveText, setLiveText] = useState('')
   // X1/U7: honest progress narrative + success banner for first-draft
   const [generateProgress, setGenerateProgress] = useState<string | null>(null)
   const [generateBanner, setGenerateBanner] = useState<string | null>(null)
+  // round-3g A3: spoken guidance from the secondary action bar
+  const [assistGuidance, setAssistGuidance] = useState<string | null>(null)
+  const runAssist = useCallback(
+    async (action: 'expand' | 'shorten' | 'change_tone') => {
+      setAssistGuidance(null)
+      try {
+        const message = await editorRef.current?.triggerAssist(action)
+        if (message) setAssistGuidance(message)
+      } catch {
+        setAssistGuidance('这次操作没成功，你的稿子没有任何改动。可以再试一次。')
+      }
+    },
+    [],
+  )
   // R1: monthly quota visibility — invisible quota is quota users are
   // afraid to spend
   const [usage, setUsage] = useState<{ used: number; quota: number } | null>(null)
@@ -99,6 +116,17 @@ export default function ProjectWritePage() {
   useEffect(() => {
     void refreshUsage()
   }, [refreshUsage])
+
+  // round-3g A4: quota urgency — <80% neutral; >=80% caramel with tooltip;
+  // =100% blocks every generation-class button (writing/saving stay free)
+  const usageRatio = usage && usage.quota > 0 ? usage.used / usage.quota : 0
+  const quotaExhausted = usageRatio >= 1
+  const quotaUrgent = usageRatio >= 0.8 && !quotaExhausted
+  const quotaTooltip = quotaExhausted
+    ? '本月额度已用完，写作与保存仍可用'
+    : quotaUrgent
+      ? `本月额度已用 ${Math.round(usageRatio * 100)}%，接近上限。写作与保存不受影响。`
+      : `本月 AI 额度：已用 ${usage?.used ?? 0} / 共 ${usage?.quota ?? 0} tokens（写作和保存不消耗额度）`
 
   // the project payload is the authority for the core idea
   useEffect(() => {
@@ -159,6 +187,13 @@ export default function ProjectWritePage() {
 
   const onStatus = useCallback((payload: EditorStatusPayload) => {
     setStatus(payload)
+    // 诉求 2: hand the live draft text to the platform preview rail so it
+    // updates on every keystroke; the preview falls back to its own
+    // skeleton when plainText is empty
+    setLiveText(payload.plainText ?? '')
+    // round-3g A3: the secondary action bar keys off draftText — it must
+    // track LIVE typing, not just the initial load / first-draft apply
+    setDraftText((payload.plainText ?? '').trim())
   }, [])
 
   // P1-3: explicit core-idea editing through the project PATCH API; the
@@ -238,9 +273,9 @@ export default function ProjectWritePage() {
       } else if (message.includes('QUOTA_EXCEEDED') || message.includes('额度')) {
         setGenerateError('本月 AI 额度已用完。写作和保存不受影响，下个月再生成初稿。')
       } else if (message.includes('TIMEOUT')) {
-        setGenerateError('这次生成等得太久了，已停止等待。你的稿纸没有任何改动，可以再试一次（重试不会重复计费）。')
+        setGenerateError('这次生成未能确认结果。你的稿纸没有任何改动；提供方可能已执行请求，预估额度可能已计入。再次生成会作为一次新请求。')
       } else {
-        setGenerateError('初稿生成暂时不可用，你的稿纸没有任何改动。稍后再试一次（重试不会重复计费）。')
+        setGenerateError('初稿生成暂时不可用，你的稿纸没有任何改动。提供方可能已执行请求，预估额度可能已计入；再次生成会作为一次新请求。')
       }
       generateKeyRef.current = null // failed+refunded — retry is a new action
     } finally {
@@ -295,6 +330,13 @@ export default function ProjectWritePage() {
 
   const reviewBubbles: ReviewBubble[] = variants.state.reviewBubbles ?? []
 
+  // round-3e (#3): publishable = a master exists AND at least one channel
+  // has a generated variant. This gates the topbar's 准备发布 so the entry
+  // never fires into an empty export.
+  const publishableVariant =
+    variants.state.status !== 'no_master' &&
+    Object.values(variants.state.channels ?? {}).some(channel => Boolean(channel?.content?.trim()))
+
   if (projectError) {
     return (
       <div className={styles.shell}>
@@ -313,7 +355,7 @@ export default function ProjectWritePage() {
           {/* back to the workspace list — the write page is reachable again
               without browser back (no nav islands) */}
           <Link href="/app" className={styles.topbarBackLink} data-testid="back-to-app">
-            我的项目
+            项目
           </Link>
           <button
             type="button"
@@ -336,7 +378,17 @@ export default function ProjectWritePage() {
         </div>
 
         <div className={styles.topbarRight}>
-          <button type="button" className={styles.preparePublish} onClick={() => void handlePrepareExport()}>
+          {/* round-3e (#3): 准备发布 is the SINGLE global publish entry (the
+              rail action bar no longer duplicates it). Disabled until there
+              is a master + at least one platform variant to publish — the
+              tooltip says why instead of silently failing. */}
+          <button
+            type="button"
+            className={styles.preparePublish}
+            disabled={!publishableVariant}
+            title={publishableVariant ? undefined : '先在稿纸定稿并生成至少一个平台版本，才能准备发布'}
+            onClick={() => void handlePrepareExport()}
+          >
             准备发布
           </button>
           {/* N6: account ownership — sign-out lives where the user is.
@@ -355,6 +407,23 @@ export default function ProjectWritePage() {
         }}
       >
         <div className={styles.editorColumn}>
+          {/* round-3g A1: manuscript micro-tab — a quiet serif header that
+              names the surface and carries the live save badge on the
+              right; never competes with the body text */}
+          <div className={styles.manuscriptMicroTab} data-testid="manuscript-micro-tab">
+            <span className={styles.manuscriptMicroTitle}>主稿 · 今天的写作台</span>
+            <span className={styles.manuscriptMicroSave}>
+              {status ? (
+                <SaveStatus
+                  state={status.saveState as SaveState}
+                  onResolveConflict={() => status.resolveConflict()}
+                  onRetrySave={() => status.retrySave()}
+                />
+              ) : (
+                '正在载入稿件…'
+              )}
+            </span>
+          </div>
           <ConsumerEditorClient
             handleRef={editorRef}
             projectId={projectId}
@@ -363,12 +432,43 @@ export default function ProjectWritePage() {
             onStatus={onStatus}
             onSaveCoreIdea={saveCoreIdea}
           />
-          {draftText === '' && (
-            <section className={materialStyles.state}>
+          {/* round-3e (#4): the empty-draft + banner surfaces belong INSIDE
+              the 720px paper column — a full-column white card above the
+              gray desk read like a system notification. Wrap with the same
+              max-width the manuscript gets. */}
+          <div className={styles.editorExtras}>
+            {/* round-3g A3: secondary action bar — lives with the manuscript
+                once there IS a manuscript; every button has a behavior or
+                an honest spoken guidance line (no dead buttons) */}
+            {draftText !== '' && !generating && (
+              <div className={styles.secondaryActionBar} data-testid="secondary-action-bar" role="toolbar" aria-label="稿件辅助操作">
+                <button type="button" onClick={() => void runAssist('expand')}>扩写</button>
+                <span aria-hidden>｜</span>
+                <button type="button" onClick={() => void runAssist('shorten')}>精简</button>
+                <span aria-hidden>｜</span>
+                <button type="button" onClick={() => void runAssist('change_tone')}>换一种语气</button>
+                <span aria-hidden>｜</span>
+                <button
+                  type="button"
+                  disabled={quotaExhausted}
+                  title={quotaExhausted ? '本月额度已用完，写作与保存仍可用' : undefined}
+                  onClick={() => void variants.generate()}
+                >
+                  生成平台版本
+                </button>
+              </div>
+            )}
+            {assistGuidance && (
+              <p role="status" className={materialStyles.generateProgress} data-testid="assist-guidance">
+                {assistGuidance}
+              </p>
+            )}
+            {draftText === '' && (
+              <section className={materialStyles.state}>
               <p>
                 {materials.excerpts.length === 0
-                  ? '稿纸还是空的。直接凭核心观点生成一版就行；之后关联素材，AI 会贴着你的素材改得更准。'
-                  : '稿纸还是空的。基于核心观点和已关联素材，先生成一版初稿试试。'}
+                  ? '稿纸还空着——准备好后，基于核心观点生成第一版。之后关联素材，AI 会贴着你的素材改得更准。'
+                  : '稿纸还空着——基于核心观点和已关联素材，先生成一版初稿试试。'}
               </p>
               {/* N14: first-run narrative — appears only while there is
                   nothing yet, dissolves as the user completes each step */}
@@ -380,7 +480,8 @@ export default function ProjectWritePage() {
               <button
                 type="button"
                 className="consumer-primary-button"
-                disabled={generating}
+                disabled={generating || quotaExhausted}
+                title={quotaExhausted ? '本月额度已用完，写作与保存仍可用' : undefined}
                 onClick={() => void generateFirstDraft()}
               >
                 {generating ? '正在写初稿…' : '生成初稿'}
@@ -392,16 +493,17 @@ export default function ProjectWritePage() {
                 </p>
               )}
               {generateError && <p role="alert">{generateError}</p>}
-            </section>
-          )}
-          {generateBanner && !generating && (
-            <div role="status" data-testid="generate-banner" className={materialStyles.generateBanner}>
-              <p>{generateBanner}</p>
-              <button type="button" aria-label="关闭提示" onClick={() => setGenerateBanner(null)}>
-                ×
-              </button>
-            </div>
-          )}
+              </section>
+            )}
+            {generateBanner && !generating && (
+              <div role="status" data-testid="generate-banner" className={materialStyles.generateBanner}>
+                <p>{generateBanner}</p>
+                <button type="button" aria-label="关闭提示" onClick={() => setGenerateBanner(null)}>
+                  ×
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         <aside className={styles.writeRail} data-testid="write-rail">
@@ -409,16 +511,12 @@ export default function ProjectWritePage() {
             <PlatformPreview
               state={variants.state}
               supportedChannels={variants.state.supportedChannels}
+              liveText={liveText}
               onGenerate={() => void variants.generate()}
               onRegenerate={channel => void variants.regenerate(channel)}
               onAdopt={() => void handleAdopt()}
             />
-            <PrePublishReview bubbles={reviewBubbles} />
-            <PrimaryActionBar
-              onAdopt={() => void handleAdopt()}
-              onRegenerate={() => void variants.regenerate()}
-              onPrepareExport={() => void handlePrepareExport()}
-            />
+            {variants.state.status !== 'no_master' && <PrePublishReview bubbles={reviewBubbles} />}
           </div>
         </aside>
       </div>
@@ -442,16 +540,24 @@ export default function ProjectWritePage() {
         <div className={styles.statusZoom}>
           {usage && usage.quota > 0 && usage.quota < Infinity && (
             <span
-              className={materialStyles.quotaPill}
+              className={`${materialStyles.quotaPill} ${
+                quotaExhausted
+                  ? materialStyles.quotaPillExhausted
+                  : quotaUrgent
+                    ? materialStyles.quotaPillUrgent
+                    : ''
+              }`}
               data-testid="quota-pill"
-              title={`本月 AI 额度：已用 ${usage.used} / 共 ${usage.quota} tokens（写作和保存不消耗额度）`}
+              data-urgent={quotaUrgent || undefined}
+              data-exhausted={quotaExhausted || undefined}
+              title={quotaTooltip}
             >
               <span
                 className={materialStyles.quotaRing}
                 style={{ '--quota-pct': `${Math.min(100, (usage.used / usage.quota) * 100)}%` } as React.CSSProperties}
                 aria-hidden
               />
-              额度 {Math.max(0, usage.quota - usage.used)}
+              {quotaExhausted ? '本月额度已用完' : `本月剩余 ${Math.max(0, usage.quota - usage.used)}`}
             </span>
           )}
           <ZoomControl

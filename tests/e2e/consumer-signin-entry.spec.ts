@@ -66,8 +66,8 @@ test('signed-in round trip: storage state reaches /app without a redirect loop',
   })
   const page = await context.newPage()
   await page.goto('/app')
-  // no loop back to sign-in, no 404: the workspace renders
-  await expect(page.getByRole('heading', { name: '我的写作' })).toBeVisible({ timeout: 30_000 })
+  // no loop back to sign-in, no 404: the U1 workspace project list renders.
+  await expect(page.getByRole('heading', { name: '项目', exact: true })).toBeVisible({ timeout: 30_000 })
   expect(page.url()).toContain('/app')
   await context.close()
 })

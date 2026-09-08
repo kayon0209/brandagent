@@ -17,6 +17,7 @@ from agent_api.api.security import Principal
 from agent_api.application.platform_variants import (
     GenerationFailed,
     PlatformVariantService,
+    VariantGenerationError,
 )
 from agent_api.domain.errors import NotFoundError
 
@@ -34,7 +35,7 @@ class StubChannelGenerator:
         self.fail_channels: set[str] = set()
         self.output_by_channel = output_by_channel or {}
 
-    async def generate(self, *, channel: str, master_content: str, core_idea: str, usage_out: dict | None = None) -> dict:
+    async def generate(self, *, channel: str, master_content: str, core_idea: str, style_directives: str | None = None, usage_out: dict | None = None) -> dict:
         self.calls.append({"channel": channel, "master_content": master_content, "core_idea": core_idea})
         if channel in self.fail_channels:
             raise GenerationFailed(channel, "provider exploded")
@@ -195,6 +196,86 @@ async def test_generation_failure_keeps_the_previous_version() -> None:
 
 
 @pytest.mark.asyncio
+async def test_unknown_variant_execution_marks_a_batch_for_estimated_settlement() -> None:
+    class UnknownExecutionGenerator:
+        async def generate(self, **kwargs) -> dict:
+            raise VariantGenerationError(
+                "MODEL_EXECUTION_UNKNOWN",
+                "模型执行结果未知",
+                retryable=False,
+                execution_unknown=True,
+            )
+
+    service, store, _ = make_service()
+    service = PlatformVariantService(
+        store=store,
+        generator=UnknownExecutionGenerator(),
+        channels=("wechat_website",),
+    )
+    usage: dict = {}
+    result = await service.generate_variants(principal_for("ws-1"), "task-1", usage_out=usage)
+
+    assert result["channels"]["wechat_website"] == {
+        "status": "failed",
+        "retryable": False,
+        "error_code": "MODEL_EXECUTION_UNKNOWN",
+    }
+    assert usage["execution_unknown"] is True
+    with pytest.raises(VariantGenerationError) as caught:
+        await service.regenerate(principal_for("ws-1"), "task-1", "wechat_website")
+    assert caught.value.execution_unknown is True
+
+
+@pytest.mark.asyncio
+async def test_variant_adapter_preserves_a_lost_provider_response_as_unknown_execution() -> None:
+    from agent_api.application.platform_variants import ConsumerChannelGeneratorAdapter
+    from agent_api.providers.base import ProviderExecutionError
+
+    class ResponseLossProvider:
+        async def generate(self, **kwargs) -> dict:
+            raise ProviderExecutionError(
+                "MODEL_EXECUTION_UNKNOWN",
+                "The provider may have executed the request but its response was lost.",
+                retryable=False,
+            )
+
+    adapter = ConsumerChannelGeneratorAdapter(provider=ResponseLossProvider())
+    with pytest.raises(VariantGenerationError) as caught:
+        await adapter.generate(
+            channel="wechat_website",
+            master_content="母稿内容",
+            core_idea="观点",
+        )
+    assert caught.value.code == "MODEL_EXECUTION_UNKNOWN"
+    assert caught.value.execution_unknown is True
+    assert caught.value.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_variant_adapter_preserves_a_confirmed_provider_execution() -> None:
+    from agent_api.application.platform_variants import ConsumerChannelGeneratorAdapter
+    from agent_api.providers.base import ProviderExecutionError
+
+    class MalformedSuccessProvider:
+        async def generate(self, **kwargs) -> dict:
+            raise ProviderExecutionError(
+                "MODEL_INVALID_RESPONSE",
+                "The provider returned a malformed success response.",
+                retryable=False,
+                execution_confirmed=True,
+            )
+
+    adapter = ConsumerChannelGeneratorAdapter(provider=MalformedSuccessProvider())
+    with pytest.raises(VariantGenerationError) as caught:
+        await adapter.generate(
+            channel="wechat_website",
+            master_content="母稿内容",
+            core_idea="观点",
+        )
+    assert caught.value.execution_confirmed is True
+
+
+@pytest.mark.asyncio
 async def test_replayed_generation_hits_idempotent_result_same_key() -> None:
     service, store, _ = make_service()
     principal = principal_for("ws-1")
@@ -315,3 +396,88 @@ async def test_variant_numeric_claim_supported_by_master_passes() -> None:
     principal = principal_for("ws-1")
     result = await service.generate_variants(principal, "task-1")
     assert all(result["channels"][c]["status"] == "ready" for c in DEFAULT_CONSUMER_CHANNELS)
+
+
+# ---------------------------------------------------------------------
+# 007: project-bound style report injects six-layer directives into
+# variant generation; a lapsed/missing binding must never block it
+# ---------------------------------------------------------------------
+
+class StyleBindingStore:
+    """Minimal ConsumerVariantStore with an optional style binding."""
+
+    def __init__(self, *, style_report=None, bound=True) -> None:
+        self.project = {"task_id": "t-1", "workspace_id": "ws-1", "core_idea": "观点", "active_master_version_id": "m-1"}
+        if bound:
+            self.project["preferred_style_report_id"] = "r-1"
+        self.style_report = style_report
+
+    async def get_project(self, workspace_id, task_id):
+        return dict(self.project) if task_id == "t-1" else None
+
+    async def active_master(self, workspace_id, task_id):
+        return {"content_version_id": "m-1", "content": "主稿正文", "immutable_hash": "h" * 64}
+
+    async def current_variant(self, workspace_id, task_id, channel):
+        return None
+
+    async def latest_reviews(self, workspace_id, task_id, content_version_id):
+        return []
+
+    async def save_variant(self, **payload):
+        return {"content_version_id": "v-1", "idempotent": False}
+
+    async def append_event(self, event):
+        return None
+
+    async def get_style_report(self, workspace_id, report_id):
+        return dict(self.style_report) if self.style_report is not None and report_id == "r-1" else None
+
+
+class DirectiveCaptureGenerator:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def generate(self, *, channel: str, master_content: str, core_idea: str, style_directives: str | None = None, usage_out: dict | None = None) -> dict:
+        self.calls.append({"channel": channel, "style_directives": style_directives})
+        return {"plain_text": f"{channel} 版本"}
+
+
+@pytest.mark.asyncio
+async def test_bound_style_report_injects_directives_into_generation():
+    report = {
+        "report_id": "r-1",
+        "layers": {
+            "l1_language_dna": {"rules": ["句子平均 20 字", "多用第一人称"], "summary": "短句口语"},
+            "l6_visual_guide": {"rules": [], "summary": "无法推断。"},
+        },
+    }
+    store = StyleBindingStore(style_report=report)
+    generator = DirectiveCaptureGenerator()
+    service = PlatformVariantService(store=store, generator=generator, channels=("wechat_website",))
+    await service.generate_variants(Principal(user_id="u-1", workspace_id="ws-1", role="admin", experience="personal"), "t-1")
+    directives = generator.calls[0]["style_directives"]
+    assert directives is not None
+    assert "句子平均 20 字" in directives
+    assert "语言 DNA" in directives
+    # an uninferable layer contributes nothing — fake rules never reach prompts
+    assert "视觉风格" not in directives
+
+
+@pytest.mark.asyncio
+async def test_lapsed_style_binding_never_blocks_generation():
+    store = StyleBindingStore(style_report=None)  # stale reference, report gone
+    generator = DirectiveCaptureGenerator()
+    service = PlatformVariantService(store=store, generator=generator, channels=("wechat_website",))
+    result = await service.generate_variants(Principal(user_id="u-1", workspace_id="ws-1", role="admin", experience="personal"), "t-1")
+    assert result["channels"]["wechat_website"]["status"] == "ready"
+    assert generator.calls[0]["style_directives"] is None
+
+
+@pytest.mark.asyncio
+async def test_unbound_project_generates_without_directives():
+    store = StyleBindingStore(style_report={"report_id": "r-1", "layers": {}}, bound=False)
+    generator = DirectiveCaptureGenerator()
+    service = PlatformVariantService(store=store, generator=generator, channels=("wechat_website",))
+    await service.generate_variants(Principal(user_id="u-1", workspace_id="ws-1", role="admin", experience="personal"), "t-1")
+    assert generator.calls[0]["style_directives"] is None

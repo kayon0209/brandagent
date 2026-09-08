@@ -96,6 +96,10 @@ export interface ConsumerEditorHandle {
   /** Re-seed the editor from the server draft (used after a first-draft
    * candidate is applied outside the editor, e.g. the empty-state button). */
   reloadDraft(): Promise<void>
+  /** round-3g A3: secondary action bar hook — runs an assist action on the
+   * CURRENT selection (or speaks the no-selection guidance). Returns the
+   * spoken outcome so the page layer never guesses editor internals. */
+  triggerAssist(action: AssistAction | 'change_tone'): Promise<string>
 }
 
 /** Live statusbar payload: the page owns the v4 statusbar chrome, the
@@ -108,6 +112,10 @@ export interface EditorStatusPayload {
   /** N4: surfaced so the status bar can offer an explicit save retry */
   retrySave(): void
   changeZoom(zoom: number): void
+  /** 诉求 2 (WYSIWYG, round-3b): the live plain-text view of the draft,
+   * updated on every keystroke, so the platform preview rail can render
+   * the creator's writing in the destination's layout in real time. */
+  plainText: string
 }
 
 interface ConsumerEditorProps {
@@ -133,6 +141,9 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
     }
   })
   const [wordCount, setWordCount] = useState(0)
+  // 诉求 2 (WYSIWYG): mirror the draft's plain text so the page can hand
+  // it to the platform preview rail. Empty when there is no content yet.
+  const [plainText, setPlainText] = useState('')
   const [toolbarHidden, setToolbarHidden] = useState(false)
   const [selectionInfo, setSelectionInfo] = useState<{ from: number; to: number; empty: boolean; text: string } | null>(null)
   const [suggesting, setSuggesting] = useState<AssistAction | null>(null)
@@ -160,8 +171,12 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
     content: '<p></p>',
     onUpdate: ({ editor: current }: { editor: Editor }) => {
       const blocks = editorToBlocks(current)
-      markDirtyRef.current({ blocks }, current.getText())
-      setWordCount(current.getText().length)
+      const text = current.getText()
+      markDirtyRef.current({ blocks }, text)
+      setWordCount(text.length)
+      // 诉求 2: publish the live draft text alongside the word count so the
+      // page can stream it into the platform preview rail
+      setPlainText(text)
     },
     onSelectionUpdate: ({ editor: current }: { editor: Editor }) => {
       const { from, to, empty } = current.state.selection
@@ -196,7 +211,11 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
     const blocks = (draft.document.blocks ?? []) as Block[]
     if (blocks.length) {
       current.commands.setContent(blocksToHtml(blocks), { emitUpdate: false })
-      setWordCount(current.getText().length)
+      const seedText = current.getText()
+      setWordCount(seedText.length)
+      // 诉求 2: publish seeded text so the preview rail reflects an already
+      // saved draft immediately on first paint
+      setPlainText(seedText)
     }
   }, [draft.document, draft.seedVersion])
 
@@ -237,8 +256,10 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
       resolveConflict: () => resolveConflictRef.current(),
       retrySave: () => retrySaveRef.current(),
       changeZoom,
+      // 诉求 2 (WYSIWYG): live draft text for the right-rail preview
+      plainText,
     })
-  }, [onStatus, draft.status, wordCount, zoom, changeZoom])
+  }, [onStatus, draft.status, wordCount, zoom, changeZoom, plainText])
 
   const currentSelection = useMemo(
     () => ({
@@ -293,10 +314,11 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
         setIntentMessage(null)
         setSuggestion({ text: result.suggested_text, suggestionId: result.suggestion_id ?? '' })
       } catch {
-        // X2: transport/provider failure is spoken, with the retry-cost
-        // promise the idempotency design already guarantees
+        // A lost provider response leaves execution uncertain. Never promise
+        // that a new user action is free: the ledger conservatively retains
+        // the estimated quota for the original request.
         setSuggestion(null)
-        setIntentMessage('这次生成没成功，你的稿子没有任何改动。再点一次试试（重试不会重复计费）。')
+        setIntentMessage('这次生成没有返回结果，你的稿子没有任何改动。提供方可能已执行请求，预估额度可能已计入；再次生成会作为一次新请求。')
       }
     },
     [api, draft.revision, projectId, selectionInfo],
@@ -392,8 +414,22 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
       reloadDraft: async () => {
         await draft.reload()
       },
+      triggerAssist: async (action: AssistAction | 'change_tone') => {
+        // round-3g A3: the page-level secondary bar delegates here; the
+        // editor owns selection truth, so guidance words come from it
+        if (!selectionInfo || selectionInfo.empty || !selectionInfo.text) {
+          return '先选中一句话，或告诉我你想改哪里。'
+        }
+        if (action === 'change_tone') {
+          // the free-intent panel is the tone path; open it by speaking the
+          // route — the toolbar's 说说怎么改 toggle owns that panel
+          return '换个语气：打开选区工具栏里的「说说怎么改」，描述你想要的语气（如「更口语」「更正式」）。'
+        }
+        await handleToolbarAction(action)
+        return '已对选中句子发起改写，建议稍后出现在选区上方。'
+      },
     }),
-    [draft, onAdopted, projectId],
+    [draft, onAdopted, projectId, selectionInfo, handleToolbarAction],
   )
 
   return (

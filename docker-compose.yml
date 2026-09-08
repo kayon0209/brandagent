@@ -16,12 +16,16 @@ services:
       - ./docs/migrations/003_consumer_experience.sql:/docker-entrypoint-initdb.d/04-consumer.sql:ro
       - ./docs/migrations/004_consumer_rls.sql:/docker-entrypoint-initdb.d/05-consumer-rls.sql:ro
       - ./docs/migrations/005_consumer_rls_hardening.sql:/docker-entrypoint-initdb.d/06-consumer-rls-force.sql:ro
-      - ./docs/deployment/postgres-grants.sql:/docker-entrypoint-initdb.d/07-grants.sql:ro
+      - ./docs/migrations/006_style_reports.sql:/docker-entrypoint-initdb.d/07-style-reports.sql:ro
+      - ./docs/migrations/007_style_report_enrichment.sql:/docker-entrypoint-initdb.d/08-style-report-enrichment.sql:ro
+      - ./docs/migrations/008_consumer_material_kinds.sql:/docker-entrypoint-initdb.d/09-consumer-material-kinds.sql:ro
+      - ./docs/deployment/postgres-grants.sql:/docker-entrypoint-initdb.d/10-grants.sql:ro
       # upgrade path for EXISTING persistent volumes: docker-entrypoint only
-      # runs on FIRST init, so 005 must be applied to an already-running
-      # stack explicitly (idempotent, safe to re-run):
+      # runs on FIRST init, so missing 005–008 migrations must be applied to
+      # an already-running stack explicitly in a maintenance window:
       #   docker compose exec postgres psql -U postgres -d brandflow \
-      #     -f /docker-entrypoint-initdb.d/06-consumer-rls-force.sql
+      #     -v ON_ERROR_STOP=1 \
+      #     -f /docker-entrypoint-initdb.d/09-consumer-material-kinds.sql
       # (see docs/deployment/RUNBOOK.md — Database rules)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d brandflow"]
