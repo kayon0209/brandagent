@@ -179,8 +179,8 @@ SUPABASE_SERVICE_ROLE_KEY= # 必填，Supabase 服务密钥（仅服务端）
 
 ## 10. 当前阶段
 
-**阶段**：Consumer Upgrade Phase 5 已完成实现与当前 checkout 验收；正在收口仓库、文档与可提交边界
-**下一步**：完成本轮整理并形成可审查提交集；Phase 6 仍需用户单独立项，不因 Phase 5 完成自动进入
+**阶段**：Phase 5 验收完成（checkout `cd1f303`：合同 33 + Jest 73 + 构建 28 页 + agent-api 252 + MCP 33 + 真实栈 E2E 4/4 全绿）；Phase 6「深度调研」已经用户 2026-09-08 单项批准进入产品化（决策记录见 docs/MASTER_PLAN.md「Phase 6 立项决定」）
+**下一步**：按 MASTER_PLAN 第 10 节规格实现 Phase 6：009 additive migration → 受限多 Agent 编排（Planner + EvidenceScout ≤4 + 引用校验 + 汇总）→ SSE 进度与取消 → /app 调研入口与候选素材卡片 → 引用校验/注入/SSRF/隔离/取消/配额测试
 **权威计划**：`docs/MASTER_PLAN.md`（阶段与门禁索引）；升级规格全文见 `docs/superpowers/plans/2026-08-28-consumer-brandagent-upgrade.md`
 **迁移规则**：默认只新增表/列，不删除、不重命名旧表或旧列；若必须替换既有约束，须先取得用户授权，记录锁影响、兼容性与回滚边界，并在隔离的 disposable PostgreSQL 上通过迁移/RLS 验证。旧 B 端接口在兼容窗口内继续工作
 

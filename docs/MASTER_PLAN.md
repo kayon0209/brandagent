@@ -29,6 +29,17 @@
 
 Phase 6 不属于当前 Consumer Upgrade 的默认交付范围。Phase 5 完成只代表具备开展对照实验的基础，不自动授权 Phase 6 的数据库、外部搜索服务、模型预算或产品上线；这些事项届时单独确认。
 
+## Phase 6 立项决定（2026-09-08）
+
+Phase 5 验收已在 checkout `cd1f303` 完成全量证据（前端合同 33 + Jest 73 全绿、生产构建 28 页、agent-api pytest 252 passed 含真实 DB/RLS、MCP pytest 33 passed、真实栈 E2E 4/4）。用户（项目负责人）已于 2026-09-08 明确批准：
+
+1. 直接进入 Phase 6 产品化，不等第二轮 S1/S2 复现实验。第一轮对照实验（`services/agent-api/evaluation/research/results/summary_full_v1.json`，数据集 sha `6cee2586…`）的结论——S2 相对 S1 覆盖率 +1.31（95%CI [0.80, 1.82]，21/29 wins），但搜索成本 2.5×、14 个 S2 tuple 因 Tavily 配额未恢复——按原计划应做第二轮复现再决策；用户选择跳过复现直接产品化。
+2. 风险接受声明：覆盖率收益基于单轮实验，尚未复现；产品化后若 S2 成本/时延不可接受，回退路径为保留 S1 单工作流编排（S2 编排器与 S1 共享同一 EvidenceScout 组件，差异只在并行度）。
+3. 授权范围：009 号 additive migration（新增 deep research 表，不动旧表）、复用现有 Tavily/GLM 凭据与 usage ledger、/app 内新增调研入口与进度/候选素材视图。外部搜索服务不新购（Tavily 现有凭据）、模型预算沿用现有配额门禁。部署与公网开放仍需单独授权。
+
+Phase 6 完成门禁沿用规格第 10 节（引用校验、Prompt Injection、SSRF、租户隔离、取消与配额测试全部通过），且实验数据集与对比结果继续留档于 evaluation/research/。
+
+
 ## Consumer Golden Gate（Phase 5，consumer_golden_v1）
 
 数据集：`services/agent-api/evaluation/consumer_golden_v1.jsonl`（110 条合成样例：45 选区建议 + 45 渠道改写 + 10 无证据拒绝 + 10 stale/conflict 工程样例；不含任何生产素材）。
