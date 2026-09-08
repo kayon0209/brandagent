@@ -12,7 +12,7 @@ from agent_api.api.security import Principal
 from agent_api.domain.consumer import MaterialImportRequest, UploadLimits
 from agent_api.application.materials import MaterialService
 
-from test_consumer_materials import MemoryMaterialStore, FakeParser, FakeDistiller, make_principal
+from .test_consumer_materials import MemoryMaterialStore, FakeParser, FakeDistiller, make_principal
 
 
 class LimitedService:

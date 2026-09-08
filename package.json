@@ -1,6 +1,7 @@
 {
   "name": "ai-blog-assistant",
   "version": "1.0.0",
+  "packageManager": "pnpm@11.22.0",
   "description": "> AI写作助手 — 帮助博主/营销人员从0快速生成中文博客。",
   "scripts": {
     "dev": "next dev",
@@ -9,7 +10,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "generate:types": "openapi-typescript docs/brandflow-openapi.yaml -o src/types/generated/brandflow-api.ts",
-    "test:contracts": "node --test tests/unit/brandflow-contracts.test.mjs tests/unit/consumer-auth.test.mjs",
+    "test:contracts": "node --test tests/unit/brandflow-contracts.test.mjs tests/unit/consumer-auth.test.mjs tests/unit/ci-workflow-contract.test.mjs",
     "test:unit": "jest --runInBand",
     "test:all": "npm run test:contracts && npm run test:unit",
     "test:db": "node --test tests/unit/brandflow-migration-docker.test.mjs",
@@ -64,6 +65,6 @@
     "js-yaml": "^4.3.0",
     "openapi-typescript": "^7.13.0",
     "prettier": "^3.8.3",
-    "typescript": "^6.0.2"
+    "typescript": "^5.9.3"
   }
 }
