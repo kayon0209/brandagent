@@ -141,6 +141,9 @@ class FakeStore:
         run["cancel_requested_at"] = "now"
         return run
 
+    async def find_orphans(self) -> list[dict]:
+        return [r for r in self.runs.values() if r.get("status") in ("planned", "running")]
+
 
 async def fake_validator(cards) -> list[dict]:
     """Network-free citation double: everything reachable + faithful."""
@@ -347,3 +350,146 @@ async def test_join_material_rejects_bad_index():
     with pytest.raises(DeepResearchError) as error:
         await service.join_material(ACTOR, run_id, 0, None, materials=FakeMaterials(), projects=None)
     assert error.value.status_code == 422
+
+
+# ---------------------------------------------------------------- SSRF gate
+# The PRODUCT validator must never let a search result aim the server at
+# internal addresses (plan gate: 安全 — 搜索范围受限，不能自由外发).
+
+
+class Card:
+    def __init__(self, url: str, content: str = "") -> None:
+        self.url = url
+        self.title = "t"
+        self.excerpts = [content or "内容"]
+        self._source_content = content or "内容"
+
+
+@pytest.mark.asyncio
+async def test_citation_validator_rejects_private_targets():
+    from agent_api.application.research_citation import validate_evidence_safely
+
+    checks = await validate_evidence_safely(
+        [Card("http://127.0.0.1:8000/secret"), Card("http://169.254.169.254/metadata")]
+    )
+    assert [c["ok"] for c in checks] == [False, False], "private targets must be unreachable-by-policy, not probed"
+
+
+@pytest.mark.asyncio
+async def test_citation_validator_rejects_public_domain_resolving_private():
+    from unittest.mock import patch
+
+    from agent_api.application.research_citation import check_card
+
+    card = Card("http://rebind.example.com/x")
+
+    class FakeInfo(tuple):
+        pass
+
+    # a 'public' name whose DNS answer is a private IP — the rebind bypass
+    fake_sockaddr = ("10.0.0.5", 80, 0, "")
+    with patch("agent_api.application.research_citation.socket.getaddrinfo", return_value=[(2, 1, 6, "", fake_sockaddr)]):
+        result = await check_card(card, client=None)
+    assert result["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_redirect_to_internal_address_is_never_followed():
+    from unittest.mock import patch
+
+    from agent_api.application.research_citation import check_card
+
+    card = Card("https://ok.example.com/a")
+    called: list[str] = []
+
+    class FakeResponse:
+        def __init__(self, status, headers=None):
+            self.status_code = status
+            self.headers = headers or {}
+
+    class FakeClient:
+        async def head(self, url, **kwargs):
+            called.append(url)
+            if url == "https://ok.example.com/a":
+                return FakeResponse(302, {"location": "http://192.168.1.10/admin"})
+            raise AssertionError("internal hop must never be requested")
+
+    public_sockaddr = ("93.184.216.34", 443, 0, "")
+    with patch(
+        "agent_api.application.research_citation.socket.getaddrinfo",
+        return_value=[(2, 1, 6, "", public_sockaddr)],
+    ):
+        result = await check_card(card, client=FakeClient())
+    assert called == ["https://ok.example.com/a"], "the internal redirect target must not be fetched"
+    assert result["ok"] is False
+
+
+# ---------------------------------------------------------------- recovery
+# The 取消与恢复 gate: a restart must leave NO half-finished runs and NO
+# unexplainable reserved balances.
+
+
+@pytest.mark.asyncio
+async def test_startup_recovery_fails_orphans_and_refunds_reservations():
+    store = FakeStore()
+    ledger = FakeLedger()
+    ledger._seen.add("req-orphan")  # reservation already exists
+    service = build_service(store=store, ledger=ledger)
+    orphan_id = str(uuid4())
+    store.runs[orphan_id] = {
+        "run_id": orphan_id,
+        "workspace_id": "ws-research",
+        "status": "running",
+        "request_id": "req-orphan",
+        "created_by": "user-1",
+    }
+    # an already-terminal run must NOT be touched
+    done_id = str(uuid4())
+    store.runs[done_id] = {
+        "run_id": done_id,
+        "workspace_id": "ws-research",
+        "status": "succeeded",
+        "request_id": "req-done",
+        "created_by": "user-1",
+    }
+
+    recovered = await service.recover_orphans()
+
+    assert recovered == 1
+    assert store.runs[orphan_id]["status"] == "failed"
+    assert "额度已退回" in store.runs[orphan_id]["error"]
+    assert store.runs[done_id]["status"] == "succeeded", "terminal runs are never rewritten"
+    refund_ids = [r["request_id"] for r in ledger.refunded]
+    assert refund_ids == ["req-orphan"], "the dead run's reservation is refunded exactly once"
+    types = [e["event_type"] for e in store.events]
+    assert "consumer.research.failed.v1" in types, "recovery emits an honest failure event"
+
+
+# ---------------------------------------------------------------- telemetry
+# Product value (plan §10 评测维度): every explicit join is one event —
+# the raw data for 用户加入素材率 / 实际引用率.
+
+
+@pytest.mark.asyncio
+async def test_join_emits_card_joined_event_with_project_linkage():
+    store = FakeStore()
+    service = build_service(store=store)
+    run_id = str(uuid4())
+    store.runs[run_id] = {
+        "run_id": run_id,
+        "workspace_id": "ws-research",
+        "status": "succeeded",
+        "candidate_cards": [
+            {"url": "https://example.com/x", "title": "参考", "excerpt": "句子。", "retrieved_at": "2026-09-08T00:00:00Z", "reachable": True, "excerpt_valid": True}
+        ],
+        "synthesis": "",
+    }
+    materials = FakeMaterials()
+    projects = FakeProjects()
+    await service.join_material(ACTOR, run_id, 0, "task-7", materials=materials, projects=projects)
+    joined_events = [e for e in store.events if e["event_type"] == "consumer.research.card_joined.v1"]
+    assert len(joined_events) == 1
+    payload = joined_events[0]["public_payload"]
+    assert payload["document_id"] == "doc-1"
+    assert payload["linked_to_project"] is True
+    assert payload["card_index"] == 0

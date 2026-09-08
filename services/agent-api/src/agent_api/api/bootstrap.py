@@ -195,6 +195,14 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             await variant_store.open()
             await usage_store.open()
             await deep_research_store.open()
+            # Phase 6 取消与恢复 gate: a restart kills every in-process
+            # orchestration task, so any planned/running run is an orphan —
+            # fail it honestly and refund its ledger reservation BEFORE the
+            # app starts serving (no unexplainable reserved balances).
+            if deep_research_service is not None:
+                recovered = await deep_research_service.recover_orphans()
+                if recovered:
+                    print(f"deep research: recovered {recovered} orphaned run(s) at startup")
             stack.push_async_callback(task_repository.close)
             stack.push_async_callback(workflow_repository.close)
             stack.push_async_callback(channel_store.close)

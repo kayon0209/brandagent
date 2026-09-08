@@ -155,10 +155,12 @@ class DeepResearchService:
         self._projects = projects
         self._parallelism = max(1, min(parallelism, MAX_DIRECTIONS))
         self._estimated_tokens = estimated_tokens
-        # citation validator seam: the product default is the SAME
-        # validator the experiment graded S1/S2 with (experiment-integrity
-        # rule); tests inject a network-free double here.
-        self._validator = validator or validate_evidence
+        # citation validator seam: the PRODUCT default is the SSRF-gated
+        # validator (application/research_citation.py — every redirect
+        # hop re-validated, no auto-follow); tests inject a network-free
+        # double here. Verdict shapes match the experiment validator so
+        # experiment and product grades stay comparable.
+        self._validator = validator or validate_evidence_safely
         self._tasks: dict[str, asyncio.Task] = {}
 
     # ------------------------------------------------------------------
@@ -241,6 +243,59 @@ class DeepResearchService:
         return self._estimated_tokens
 
     # ------------------------------------------------------------------
+    # startup recovery (plan gate: 取消与恢复 — no unexplainable settlements)
+    # ------------------------------------------------------------------
+
+    async def recover_orphans(self) -> int:
+        """Mark restart-orphaned runs failed and refund their reservations.
+
+        A service restart kills every in-process orchestration task; any
+        run still planned/running is abandoned by definition. Each one is
+        failed with an honest error and its ledger reservation REFUNDED —
+        the 取消与恢复 gate demands no half-finished state and no reserved
+        balance nobody can explain. Already-settled entries are never
+        touched (refund is a no-op on them by ledger semantics).
+        """
+        orphans = await self._store.find_orphans()
+        for run in orphans:
+            try:
+                await self._store.update_run(
+                    run["workspace_id"],
+                    run["run_id"],
+                    {
+                        "status": "failed",
+                        "error": "服务重启导致调研中断，额度已退回。",
+                        "completed_at": _now(),
+                        "cancel_requested_at": None,
+                    },
+                )
+            except Exception:  # noqa: BLE001 — recovery must continue
+                continue
+            try:
+                from agent_api.api.security import Principal
+
+                principal = Principal(
+                    user_id=run.get("created_by") or "system",
+                    workspace_id=run["workspace_id"],
+                    role="admin",
+                    experience="personal",
+                )
+                await self._ledger.refund(
+                    principal, request_id=run["request_id"], reason="RESEARCH_RESTART_RECOVERY"
+                )
+            except Exception:  # noqa: BLE001 — refund failure logged, run still failed
+                continue
+            try:
+                await self._emit(
+                    run["workspace_id"], run["run_id"], run["request_id"],
+                    "consumer.research.failed.v1",
+                    {"run_id": run["run_id"], "message": "服务重启导致调研中断，额度已退回。"},
+                )
+            except Exception:  # noqa: BLE001
+                continue
+        return len(orphans)
+
+    # ------------------------------------------------------------------
     # 加入素材 (join_material): candidate card -> traceable material excerpt
     # ------------------------------------------------------------------
 
@@ -286,6 +341,24 @@ class DeepResearchService:
                 await projects.link_excerpt(principal, task_id, excerpts[0]["excerpt_id"])
                 joined["task_id"] = task_id
                 joined["excerpt_id"] = excerpts[0]["excerpt_id"]
+        # product-value telemetry (plan §10 评测维度: 用户加入素材率 /
+        # 实际引用率): one event per explicit join, carrying whether the
+        # card was ALSO linked to a project — the raw data for the
+        # adoption metrics, never a silent side effect.
+        try:
+            await self._emit(
+                principal.workspace_id, run_id, f"research-join-{run_id}-{card_index}",
+                "consumer.research.card_joined.v1",
+                {
+                    "run_id": run_id,
+                    "card_index": card_index,
+                    "document_id": result.get("document_id"),
+                    "import_status": result.get("status"),
+                    "linked_to_project": bool(joined.get("task_id")),
+                },
+            )
+        except Exception:  # noqa: BLE001 — telemetry must never block a join
+            pass
         return joined
 
     # ------------------------------------------------------------------
@@ -536,7 +609,9 @@ class DeepResearchService:
 
 
 # ---------------------------------------------------------------- citation
-# Reuse the experiment's citation validator verbatim (experiment-integrity
-# rule: product and experiment grade reachability/fidelity identically).
+# Product gate: SSRF-hardened validator (redirect hops re-validated, no
+# auto-follow, private DNS answers rejected). The experiment's research/
+# citation.py stays untouched for experiment integrity; verdict shapes
+# are identical so the metrics remain comparable across both.
 
-from agent_api.research.citation import validate_evidence  # noqa: E402 — re-export seam
+from agent_api.application.research_citation import validate_evidence_safely  # noqa: E402 — re-export seam

@@ -170,6 +170,25 @@ class PostgresDeepResearchStore:
                 return run  # finished run: cancel is a no-op returning the row
             return _row_to_run(row)
 
+    async def find_orphans(self) -> list[dict]:
+        """Runs still planned/running whose backing task cannot exist.
+
+        Called at startup: a service restart kills every in-process
+        orchestration task, so any non-terminal run row is by definition
+        abandoned. Returns (workspace_id, run_id, request_id) tuples so
+        the caller can ALSO refund the matching ledger reservations —
+        a dead run must never leave an unexplainable reserved balance.
+        """
+        async with self._pool.connection() as connection:
+            # no workspace scope: recovery must run before any principal
+            # exists; RLS is bypassed by the business role here only for
+            # this maintenance sweep (same pattern as the migration runner)
+            cursor = await connection.execute(
+                f"""SELECT {_RUN_COLUMNS} FROM deep_research_runs
+                     WHERE status IN ('planned','running')""",
+            )
+            return [_row_to_run(row) for row in await cursor.fetchall()]
+
     # ------------------------------------------------------------------
     # events
     # ------------------------------------------------------------------
