@@ -38,7 +38,8 @@ test('fresh Compose initialization applies every numbered migration before grant
     '006_style_reports.sql:/docker-entrypoint-initdb.d/07-style-reports.sql',
     '007_style_report_enrichment.sql:/docker-entrypoint-initdb.d/08-style-report-enrichment.sql',
     '008_consumer_material_kinds.sql:/docker-entrypoint-initdb.d/09-consumer-material-kinds.sql',
-    'postgres-grants.sql:/docker-entrypoint-initdb.d/10-grants.sql',
+    '009_deep_research.sql:/docker-entrypoint-initdb.d/10-deep-research.sql',
+    'postgres-grants.sql:/docker-entrypoint-initdb.d/11-grants.sql',
   ]
   let previous = -1
   for (const mount of mounts) {
@@ -98,6 +99,7 @@ test('fresh PostgreSQL applies legacy, BrandFlow and consumer migrations with ch
       '006_style_reports.sql',
       '007_style_report_enrichment.sql',
       '008_consumer_material_kinds.sql',
+      '009_deep_research.sql',
     ]) {
       docker(['exec', container, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-f', `/migrations/${file}`])
     }

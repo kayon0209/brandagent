@@ -237,6 +237,30 @@ class MaterialService:
             principal, material, request_id=request_id or str(uuid4()), source_kind="text"
         )
 
+    async def import_research_card(
+        self,
+        principal: Principal,
+        *,
+        name: str,
+        content: str,
+        source_url: str,
+        request_id: str,
+    ) -> dict:
+        """Phase 6 加入素材: a deep-research candidate card becomes a
+        traceable link-kind material. Reuses the whole import pipeline
+        (checksum dedup, deterministic chunks, provenance, events) — the
+        recorded excerpt text is the body, so nothing depends on the live
+        page still being reachable."""
+        material = ParsedMaterial(
+            name=name,
+            content=content,
+            document_type="link",
+            source_url=source_url,
+        )
+        return await self._import_parsed(
+            principal, material, request_id=request_id, source_kind=f"research-card:{source_url}"
+        )
+
     async def import_url(self, principal: Principal, url: str, request_id: str | None = None) -> dict:
         """round-3g D6: save-a-link import — fetch the page, strip markup,
         store the readable text with the URL as provenance. Failures are

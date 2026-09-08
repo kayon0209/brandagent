@@ -10,6 +10,7 @@
 import Link from 'next/link'
 
 import type { ConsumerMaterialExcerpt, MaterialLinkState } from '@/types/consumer.types'
+import { DeepResearchPanel } from '@/components/consumer/research/DeepResearchPanel'
 import { MaterialCard } from './MaterialCard'
 import styles from './consumer-materials.module.css'
 
@@ -89,6 +90,11 @@ export function MaterialDrawer({
                 linkState={linkStates[excerpt.excerpt_id] ?? 'unlinked'}
               />
             ))}
+
+          {/* Phase 6 深度调研 (user-approved 2026-09-08): the drawer is the
+              in-project entry — a joined card lands in this project's
+              material flow without leaving the writing desk. */}
+          <DeepResearchPanel taskId={projectId ?? null} />
         </div>
       )}
     </aside>

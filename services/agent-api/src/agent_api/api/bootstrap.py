@@ -127,6 +127,25 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
 
     consumer_style = StyleDistillationService(store=consumer_project_store, provider=provider)
 
+    # Phase 6 deep research (user-approved 2026-09-08): bounded multi-agent
+    # orchestration over the disposable Tavily channel. Enabled only when
+    # the key is present so B-end-only deployments keep booting.
+    from agent_api.application.deep_research import DeepResearchService
+    from agent_api.repositories.postgres_deep_research import PostgresDeepResearchStore
+    from agent_api.research.search_provider import TavilySearchProvider
+
+    deep_research_store = PostgresDeepResearchStore(database_url)
+    deep_research_service = None
+    if settings.tavily_api_key is not None and settings.tavily_api_key.get_secret_value():
+        deep_research_service = DeepResearchService(
+            store=deep_research_store,
+            provider=provider,
+            search=TavilySearchProvider(api_key=settings.tavily_api_key.get_secret_value()),
+            ledger=consumer_usage,
+            parallelism=settings.deep_research_parallelism,
+            estimated_tokens=settings.deep_research_estimated_tokens,
+        )
+
     class ConsumerApps:
         """ConsumerProjectsApp protocol bundle wired into create_app."""
 
@@ -143,6 +162,10 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             # when the MCP service is unreachable
             self.channel_validator = channel_validator
             self.style = consumer_style
+            # Phase 6: deep research bundle (service + the join seam)
+            self.research = deep_research_service
+            self.materials = material_service
+            # app.projects (consumer_projects) already exposes link_excerpt
 
     mcp_client = RealMCPClient(
         mcp_url,
@@ -171,6 +194,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             await suggestion_store.open()
             await variant_store.open()
             await usage_store.open()
+            await deep_research_store.open()
             stack.push_async_callback(task_repository.close)
             stack.push_async_callback(workflow_repository.close)
             stack.push_async_callback(channel_store.close)
@@ -181,6 +205,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             stack.push_async_callback(suggestion_store.close)
             stack.push_async_callback(variant_store.close)
             stack.push_async_callback(usage_store.close)
+            stack.push_async_callback(deep_research_store.close)
             stack.push_async_callback(provider.aclose)
             await mcp_client.discover()
             saver = await stack.enter_async_context(postgres_checkpointer(checkpoint_database_url))

@@ -257,6 +257,13 @@ def create_app(*, tasks: TaskApplication, verifier: TokenVerifier, knowledge, ma
         app.include_router(create_projects_router(consumer_apps, principal=principal))
         app.include_router(create_usage_router(consumer_apps, principal=principal))
         app.include_router(create_style_router(consumer_apps, principal=principal))
+        # Phase 6 deep research (user-approved 2026-09-08): router only
+        # mounts when the service is actually wired (Tavily key present).
+        research_service = getattr(consumer_apps, "research", None)
+        if research_service is not None:
+            from .research import create_research_router
+
+            app.include_router(create_research_router(consumer_apps, principal=principal))
 
     @app.exception_handler(HTTPException)
     async def http_error(_request, error: HTTPException):

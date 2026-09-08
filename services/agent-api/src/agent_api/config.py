@@ -23,6 +23,17 @@ class Settings(BaseSettings):
     clerk_audience: str | None = None
     clerk_authorized_parties: str | None = None
     provider_verified: bool = False
+    # Phase 6 deep research (user-approved 2026-09-08): the single outbound
+    # search channel. Missing key disables the feature at startup with an
+    # honest error instead of a crash mid-run.
+    tavily_api_key: SecretStr | None = None
+    deep_research_parallelism: int = 4
+    deep_research_estimated_tokens: int = 30000
+
+    def require_tavily_key(self) -> SecretStr:
+        if self.tavily_api_key is None or not self.tavily_api_key.get_secret_value():
+            raise RuntimeError("TAVILY_API_KEY is required for deep research execution")
+        return self.tavily_api_key
 
     def require_glm_key(self) -> SecretStr:
         if self.glm_api_key is None:
