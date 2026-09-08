@@ -15,6 +15,7 @@ test('CI uses the production pnpm lockfile with a frozen install', () => {
 })
 
 test('CI runs the complete maintained frontend quality gate', () => {
+  assert.match(workflow, /NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:\s*pk_test_ZG9ja2VyLWJ1aWxkLXBsYWNlaG9sZGVyLmNsZXJrLmV4YW1wbGUk/)
   assert.match(workflow, /run: \|\s*\n\s*pnpm run test:all\s*\n\s*pnpm run typecheck\s*\n\s*pnpm run lint\s*\n\s*pnpm run build/)
 })
 

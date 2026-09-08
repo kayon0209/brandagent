@@ -99,6 +99,13 @@ jobs:
           corepack enable
           pnpm install --frozen-lockfile
       - name: Quality gate
+        # Format-valid placeholder (same policy as the Dockerfile build arg):
+        # decodes to "docker-build-placeholder.clerk.example$". Clerk validates
+        # key STRUCTURE at build time but never contacts the API during static
+        # prerender, so the build passes reproducibly without secrets. Real
+        # deployments inject their public key via environment/secrets.
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZG9ja2VyLWJ1aWxkLXBsYWNlaG9sZGVyLmNsZXJrLmV4YW1wbGUk
         run: |
           pnpm run test:all
           pnpm run typecheck
