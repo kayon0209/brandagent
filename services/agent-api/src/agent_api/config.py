@@ -28,7 +28,11 @@ class Settings(BaseSettings):
     # honest error instead of a crash mid-run.
     tavily_api_key: SecretStr | None = None
     deep_research_parallelism: int = 4
-    deep_research_estimated_tokens: int = 30000
+    # Reservation estimate rides the measured S2 experiment usage
+    # (summary_full_v1.json: ~6.5K input + ~6.6K output ≈ 13K tokens),
+    # NOT the whole monthly quota — a run must be affordable inside the
+    # user's remaining balance, not price itself out of existence.
+    deep_research_estimated_tokens: int = 13000
 
     def require_tavily_key(self) -> SecretStr:
         if self.tavily_api_key is None or not self.tavily_api_key.get_secret_value():

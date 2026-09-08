@@ -97,7 +97,7 @@ export function DeepResearchPanel({ taskId }: { taskId?: string | null }) {
             style={{ width: '100%', marginBottom: 12 }}
           />
           <p data-testid="research-estimate" style={{ fontSize: 13, margin: '0 0 12px' }}>
-            发起前说明：一次调研通常消耗约 30K token 额度、几分钟内完成；期间可随时取消，已完成方向的结果会保留。
+            发起前说明：一次调研通常消耗约 13K token 额度、几分钟内完成；期间可随时取消，已完成方向的结果会保留。
           </p>
           <div>
             <button type="submit" disabled={busy || question.trim().length < 4} data-testid="research-submit">

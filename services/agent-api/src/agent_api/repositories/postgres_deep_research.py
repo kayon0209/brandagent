@@ -22,7 +22,15 @@ _RUN_COLUMNS = """run_id, workspace_id, question, audience, scope_hint, status,
 
 
 def _row_to_run(row) -> dict:
+    from uuid import UUID as _UUID
+
     run = dict(row)
+    # psycopg returns UUID columns as uuid objects; every store method
+    # takes str workspace ids (and set_config needs TEXT, not uuid).
+    for key in ("run_id", "workspace_id"):
+        value = run.get(key)
+        if isinstance(value, _UUID):
+            run[key] = str(value)
     for key in ("planned_directions", "candidate_cards"):
         value = run.get(key)
         if isinstance(value, str):

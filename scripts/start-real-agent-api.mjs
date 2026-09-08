@@ -55,6 +55,10 @@ with asyncio.Runner(loop_factory=lambda: asyncio.SelectorEventLoop(selectors.Sel
       CLERK_ISSUER: local.CLERK_ISSUER || '',
       CLERK_AUDIENCE: local.CLERK_AUDIENCE || '',
       CLERK_AUTHORIZED_PARTIES: local.CLERK_AUTHORIZED_PARTIES || '',
+      // Phase 6 deep research: the single outbound search channel. An
+      // absent key keeps the server booting — the research router then
+      // stays unmounted (honest 404 instead of a half-wired feature).
+      TAVILY_API_KEY: local.TAVILY_API_KEY || '',
     },
     stdio: ['ignore', 'inherit', 'inherit'],
   },
