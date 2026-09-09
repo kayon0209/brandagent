@@ -119,9 +119,16 @@ export function CoreIdeaBlock({
             {generating ? '正在生成…' : '生成初稿'} <span aria-hidden>→</span>
           </button>
         )}
+        <button
+          type="button"
+          disabled={!dirty || saveState === 'saving' || !text.trim()}
+          onClick={() => void save(text.trim())}
+        >
+          保存
+        </button>
         <span className={styles.ideaSaveStatus} aria-live="polite">
           {saveState === 'saving' && '正在保存'}
-          {saveState === 'saved' && !dirty && '已自动保存'}
+          {saveState === 'saved' && !dirty && <span data-testid="core-idea-saved">已自动保存</span>}
         </span>
         {saveState === 'failed' && (
           <span className={styles.ideaSaveFailure}>
