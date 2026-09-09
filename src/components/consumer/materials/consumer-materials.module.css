@@ -201,7 +201,7 @@
 /* round-3e (#5): the workspace home (项目列表) gets a wider reading column;
    detail pages (素材/风格) keep the narrow 720px article width. */
 .pageWide {
-  max-width: 1040px;
+  max-width: 1248px;
 }
 
 @media (max-width: 760px) {
@@ -1250,6 +1250,7 @@
 .consumerNavAccount {
   display: flex;
   align-items: center;
+  gap: 10px;
 }
 
 @media (max-width: 640px) {

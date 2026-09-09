@@ -15,6 +15,9 @@ export interface ResearchCandidateCard {
   excerpt: string
   retrieved_at: string
   score?: number | null
+  /** Explicit no-egress check: safe canonical URL plus Tavily evidence. */
+  source_url_valid?: boolean
+  /** @deprecated It is no longer a live reachability probe. */
   reachable: boolean
   excerpt_valid: boolean
 }

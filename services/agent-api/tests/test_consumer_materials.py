@@ -236,6 +236,23 @@ async def test_url_import_rejects_private_and_redirect_targets() -> None:
             await service.import_url(principal, url)
 
 
+@pytest.mark.asyncio
+async def test_research_card_import_rejects_an_unsafe_source_url_before_writing() -> None:
+    service, store = make_service()
+    principal = make_principal()
+
+    with pytest.raises(ValueError):
+        await service.import_research_card(
+            principal,
+            name="恶意来源",
+            content="这段内容不得入库。",
+            source_url="javascript:alert(1)",
+            request_id="research-card-unsafe",
+        )
+
+    assert store.documents == {}, "unsafe provenance must not create a material row"
+
+
 # ---------------------------------------------------------------------------
 # HTTP layer contract tests
 # ---------------------------------------------------------------------------

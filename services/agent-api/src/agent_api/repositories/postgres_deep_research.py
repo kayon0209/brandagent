@@ -171,23 +171,55 @@ class PostgresDeepResearchStore:
             return _row_to_run(row)
 
     async def find_orphans(self) -> list[dict]:
-        """Runs still planned/running whose backing task cannot exist.
+        """Restart-orphaned runs (planned/running) across ALL workspaces.
 
         Called at startup: a service restart kills every in-process
         orchestration task, so any non-terminal run row is by definition
-        abandoned. Returns (workspace_id, run_id, request_id) tuples so
-        the caller can ALSO refund the matching ledger reservations —
-        a dead run must never leave an unexplainable reserved balance.
+        abandoned.
+
+        RLS gap fix (010): deep_research_runs is FORCE RLS and the
+        business role is neither superuser nor BYPASSRLS, so a plain
+        table scan would (correctly) see zero rows here. This method
+        instead calls the restricted security-definer entry
+        deep_research_list_orphaned_runs(), which returns ONLY the
+        minimal identification columns (run_id, workspace_id,
+        request_id, created_by) — never question/synthesis/candidate
+        content — and is granted to the business role alone. It is not
+        a generic cross-workspace read path; every caller must be a
+        recovery step.
         """
         async with self._pool.connection() as connection:
-            # no workspace scope: recovery must run before any principal
-            # exists; RLS is bypassed by the business role here only for
-            # this maintenance sweep (same pattern as the migration runner)
             cursor = await connection.execute(
-                f"""SELECT {_RUN_COLUMNS} FROM deep_research_runs
-                     WHERE status IN ('planned','running')""",
+                """SELECT run_id, workspace_id, request_id, created_by
+                     FROM deep_research_list_orphaned_runs()""",
             )
-            return [_row_to_run(row) for row in await cursor.fetchall()]
+            orphans = []
+            for row in await cursor.fetchall():
+                from uuid import UUID as _UUID
+
+                orphan = dict(row)
+                for key in ("run_id", "workspace_id"):
+                    value = orphan.get(key)
+                    if isinstance(value, _UUID):
+                        orphan[key] = str(value)
+                orphans.append(orphan)
+            return orphans
+
+    async def fail_orphan(self, run_id: str) -> bool:
+        """Fail exactly one restart-orphaned run through the 010 entry.
+
+        Terminal and unknown runs are refused (False); the honest
+        error message is FIXED by the migration so every caller shows
+        identical wording. Scoped to the one recovery-shaped mutation
+        (planned/running -> failed); not a general write path.
+        """
+        async with self._pool.connection() as connection:
+            cursor = await connection.execute(
+                "SELECT deep_research_fail_orphaned_run(%s) AS failed",
+                (run_id,),
+            )
+            row = await cursor.fetchone()
+            return bool(row and row.get("failed"))
 
     # ------------------------------------------------------------------
     # events

@@ -305,15 +305,17 @@ describe('ConsumerEditor', () => {
     return { api, ...utilities }
   }
 
-  it('renders a 720px manuscript canvas with the core idea block above the prose', async () => {
+  it('renders an 840px manuscript canvas with the core idea block above the prose', async () => {
     await renderEditor()
     const canvas = await screen.findByTestId('manuscript-canvas')
     expect(canvas).toBeInTheDocument()
-    expect(canvas.style.maxWidth).toBe('720px')
+    expect(canvas.style.maxWidth).toBe('840px')
     const coreIdea = await screen.findByTestId('core-idea-block')
-    expect(coreIdea.getAttribute('data-gap')).toBe('32')
+    expect(coreIdea.getAttribute('data-gap')).toBe('24')
     const prose = await screen.findByText(/这是第一段/)
     expect(coreIdea.compareDocumentPosition(prose) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('toolbar', { name: '稿件格式' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '加粗' })).toBeEnabled()
   })
 
   it('exposes zoom through the status callback (the statusbar owns the controls)', async () => {
@@ -328,9 +330,9 @@ describe('ConsumerEditor', () => {
       await Promise.resolve()
     })
     await screen.findByTestId('manuscript-canvas')
-    // the canvas keeps the 720px paper contract; zoom travels in the payload
+    // the canvas keeps the 840px paper contract; zoom travels in the payload
     const canvas = screen.getByTestId('manuscript-canvas')
-    expect(canvas.style.maxWidth).toBe('720px')
+    expect(canvas.style.maxWidth).toBe('840px')
     await waitFor(() => expect(onStatus).toHaveBeenCalled())
     const payload = onStatus.mock.calls.at(-1)[0]
     expect(payload.zoom).toBeGreaterThanOrEqual(0.75)

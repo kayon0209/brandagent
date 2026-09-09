@@ -137,6 +137,30 @@ async def test_settle_records_measured_tokens_and_estimated_when_missing() -> No
 
 
 @pytest.mark.asyncio
+async def test_refund_never_touches_a_settled_entry() -> None:
+    """A settled row is a completed billable charge. The restart-recovery
+    path refunds by request_id; a crash between a settle and the terminal
+    status write must not let that refund erase the charge."""
+    service, store = make_service()
+    principal = principal_for("ws-1")
+    await service.reserve(principal, request_id="req-7", operation="deep_research", estimated_tokens=13000)
+    settled = await service.settle(
+        principal, request_id="req-7", operation="deep_research",
+        input_tokens=1144, output_tokens=0, model="glm-5.3-flash",
+    )
+    assert settled["state"] == "settled"
+    assert settled["total_tokens"] == 1144
+
+    refunded = await service.refund(principal, request_id="req-7", reason="RESEARCH_RESTART_RECOVERY")
+
+    assert refunded["replayed"] is True, "a refund on a settled entry is a no-op"
+    entry = await store.find_entry("ws-1", "req-7")
+    assert entry["state"] == "settled", "the charge must survive the late refund"
+    assert entry["total_tokens"] == 1144
+    assert await store.settled_total("ws-1") == 1144
+
+
+@pytest.mark.asyncio
 async def test_quota_exhausted_rejects_model_calls_before_they_run() -> None:
     service, _ = make_service(quota=100)
     principal = principal_for("ws-1")

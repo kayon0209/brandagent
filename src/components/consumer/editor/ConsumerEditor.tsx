@@ -124,12 +124,15 @@ interface ConsumerEditorProps {
   api: ConsumerDraftApi
   onAdopted?(): void
   onStatus?(status: EditorStatusPayload): void
-  /** P1-3: persist an edited core idea (project PATCH); read-only if absent */
   onSaveCoreIdea?(coreIdea: string): Promise<void>
+  onOpenMaterials?(): void
+  onGenerateDraft?(): void
+  generating?: boolean
+  generationDisabled?: boolean
 }
 
 export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorProps>(
-  function ConsumerEditor({ projectId, coreIdea, api, onAdopted, onStatus, onSaveCoreIdea }, ref) {
+  function ConsumerEditor({ projectId, coreIdea, api, onAdopted, onStatus, onSaveCoreIdea, onOpenMaterials, onGenerateDraft, generating, generationDisabled }, ref) {
   const draft = useConsumerDraft(projectId, api)
   const [zoom, setZoom] = useState(() => {
     try {
@@ -433,11 +436,19 @@ export const ConsumerEditor = forwardRef<ConsumerEditorHandle, ConsumerEditorPro
   )
 
   return (
-    <div className={styles.editorColumn} data-testid="consumer-editor">
+    <div className={styles.editorSurface} data-testid="consumer-editor">
       <div className={styles.main}>
         <div className={styles.manuscriptColumn}>
-          <CoreIdeaBlock coreIdea={coreIdea} onSave={onSaveCoreIdea} />
-          <ManuscriptCanvas editor={editor} zoom={zoom} />
+          <ManuscriptCanvas editor={editor} zoom={zoom} wordCount={wordCount}>
+            <CoreIdeaBlock
+              coreIdea={coreIdea}
+              onSave={onSaveCoreIdea}
+              onOpenMaterials={onOpenMaterials}
+              onGenerateDraft={onGenerateDraft}
+              generating={generating}
+              generationDisabled={generationDisabled}
+            />
+          </ManuscriptCanvas>
         </div>
       </div>
 

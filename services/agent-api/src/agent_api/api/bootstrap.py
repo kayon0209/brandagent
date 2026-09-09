@@ -90,6 +90,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
         api_key=settings.require_glm_key(),
         model=settings.glm_model,
         base_url=settings.glm_base_url,
+        timeout_seconds=settings.glm_timeout_seconds,
     )
     consumer_project_store = PostgresConsumerProjectStore(database_url)
     consumer_projects = ConsumerProjectService(store=consumer_project_store)

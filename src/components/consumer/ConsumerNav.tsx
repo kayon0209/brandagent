@@ -8,6 +8,7 @@
  * which is the same pattern plus the document context.
  */
 
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { UserButton } from '@clerk/nextjs'
 
@@ -22,7 +23,7 @@ const NAV: Array<{ key: Section; href: string; label: string }> = [
   { key: 'style', href: '/app/style', label: '风格实验室' },
 ]
 
-export function ConsumerNav({ active }: { active: Section }) {
+export function ConsumerNav({ active, rightSlot }: { active: Section; rightSlot?: ReactNode }) {
   return (
     <div className={styles.consumerNav} data-testid="consumer-nav">
       <Link href="/app" className={styles.consumerNavBrand} aria-label="BrandAgent 首页">
@@ -42,6 +43,7 @@ export function ConsumerNav({ active }: { active: Section }) {
         ))}
       </nav>
       <div className={styles.consumerNavAccount}>
+        {rightSlot}
         <UserButton afterSignOutUrl="/sign-in" />
       </div>
     </div>

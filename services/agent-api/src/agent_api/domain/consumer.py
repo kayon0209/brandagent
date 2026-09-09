@@ -176,6 +176,16 @@ def assert_safe_material_url(url: str) -> str:
     host = (parts.hostname or "").lower()
     if not host:
         raise MaterialValidationError("URL host is required")
+    # Browsers apply WHATWG host canonicalization before navigating. Python
+    # preserves Unicode full stops and percent-encoded IPv4 octets, so accept
+    # only an unambiguous ASCII host at this shared trust boundary.
+    if not host.isascii() or "%" in host:
+        raise MaterialValidationError("URL host must use a canonical ASCII spelling")
+    # Browsers treat a trailing dot as the same DNS name; normalize it before
+    # applying localhost/private suffix checks.
+    host = host.rstrip(".")
+    if not host:
+        raise MaterialValidationError("URL host is required")
     if (
         host in _PRIVATE_HOSTS
         or any(host.startswith(hint) for hint in _PRIVATE_PREFIXES)

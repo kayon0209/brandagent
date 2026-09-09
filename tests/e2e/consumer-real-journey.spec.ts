@@ -116,8 +116,8 @@ test('real journey: create project → import material → link excerpt → edit
   await expect(popover).toBeHidden({ timeout: 30_000 })
 
   // 9. adopt the current draft as the master snapshot. The adoption action
-  // lives in the 平台精修版 empty state, not in the current-draft preview.
-  await page.getByRole('tab', { name: '平台精修版', exact: true }).click()
+  // lives in the 平台优化 empty state, not in the current-content preview.
+  await page.getByRole('tab', { name: '平台优化', exact: true }).click()
   const adoptButton = page.getByRole('button', { name: '定稿', exact: true })
   await expect(adoptButton).toBeVisible({ timeout: 30_000 })
   await adoptButton.click({ timeout: 30_000 })

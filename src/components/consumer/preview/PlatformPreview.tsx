@@ -10,11 +10,11 @@
  * looking at, and the bottom action bar conflated 定稿/重新生成/准备发布.
  *
  * Now the rail is two explicit modes behind a segmented control:
- *   [当前稿预览]  — the DRAFT rendered in the platform's layout, live.
- *   [平台精修版]  — the AI-rewritten variant for that platform.
+ *   [当前内容]  — the DRAFT rendered in the platform's layout, live.
+ *   [平台优化]  — the AI-rewritten variant for that platform.
  *
  * And the product model is spoken (not hidden machinery):
- *   稿纸 (draft) → 设为母稿 (freeze a master) → 平台精修版 (variants)
+ *   稿纸 (draft) → 设为母稿 (freeze a master) → 平台优化 (variants)
  *   → 准备发布 (topbar only, single publish entry).
  */
 
@@ -49,6 +49,8 @@ interface PlatformPreviewProps {
   onRegenerate(channel?: string): void
   /** Freeze the current draft as the master the variants are derived from */
   onAdopt(): void
+  /** Re-fetch the preview payload after a non-generation request failure. */
+  onRetry?(): void
 }
 
 const BUILTIN_TABS: Array<{ key: string; label: string }> = [
@@ -59,7 +61,7 @@ const BUILTIN_TABS: Array<{ key: string; label: string }> = [
 
 type Mode = 'draft' | 'polished'
 
-export function PlatformPreview({ state, supportedChannels, liveText, onGenerate, onRegenerate, onAdopt }: PlatformPreviewProps) {
+export function PlatformPreview({ state, supportedChannels, liveText, onGenerate, onRegenerate, onAdopt, onRetry }: PlatformPreviewProps) {
   const supported = supportedChannels ?? BUILTIN_TABS.map(tab => tab.key)
   const hasVariant = (key: string) => Boolean(state.channels[key]?.content?.trim())
   const tabKeys = Array.from(new Set([...supported, ...Object.keys(state.channels)])).filter(
@@ -74,10 +76,11 @@ export function PlatformPreview({ state, supportedChannels, liveText, onGenerate
 
   // round-3e: explicit two-mode split. Default shows the polished variant
   // once one exists (that's why the user generated it); otherwise the live
-  // draft preview. round-3f (P0-3): a user who switches to 平台精修版 with
+  // draft preview. round-3f (P0-3): a user who switches to 平台优化 with
   // NO variant STAYS there — the empty state guides them to 定稿/生成, so we
   // must NOT yank them back to draft mode (that made 定稿 unreachable).
   const [mode, setMode] = useState<Mode>(anyVariant ? 'polished' : 'draft')
+  const [collapsed, setCollapsed] = useState(false)
   const modeTouchedRef = useRef(false)
   useEffect(() => {
     // round-3g: variants arrive AFTER mount (async load). The initial
@@ -108,7 +111,12 @@ export function PlatformPreview({ state, supportedChannels, liveText, onGenerate
       style={{ maxWidth: '612px' }}
     >
       <div className={styles.panelHead}>
-        <h2 className={styles.panelTitle}>平台预览</h2>
+        <div className={styles.panelTitleRow}>
+          <h2 className={styles.panelTitle}>平台预览</h2>
+          <button type="button" className={styles.collapseButton} aria-label={collapsed ? '展开预览' : '折叠预览'} onClick={() => setCollapsed(v => !v)}>
+            {collapsed ? '⌃' : '⌄'}
+          </button>
+        </div>
         <div className={styles.modeSwitch} role="tablist" aria-label="预览模式">
           <button
             type="button"
@@ -118,7 +126,7 @@ export function PlatformPreview({ state, supportedChannels, liveText, onGenerate
             className={mode === 'draft' ? styles.modeActive : styles.modeTab}
             onClick={() => setMode('draft')}
           >
-            当前稿预览
+            当前内容
           </button>
           <button
             type="button"
@@ -128,128 +136,130 @@ export function PlatformPreview({ state, supportedChannels, liveText, onGenerate
             className={mode === 'polished' ? styles.modeActive : styles.modeTab}
             onClick={() => setMode('polished')}
           >
-            平台精修版
+            平台优化
             {anyVariant && <span className={styles.modeDot} aria-hidden />}
           </button>
         </div>
       </div>
 
-      {state.status === 'error' && (
-        <p className={styles.hint} data-testid="variant-error">
-          预览暂时打不开：{state.error?.message?.replace(/。+$/, '') ?? '网络出了点问题'}。你的稿纸不受影响。
-        </p>
-      )}
-
-      {/* channel tabs — which platform the panel is looking at */}
-      {availableTabs.length > 0 && (
-        <div className={styles.channelTabs} role="tablist" aria-label="平台">
-          {availableTabs.map(tab => (
-            <button
-              key={tab.key}
-              type="button"
-              role="tab"
-              aria-selected={tab.key === activeKey}
-              className={tab.key === activeKey ? styles.channelTabActive : styles.channelTab}
-              onClick={() => setActive(tab.key)}
-            >
-              {tab.label}
-              {hasVariant(tab.key) && <span className={styles.tabReadyDot} aria-hidden title="已生成" />}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* non-blocking progress: the previous version stays visible while a
-          new variant is generated */}
-      {state.status === 'generating' && (
-        <p className={styles.progress} role="status" data-testid="generating-note">
-          正在生成新版本…（上一版仍可查看）
-        </p>
-      )}
-
-      {/* MODE 1 — 当前稿预览: the draft rendered in the platform layout */}
-      {mode === 'draft' && (
+      {collapsed ? (
+        <p className={styles.collapsedHint} data-testid="preview-collapsed">预览已折叠，点击展开查看。</p>
+      ) : (
         <>
-          <PlatformShape activeKey={activeKey} content={liveText ?? ''} />
-          {liveText && liveText.trim() ? (
-            <p className={styles.previewCaption} data-testid="draft-preview-caption">
-              这是「{channelName}」的排版——内容实时取自你稿纸里的文字。
-            </p>
-          ) : (
-            <p className={styles.previewCaption} data-testid="draft-preview-empty">
-              在稿纸里写下内容后，这里会实时显示「{channelName}」的排版效果。
-            </p>
-          )}
-        </>
-      )}
-
-      {/* MODE 2 — 平台精修版: the AI-rewritten variant (or a clear empty state) */}
-      {mode === 'polished' && (
-        <>
-          {activeData?.content ? (
-            <>
-              <PlatformShape activeKey={activeKey} content={activeData.content} />
-              <p className={styles.previewCaption} data-testid="polished-caption">
-                AI 已按「{channelName}」的规格改写：标题、段落节奏、标签都适配过，可直接采用发布。
+          {state.status === 'error' && (
+            <div className={styles.errorState} data-testid="variant-error">
+              <p className={styles.hint}>
+                预览暂时打不开：{state.error?.message?.replace(/。+$/, '') ?? '网络出了点问题'}。你的稿纸不受影响。
               </p>
-            </>
-          ) : state.status === 'generating' ? null : hasMaster ? (
-            <div className={styles.polishedEmpty} data-testid="polished-empty">
-              <p>还没有「{channelName}」的精修版。生成后，这里展示按平台特点改写的结果。</p>
-              <button type="button" className={styles.primarySmall} onClick={onGenerate}>
-                生成平台版本
-              </button>
+              {onRetry && (
+                <button type="button" className={styles.retryPreview} onClick={onRetry}>
+                  重试预览
+                </button>
+              )}
             </div>
-          ) : (
-            <div className={styles.polishedEmpty} data-testid="polished-no-master">
-              <p>先「定稿」，把当前稿纸存为平台精修版的基础，再生成「{channelName}」版本。</p>
-              <button type="button" className={styles.primarySmall} onClick={onAdopt}>
-                定稿
-              </button>
+          )}
+
+          {availableTabs.length > 0 && (
+            <div className={styles.channelTabs} role="tablist" aria-label="平台">
+              {availableTabs.map(tab => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab.key === activeKey}
+                  className={tab.key === activeKey ? styles.channelTabActive : styles.channelTab}
+                  onClick={() => setActive(tab.key)}
+                >
+                  {tab.label}
+                  {hasVariant(tab.key) && <span className={styles.tabReadyDot} aria-hidden title="已生成" />}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {state.status === 'generating' && (
+            <p className={styles.progress} role="status" data-testid="generating-note">
+              正在生成新版本…（上一版仍可查看）
+            </p>
+          )}
+
+          {mode === 'draft' && (
+            <>
+              <PlatformShape activeKey={activeKey} content={liveText ?? ''} />
+              {liveText && liveText.trim() ? (
+                <p className={styles.previewCaption} data-testid="draft-preview-caption">
+                  这是「{channelName}」的排版——内容实时取自你稿纸里的文字。
+                </p>
+              ) : (
+                <p className={styles.previewCaption} data-testid="draft-preview-empty">
+                  在稿纸里写下内容后，这里会实时显示「{channelName}」的排版效果。
+                </p>
+              )}
+            </>
+          )}
+
+          {mode === 'polished' && (
+            <>
+              {activeData?.content ? (
+                <>
+                  <PlatformShape activeKey={activeKey} content={activeData.content} />
+                  <p className={styles.previewCaption} data-testid="polished-caption">
+                    AI 已按「{channelName}」的规格改写：标题、段落节奏、标签都适配过，可直接采用发布。
+                  </p>
+                </>
+              ) : state.status === 'generating' ? null : hasMaster ? (
+                <div className={styles.polishedEmpty} data-testid="polished-empty">
+                  <p>还没有「{channelName}」的精修版。生成后，这里展示按平台特点改写的结果。</p>
+                  <button type="button" className={styles.primarySmall} onClick={onGenerate}>
+                    生成平台版本
+                  </button>
+                </div>
+              ) : (
+                <div className={styles.polishedEmpty} data-testid="polished-no-master">
+                  <p>先「定稿」，把当前稿纸存为平台优化的基础，再生成「{channelName}」版本。</p>
+                  <button type="button" className={styles.primarySmall} onClick={onAdopt}>
+                    定稿
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {state.status === 'failed' &&
+            Object.entries(state.failedChannels ?? {}).map(([channel, failure]) =>
+              failure?.retryable ? (
+                <button
+                  key={channel}
+                  type="button"
+                  className={styles.retry}
+                  onClick={() => onRegenerate(channel)}
+                >
+                  重试{channelLabel(channel)}
+                </button>
+              ) : null,
+            )}
+
+          {mode === 'draft' && hasMaster && (
+            <p className={styles.hint} data-testid="stale-hint">
+              稿纸改动不会自动更新已生成的平台优化版——需要时切到「平台优化」重新生成。
+            </p>
+          )}
+
+          {!state.error && (
+            <div className={styles.modeActions} data-testid="mode-actions">
+              {mode === 'draft' && (
+                <button type="button" className={styles.secondary} onClick={() => setMode('polished')}>
+                  生成平台优化版 →
+                </button>
+              )}
+              {mode === 'polished' && activeData?.content && (
+                <button type="button" className={styles.secondary} onClick={() => onRegenerate(activeKey)}>
+                  重新生成
+                </button>
+              )}
             </div>
           )}
         </>
-      )}
-
-      {/* retry surface for failed channels */}
-      {state.status === 'failed' &&
-        Object.entries(state.failedChannels ?? {}).map(([channel, failure]) =>
-          failure?.retryable ? (
-            <button
-              key={channel}
-              type="button"
-              className={styles.retry}
-              onClick={() => onRegenerate(channel)}
-            >
-              重试{channelLabel(channel)}
-            </button>
-          ) : null,
-        )}
-
-      {/* the master hint sits below the preview once a master exists */}
-      {mode === 'draft' && hasMaster && (
-        <p className={styles.hint} data-testid="stale-hint">
-          稿纸改动不会自动更新已生成的精修版——需要时切到「平台精修版」重新生成。
-        </p>
-      )}
-
-      {/* round-3f (P0-3): bottom actions follow the ACTIVE MODE — the draft
-          IS the master, so 当前稿预览 never offers 定稿/重新生成; it offers
-          a single path forward (去平台精修版). Polished mode offers
-          regenerate only when a variant exists. Publish stays in the topbar. */}
-      {!state.error && (
-        <div className={styles.modeActions} data-testid="mode-actions">
-          {mode === 'draft' && (
-            <button type="button" className={styles.secondary} onClick={() => setMode('polished')}>
-              生成平台精修版 →
-            </button>
-          )}
-          {mode === 'polished' && activeData?.content && (
-            <button type="button" className={styles.secondary} onClick={() => onRegenerate(activeKey)}>
-              重新生成
-            </button>
-          )}
-        </div>
       )}
     </section>
   )

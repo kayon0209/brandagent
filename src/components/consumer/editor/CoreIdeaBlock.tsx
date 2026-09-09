@@ -1,14 +1,6 @@
 'use client'
 
-/**
- * P1-3: the core idea is EDITABLE on the write page. Saving goes through
- * the project PATCH API with honest feedback (saving / saved / failed +
- * retry) — a failed save never renders as saved, and the draft/variant
- * generation reads the updated project on the server, so the flow stays
- * consistent after an edit.
- */
-
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import styles from './consumer-editor.module.css'
 
@@ -16,74 +8,91 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'failed'
 
 interface CoreIdeaBlockProps {
   coreIdea: string
-  /** Persist the edited idea (project PATCH). Absent -> read-only display. */
   onSave?: (coreIdea: string) => Promise<void>
+  onOpenMaterials?: () => void
+  onGenerateDraft?: () => void
+  generating?: boolean
+  generationDisabled?: boolean
 }
 
-export function CoreIdeaBlock({ coreIdea, onSave }: CoreIdeaBlockProps) {
+export function CoreIdeaBlock({
+  coreIdea,
+  onSave,
+  onOpenMaterials,
+  onGenerateDraft,
+  generating = false,
+  generationDisabled = false,
+}: CoreIdeaBlockProps) {
   const [text, setText] = useState(coreIdea)
   const [savedText, setSavedText] = useState(coreIdea)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
+  const textRef = useRef(text)
+  const previousCoreIdeaRef = useRef(coreIdea)
   const editable = typeof onSave === 'function'
-  // the server value can arrive after mount (project fetch) — sync the
-  // editor buffer only while the user is NOT mid-edit
-  const editingRef = useRef(false)
 
+  useEffect(() => { textRef.current = text }, [text])
   useEffect(() => {
-    if (!editingRef.current) {
+    // Only respond to a genuinely newer server prop. A successful local
+    // autosave updates savedText first; treating that state change as a
+    // server refresh would briefly restore the old prop and lose the edit.
+    if (coreIdea === previousCoreIdeaRef.current) return
+    previousCoreIdeaRef.current = coreIdea
+    if (textRef.current === savedText) {
       setText(coreIdea)
       setSavedText(coreIdea)
     }
-  }, [coreIdea])
+  }, [coreIdea, savedText])
 
-  if (!editable) {
-    return (
-      <section
-        data-testid="core-idea-block"
-        data-gap="32"
-        className={styles.coreIdea}
-        style={{ marginBottom: '32px' }}
-      >
-        <p className={styles.coreIdeaLabel}>核心观点</p>
-        <p className={styles.coreIdeaText}>{coreIdea}</p>
-      </section>
-    )
-  }
-
-  const dirty = text !== savedText
-
-  async function save() {
-    if (!dirty || saveState === 'saving') return
-    const value = text.trim()
-    if (!value) {
-      setSaveState('failed')
-      setSaveError('核心观点不能为空。')
+  const save = useCallback(async (value: string) => {
+    if (!onSave || !value.trim()) {
+      if (!value.trim()) {
+        setSaveState('failed')
+        setSaveError('核心观点不能为空。')
+      }
       return
     }
     setSaveState('saving')
     setSaveError(null)
     try {
-      await onSave?.(value)
-      editingRef.current = false
+      await onSave(value)
       setSavedText(value)
       setSaveState('saved')
     } catch {
-      // keep the buffer; the server value did not change — the UI must
-      // never pretend a failed PATCH succeeded
+      // A failed save never replaces the creator's local buffer.
       setSaveState('failed')
       setSaveError('保存失败，请检查网络后重试。')
     }
+  }, [onSave])
+
+  useEffect(() => {
+    if (!editable || text === savedText || saveState === 'saving') return
+    const value = text.trim()
+    if (!value) return
+    const timer = window.setTimeout(() => { void save(value) }, 600)
+    return () => window.clearTimeout(timer)
+  }, [editable, save, saveState, savedText, text])
+
+  const dirty = text !== savedText
+
+  if (!editable) {
+    return (
+      <section data-testid="core-idea-block" data-gap="24" className={styles.coreIdea}>
+        <div className={styles.coreIdeaHeading}>
+          <p className={styles.coreIdeaLabel}>核心观点</p>
+          <span>这篇内容想让读者记住什么？</span>
+        </div>
+        <p className={styles.coreIdeaText}>{coreIdea}</p>
+      </section>
+    )
   }
 
   return (
-    <section
-      data-testid="core-idea-block"
-      data-gap="32"
-      className={styles.coreIdea}
-      style={{ marginBottom: '32px' }}
-    >
-      <p className={styles.coreIdeaLabel}>这篇内容最想让读者记住什么？</p>
+    <section data-testid="core-idea-block" data-gap="24" className={styles.coreIdea}>
+      <div className={styles.coreIdeaHeading}>
+        <p className={styles.coreIdeaLabel}>核心观点</p>
+        <span>这篇内容想让读者记住什么？</span>
+      </div>
       <textarea
         data-testid="core-idea-input"
         className="consumer-text-input"
@@ -91,38 +100,33 @@ export function CoreIdeaBlock({ coreIdea, onSave }: CoreIdeaBlockProps) {
         value={text}
         aria-label="核心观点"
         onChange={event => {
-          editingRef.current = true
-          if (saveState === 'saved') setSaveState('idle')
+          setSaveError(null)
+          if (saveState === 'saved' || saveState === 'failed') setSaveState('idle')
           setText(event.target.value)
         }}
         placeholder="一句话说清这篇文章要讲什么"
       />
-      <div>
-        <button
-          type="button"
-          className="consumer-primary-button"
-          disabled={saveState === 'saving' || !dirty}
-          onClick={() => void save()}
-        >
-          {saveState === 'saving' ? '正在保存…' : dirty ? '保存' : '保存观点'}
-        </button>
-        {saveState === 'saved' && (
-          <span role="status" data-testid="core-idea-saved">
-            已保存
-          </span>
+      <div className={styles.coreIdeaActions}>
+        {onOpenMaterials && <button type="button" className={styles.materialAction} onClick={onOpenMaterials}>+ 添加素材</button>}
+        {onGenerateDraft && (
+          <button
+            type="button"
+            className={styles.generateDraftAction}
+            disabled={generating || generationDisabled || !text.trim()}
+            title={generationDisabled ? '本月额度已用完，写作与保存仍可用' : undefined}
+            onClick={onGenerateDraft}
+          >
+            {generating ? '正在生成…' : '生成初稿'} <span aria-hidden>→</span>
+          </button>
         )}
+        <span className={styles.ideaSaveStatus} aria-live="polite">
+          {saveState === 'saving' && '正在保存'}
+          {saveState === 'saved' && !dirty && '已自动保存'}
+        </span>
         {saveState === 'failed' && (
-          <span>
-            <span role="alert" data-testid="core-idea-error">
-              {saveError}
-            </span>
-            <button
-              type="button"
-              data-testid="core-idea-retry"
-              onClick={() => void save()}
-            >
-              重试
-            </button>
+          <span className={styles.ideaSaveFailure}>
+            <span role="alert" data-testid="core-idea-error">{saveError}</span>
+            <button type="button" data-testid="core-idea-retry" onClick={() => void save(text.trim())}>重试</button>
           </span>
         )}
       </div>

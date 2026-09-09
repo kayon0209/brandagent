@@ -48,21 +48,27 @@ class ZhipuProvider(LLMProvider):
         if client is not None and not client.is_closed:
             await client.aclose()
 
-    async def generate(self, *, system: str, prompt: str, prompt_version: str) -> ModelCallResult:
+    async def generate(self, *, system: str, prompt: str, prompt_version: str, max_output_tokens: int | None = None) -> ModelCallResult:
         started = time.perf_counter()
         client = await self._client_for_request()
+        body = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.2,
+        }
+        if max_output_tokens is not None:
+            # Some OpenAI-compatible gateways cut connections at ~60s of
+            # generation time (measured: Gitee AI, 2026-09-09). Capping the
+            # completion keeps generation inside that window.
+            body["max_tokens"] = max_output_tokens
         try:
             response = await client.post(
                 f"{self._base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {self._api_key.get_secret_value()}"},
-                json={
-                    "model": self._model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "temperature": 0.2,
-                },
+                json=body,
             )
         except (httpx.TimeoutException, httpx.TransportError, ssl.SSLError) as error:
             # We cannot prove whether the provider received this non-idempotent

@@ -64,8 +64,18 @@ Agent readiness fails closed when PostgreSQL checkpoint isolation, GLM configura
 - `brandflow_app` owns business reads/writes.
 - `brandflow_checkpoint` uses the separate `brandflow_checkpoint` schema and must not equal the business role.
 - Apply numbered migrations to a fresh disposable database before any shared environment.
+- 010 adds the ONLY two cross-workspace entry points the business role
+  may use: `deep_research_list_orphaned_runs()` and
+  `deep_research_fail_orphaned_run(uuid)` — both `SECURITY DEFINER`,
+  owned by the table owner, fixed `search_path = pg_catalog, public`,
+  granted to `brandflow_app` only and revoked from every other role.
+  They exist solely for startup orphan recovery of deep-research runs;
+  neither returns question/synthesis/candidate content. Never widen
+  them into a general cross-workspace read/write interface, and never
+  work around them by disabling RLS, granting `BYPASSRLS`, elevating
+  the business connection, or setting a global `app.workspace_id`.
 
-### Applying missing migrations to an EXISTING stack (005–008)
+### Applying missing migrations to an EXISTING stack (005–010)
 
 `docker-entrypoint-initdb.d` only runs when the persistent volume is
 FIRST initialized. For an already-running stack, apply the migration
@@ -74,7 +84,7 @@ explicitly. Schedule a maintenance window first: 008 replaces the existing
 table lock even though it neither deletes rows nor columns. Do not apply any
 migration merely to re-run a test.
 
-After the Compose definition containing the 005–008 mounts has been rolled
+After the Compose definition containing the 005–010 mounts has been rolled
 out, apply only the migration files absent from that database, in order:
 
 ```powershell
@@ -82,7 +92,9 @@ foreach ($migration in @(
   '06-consumer-rls-force.sql',
   '07-style-reports.sql',
   '08-style-report-enrichment.sql',
-  '09-consumer-material-kinds.sql'
+  '09-consumer-material-kinds.sql',
+  '10-deep-research.sql',
+  '11-orphan-recovery.sql'
 )) {
   docker compose exec postgres psql -U postgres -d brandflow `
     -v ON_ERROR_STOP=1 `
@@ -97,7 +109,7 @@ docker compose exec postgres psql -U postgres -d brandflow -t -c `
   "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='consumer_projects';"
 ```
 
-Never delete the data volume to "re-run" migrations; upgrade in place. The consumer gate (`RUN_BRANDFLOW_DB_TESTS=true pnpm test:db:consumer`) applies 001–008 on a disposable container, verifies the 004 workspace policies and 005 FORCE hardening (including owner bypass closed), verifies 006 `style_reports` RLS, and proves 007/008 schema contracts.
+Never delete the data volume to "re-run" migrations; upgrade in place. The consumer gate (`RUN_BRANDFLOW_DB_TESTS=true pnpm test:db:consumer`) applies 001–009 on a disposable container, verifies the 004 workspace policies and 005 FORCE hardening (including owner bypass closed), verifies 006 `style_reports` RLS, and proves 007/008 schema contracts. The agent-api RLS gate (`RUN_AGENT_DB_TESTS=true`, see Verification below) additionally proves 009 deep-research RLS and the 010 orphan-recovery entries under the plain `brandflow_app` role.
 - Content versions, decisions, lineage and audit events are append-only. Never repair them with direct updates.
 
 ## Recovery
@@ -119,7 +131,12 @@ Never delete the data volume to "re-run" migrations; upgrade in place. The consu
 ### Service restart
 
 1. Restore PostgreSQL first, then MCP, Agent API and Web.
-2. Confirm Agent readiness.
+2. Confirm Agent readiness. At startup the Agent API sweeps
+   restart-orphaned deep-research runs through the 010 recovery
+   entries: each abandoned `planned`/`running` run is refunded (ledger
+   reservation released) and marked failed with an honest message; a
+   run whose refund fails stays non-terminal so the next restart
+   retries it. Terminal runs and settled usage are never rewritten.
 3. Open the existing task and retry from its checkpoint. Do not replay approval/export calls with a new payload under an old idempotency key.
 
 ### Export rejected

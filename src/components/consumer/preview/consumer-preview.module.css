@@ -3,8 +3,13 @@
 .panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   width: 100%;
+  padding: 17px;
+  border: 1px solid rgba(39, 36, 31, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 253, 248, 0.88);
+  box-shadow: 0 12px 28px rgba(72, 56, 36, 0.06);
 }
 
 .panelTitle {
@@ -22,6 +27,35 @@
   color: var(--ink-soft);
   font-size: 13px;
   line-height: 1.7;
+}
+
+.errorState {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.errorState .hint {
+  flex: 1;
+  margin: 0;
+}
+
+.retryPreview {
+  flex: 0 0 auto;
+  min-height: 34px;
+  border: 1px solid rgba(173, 86, 65, 0.45);
+  border-radius: 999px;
+  background: var(--paper, #fffdf8);
+  color: var(--accent, #ad5641);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.retryPreview:hover {
+  background: var(--accent-soft, #f3e5df);
 }
 
 .channelTabs {
@@ -67,9 +101,9 @@
   width: 100%;
   max-width: 420px;
   background: #fff;
-  border-radius: 4px;
+  border-radius: 10px;
   padding: 22px 18px 30px;
-  box-shadow: 0 2px 10px rgba(15, 15, 15, 0.06);
+  box-shadow: 0 4px 14px rgba(15, 15, 15, 0.08);
 }
 
 .wechatTitle {
@@ -492,11 +526,37 @@
   flex-wrap: wrap;
 }
 
+.panelTitleRow { display: flex; align-items: center; gap: 8px; }
+
 .panelTitle {
   margin: 0;
   font-size: 15px;
   color: var(--ink);
   letter-spacing: 0.02em;
+}
+
+.collapseButton {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(39,36,31,0.12);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.collapsedHint {
+  margin: 0;
+  padding: 16px 14px;
+  border: 1px dashed rgba(39,36,31,0.14);
+  border-radius: 10px;
+  background: rgba(255,253,248,0.6);
+  color: var(--ink-soft);
+  font-size: 12px;
+  text-align: center;
 }
 
 .modeSwitch {

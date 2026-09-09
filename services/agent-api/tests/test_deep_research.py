@@ -59,18 +59,20 @@ class FakeProvider:
     outputs: list[str] = field(default_factory=list)
     calls: list[dict] = field(default_factory=list)
 
-    async def generate(self, *, system: str, prompt: str, prompt_version: str) -> FakeModelCall:
+    async def generate(self, *, system: str, prompt: str, prompt_version: str, max_output_tokens: int | None = None) -> FakeModelCall:
         self.calls.append({"system": system, "prompt": prompt, "prompt_version": prompt_version})
         content = self.outputs.pop(0) if self.outputs else "方向A\n方向B"
         return FakeModelCall(content=content)
 
 
 class FakeLedger:
-    def __init__(self, quota_ok: bool = True) -> None:
+    def __init__(self, quota_ok: bool = True, refund_error: Exception | None = None, refund_not_found: bool = False) -> None:
         self.reserved: list[dict] = []
         self.settled: list[dict] = []
         self.refunded: list[dict] = []
         self.quota_ok = quota_ok
+        self.refund_error = refund_error
+        self.refund_not_found = refund_not_found
         self._seen: set[str] = set()
 
     async def reserve(self, principal, *, request_id, operation, estimated_tokens):
@@ -91,6 +93,12 @@ class FakeLedger:
         return {"state": "settled"}
 
     async def refund(self, principal, *, request_id, reason):
+        if self.refund_error is not None:
+            raise self.refund_error
+        if self.refund_not_found:
+            from agent_api.domain.errors import NotFoundError
+
+            raise NotFoundError(f"usage entry {request_id} not found")
         self.refunded.append({"request_id": request_id, "reason": reason})
         return {"state": "refunded"}
 
@@ -142,7 +150,34 @@ class FakeStore:
         return run
 
     async def find_orphans(self) -> list[dict]:
-        return [r for r in self.runs.values() if r.get("status") in ("planned", "running")]
+        # mirrors 010's restricted listing: minimal identification
+        # columns only, never question/synthesis/candidate content
+        return [
+            {
+                "run_id": r["run_id"],
+                "workspace_id": r["workspace_id"],
+                "request_id": r["request_id"],
+                "created_by": r.get("created_by", "system"),
+            }
+            for r in self.runs.values()
+            if r.get("status") in ("planned", "running")
+        ]
+
+    async def fail_orphan(self, run_id: str) -> bool:
+        # mirrors 010's deep_research_fail_orphaned_run: terminal and
+        # unknown rows are refused; the honest message is fixed
+        run = self.runs.get(run_id)
+        if run is None or run.get("status") not in ("planned", "running"):
+            return False
+        run.update(
+            {
+                "status": "failed",
+                "error": "服务重启导致调研中断，额度已退回。",
+                "completed_at": "now",
+                "cancel_requested_at": None,
+            }
+        )
+        return True
 
 
 async def fake_validator(cards) -> list[dict]:
@@ -159,6 +194,7 @@ def build_service(*, provider=None, search=None, ledger=None, store=None, parall
         parallelism=parallelism,
         estimated_tokens=30000,
         validator=validator or fake_validator,
+        retry_delays=(0, 0, 0, 0),  # failure-path retries resolve instantly in tests
     )
 
 
@@ -239,6 +275,7 @@ async def test_web_never_enters_system_prompt():
 async def test_cancel_preserves_partial_results():
     store = FakeStore()
     provider = FakeProvider(outputs=["方向一\n方向二"])
+    ledger = FakeLedger()
 
     class CancelAfterFirstCard(RecordedSearchProvider):
         def __init__(self) -> None:
@@ -253,12 +290,54 @@ async def test_cancel_preserves_partial_results():
 
     run_id_holder = {}
     search = CancelAfterFirstCard()
-    service = build_service(provider=provider, search=search, store=store)
+    service = build_service(provider=provider, search=search, store=store, ledger=ledger)
     run = await service.start(ACTOR, question="取消后保留部分结果吗？", audience="", scope_hint="", request_id="req-c")
     run_id_holder["run_id"] = run["run_id"]
     final = await wait_for_run(service, run)
     assert final["status"] == "canceled"
     assert final["candidate_cards"], "cards gathered before the cancel are kept"
+    # 取消与恢复 gate: a cancel must release the reservation by settling the
+    # MEASURED tokens. A stranded 'reserved' 13K is an unexplainable balance.
+    assert ledger.settled, "cancel settles the consumed tokens"
+    assert ledger.settled[0]["request_id"] == "req-c"
+    assert ledger.settled[0]["tokens"] == final["tokens_used"], "settlement equals measured usage"
+    assert ledger.refunded == [], "cancel settles, it does not refund a run that consumed tokens"
+    canceled_events = [e for e in store.events if e["event_type"] == "consumer.research.canceled.v1"]
+    assert canceled_events and canceled_events[0]["public_payload"]["tokens_used"] == final["tokens_used"]
+
+
+async def test_cancel_discards_unverified_partial_cards():
+    """A cancellation must not turn an unchecked source into a trusted card."""
+    from agent_api.application.research_citation import validate_evidence_safely
+
+    store = FakeStore()
+    provider = FakeProvider(outputs=["方向一\n方向二"])
+
+    class CancelAfterFirstCard(RecordedSearchProvider):
+        def __init__(self) -> None:
+            super().__init__(script=[{"url": "http://127.0.0.1:8000/private", "title": "Private", "content": "内部内容", "score": 0.9}])
+            self.searches = 0
+
+        async def search(self, query, *, max_results=5):
+            self.searches += 1
+            if self.searches > 1:
+                await store.request_cancel("ws-research", run_id_holder["run_id"])
+            return await super().search(query, max_results=max_results)
+
+    run_id_holder = {}
+    service = build_service(
+        provider=provider,
+        search=CancelAfterFirstCard(),
+        store=store,
+        validator=validate_evidence_safely,
+    )
+    run = await service.start(ACTOR, question="取消时私网来源会保留吗？", audience="", scope_hint="", request_id="req-c-private")
+    run_id_holder["run_id"] = run["run_id"]
+
+    final = await wait_for_run(service, run)
+
+    assert final["status"] == "canceled"
+    assert final["candidate_cards"] == [], "cancellation cannot bypass the same evidence gate"
 
 
 async def test_possible_loss_of_sync_when_ledger_fails_is_not_masked():
@@ -274,6 +353,32 @@ async def test_possible_loss_of_sync_when_ledger_fails_is_not_masked():
     final = await wait_for_run(service, run)
     assert final["status"] == "succeeded"
     assert "没有拿到可核实的来源" in final["synthesis"], "honest no-evidence answer, no fake citations"
+
+
+async def test_failure_after_partial_model_calls_settles_measured_tokens():
+    """A run whose planner call already burned tokens must settle the
+    MEASURED count, never the full 13K estimate (成本与时延 gate: no
+    unexplainable overcharge on failure). BudgetExceeded after the
+    planner is the canonical mid-run failure path."""
+    from agent_api.research.search_provider import BudgetExceeded
+
+    provider = FakeProvider(outputs=["方向一\n方向二"])
+    ledger = FakeLedger()
+
+    class BudgetCappedSearch(RecordedSearchProvider):
+        async def search(self, query, *, max_results=5):
+            raise BudgetExceeded("search budget cap reached")
+
+    service = build_service(provider=provider, search=BudgetCappedSearch(script=[]), ledger=ledger)
+    run = await service.start(ACTOR, question="中途失败时怎么结算？", audience="", scope_hint="", request_id="req-fail-measured")
+
+    final = await wait_for_run(service, run)
+
+    assert final["status"] == "failed"
+    assert ledger.settled, "failure after real model calls settles, not refunds"
+    assert ledger.settled[0]["tokens"] == final["tokens_used"], "settlement equals measured usage, not the reservation"
+    assert ledger.settled[0]["tokens"] is not None and ledger.settled[0]["tokens"] > 0
+    assert ledger.refunded == [], "tokens already consumed must not become free"
 
 
 async def test_get_and_events_are_workspace_scoped():
@@ -352,6 +457,29 @@ async def test_join_material_rejects_bad_index():
     assert error.value.status_code == 422
 
 
+async def test_join_material_rejects_an_unverified_persisted_card():
+    """Older/corrupt rows cannot smuggle an unsafe card into materials."""
+    store = FakeStore()
+    service = build_service(store=store)
+    run_id = str(uuid4())
+    store.runs[run_id] = {
+        "run_id": run_id,
+        "workspace_id": "ws-research",
+        "status": "succeeded",
+        "candidate_cards": [
+            {"url": "javascript:alert(1)", "title": "恶意", "excerpt": "不应导入", "retrieved_at": "2026-09-08T00:00:00Z", "reachable": False, "excerpt_valid": False}
+        ],
+        "synthesis": "",
+    }
+    materials = FakeMaterials()
+
+    with pytest.raises(DeepResearchError) as error:
+        await service.join_material(ACTOR, run_id, 0, None, materials=materials, projects=None)
+
+    assert error.value.status_code == 422
+    assert materials.imported == [], "rejected cards must never reach the material write seam"
+
+
 # ---------------------------------------------------------------- SSRF gate
 # The PRODUCT validator must never let a search result aim the server at
 # internal addresses (plan gate: 安全 — 搜索范围受限，不能自由外发).
@@ -370,59 +498,52 @@ async def test_citation_validator_rejects_private_targets():
     from agent_api.application.research_citation import validate_evidence_safely
 
     checks = await validate_evidence_safely(
-        [Card("http://127.0.0.1:8000/secret"), Card("http://169.254.169.254/metadata")]
+        [
+            Card("http://127.0.0.1:8000/secret"),
+            Card("http://169.254.169.254/metadata"),
+            Card("http://127\u30020\u30020\u30021/"),
+            Card("http://localhost\u3002/"),
+            Card("http://localhost./"),
+            Card("http://%31%32%37.0.0.1/"),
+        ]
     )
-    assert [c["ok"] for c in checks] == [False, False], "private targets must be unreachable-by-policy, not probed"
+    assert [c["ok"] for c in checks] == [False] * 6, "private targets and browser-normalized aliases must be rejected without probing"
+
+
+async def test_completed_runs_persist_only_cards_that_pass_the_evidence_gate():
+    """Failed source validation must remove a card, not merely label it unsafe."""
+    from agent_api.application.research_citation import validate_evidence_safely
+
+    service = build_service(
+        provider=FakeProvider(outputs=["方向一", "不应合成"]),
+        search=RecordedSearchProvider(
+            script=[{"url": "javascript:alert(1)", "title": "恶意", "content": "不应保留", "score": 0.9}]
+        ),
+        validator=validate_evidence_safely,
+    )
+    run = await service.start(ACTOR, question="恶意来源会进入候选卡吗？", audience="", scope_hint="", request_id="req-invalid-card")
+
+    final = await wait_for_run(service, run)
+
+    assert final["status"] == "succeeded"
+    assert final["candidate_cards"] == []
+    assert final["citations_invalid"] == 1
 
 
 @pytest.mark.asyncio
-async def test_citation_validator_rejects_public_domain_resolving_private():
+async def test_citation_validator_does_not_resolve_provider_source_urls():
     from unittest.mock import patch
 
     from agent_api.application.research_citation import check_card
 
     card = Card("http://rebind.example.com/x")
 
-    class FakeInfo(tuple):
-        pass
-
-    # a 'public' name whose DNS answer is a private IP — the rebind bypass
-    fake_sockaddr = ("10.0.0.5", 80, 0, "")
-    with patch("agent_api.application.research_citation.socket.getaddrinfo", return_value=[(2, 1, 6, "", fake_sockaddr)]):
-        result = await check_card(card, client=None)
-    assert result["ok"] is False
-
-
-@pytest.mark.asyncio
-async def test_redirect_to_internal_address_is_never_followed():
-    from unittest.mock import patch
-
-    from agent_api.application.research_citation import check_card
-
-    card = Card("https://ok.example.com/a")
-    called: list[str] = []
-
-    class FakeResponse:
-        def __init__(self, status, headers=None):
-            self.status_code = status
-            self.headers = headers or {}
-
-    class FakeClient:
-        async def head(self, url, **kwargs):
-            called.append(url)
-            if url == "https://ok.example.com/a":
-                return FakeResponse(302, {"location": "http://192.168.1.10/admin"})
-            raise AssertionError("internal hop must never be requested")
-
-    public_sockaddr = ("93.184.216.34", 443, 0, "")
-    with patch(
-        "agent_api.application.research_citation.socket.getaddrinfo",
-        return_value=[(2, 1, 6, "", public_sockaddr)],
-    ):
-        result = await check_card(card, client=FakeClient())
-    assert called == ["https://ok.example.com/a"], "the internal redirect target must not be fetched"
-    assert result["ok"] is False
-
+    # Even a public name whose DNS answer would be private must NOT be
+    # resolved by this service. Tavily is the sole fetch egress, so the
+    # product validates URL shape plus provider-supplied excerpt fidelity.
+    with patch("socket.getaddrinfo", side_effect=AssertionError("no DNS lookup is allowed")):
+        result = await check_card(card)
+    assert result["ok"] is True
 
 # ---------------------------------------------------------------- recovery
 # The 取消与恢复 gate: a restart must leave NO half-finished runs and NO
@@ -463,6 +584,110 @@ async def test_startup_recovery_fails_orphans_and_refunds_reservations():
     assert refund_ids == ["req-orphan"], "the dead run's reservation is refunded exactly once"
     types = [e["event_type"] for e in store.events]
     assert "consumer.research.failed.v1" in types, "recovery emits an honest failure event"
+
+
+@pytest.mark.asyncio
+async def test_recovery_refund_failure_leaves_the_run_retryable():
+    """A refund that fails must NOT mark the run failed-with-refunded —
+    that would be a lie in the row. The run stays non-terminal so the
+    NEXT restart retries refund-then-fail; refund idempotency (replay
+    is a no-op) makes the retry safe."""
+    store = FakeStore()
+    ledger = FakeLedger(refund_error=RuntimeError("ledger down"))
+    service = build_service(store=store, ledger=ledger)
+    orphan_id = str(uuid4())
+    store.runs[orphan_id] = {
+        "run_id": orphan_id,
+        "workspace_id": "ws-research",
+        "status": "running",
+        "request_id": "req-retry",
+        "created_by": "user-1",
+    }
+
+    recovered = await service.recover_orphans()
+
+    assert recovered == 0, "a run whose refund failed is NOT counted as recovered"
+    assert store.runs[orphan_id]["status"] == "running", "the row stays non-terminal for retry"
+    assert ledger.refunded == [] or ledger.refunded[0]["reason"] != "never"
+
+    # the next startup (ledger healthy again) completes the retry
+    ledger2 = FakeLedger()
+    ledger2._seen.add("req-retry")
+    service2 = build_service(store=store, ledger=ledger2)
+    recovered2 = await service2.recover_orphans()
+    assert recovered2 == 1
+    assert store.runs[orphan_id]["status"] == "failed"
+    assert "额度已退回" in store.runs[orphan_id]["error"]
+
+
+@pytest.mark.asyncio
+async def test_recovery_missing_ledger_entry_still_marks_the_run_failed():
+    """A run with NO ledger row (pre-ledger/never-committed reservation)
+    has nothing to refund; recovery must not strand it as non-terminal
+    forever. There is no '额度已退回' claim issue here — refund raises
+    NotFound, which is treated as done."""
+    store = FakeStore()
+    ledger = FakeLedger(refund_error=None, refund_not_found=True)
+    service = build_service(store=store, ledger=ledger)
+    orphan_id = str(uuid4())
+    store.runs[orphan_id] = {
+        "run_id": orphan_id,
+        "workspace_id": "ws-research",
+        "status": "planned",
+        "request_id": "req-noentry",
+        "created_by": "user-1",
+    }
+
+    recovered = await service.recover_orphans()
+
+    assert recovered == 1
+    assert store.runs[orphan_id]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_recovery_raced_terminal_run_is_never_overwritten():
+    """If a run reached a terminal state between listing and failing,
+    the 010 entry refuses the write (returns False); recovery reports
+    0 and the terminal state stands."""
+    class RacingStore(FakeStore):
+        async def fail_orphan(self, run_id: str) -> bool:
+            # simulate the race: mark terminal first, then refuse
+            self.runs[run_id]["status"] = "canceled"
+            return False
+
+    store = RacingStore()
+    ledger = FakeLedger()
+    ledger._seen.add("req-race")
+    service = build_service(store=store, ledger=ledger)
+    orphan_id = str(uuid4())
+    store.runs[orphan_id] = {
+        "run_id": orphan_id,
+        "workspace_id": "ws-research",
+        "status": "running",
+        "request_id": "req-race",
+        "created_by": "user-1",
+    }
+
+    recovered = await service.recover_orphans()
+
+    assert recovered == 0
+    assert store.runs[orphan_id]["status"] == "canceled"
+
+
+@pytest.mark.asyncio
+async def test_recovery_propagates_a_broken_recovery_entry():
+    """A listing failure must surface — recovery never claims success
+    when it could not even read the orphan set."""
+    from agent_api.application.deep_research import DeepResearchError
+
+    class BrokenListStore(FakeStore):
+        async def find_orphans(self):
+            raise RuntimeError("010 entry missing (migration not applied)")
+
+    service = build_service(store=BrokenListStore(), ledger=FakeLedger())
+    with pytest.raises(DeepResearchError) as error:
+        await service.recover_orphans()
+    assert error.value.code == "RECOVERY_LIST_FAILED"
 
 
 # ---------------------------------------------------------------- telemetry

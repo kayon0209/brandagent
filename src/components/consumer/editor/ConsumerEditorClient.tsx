@@ -41,6 +41,10 @@ export interface ConsumerEditorClientProps {
   onAdopted?: () => void
   onStatus?: (status: EditorStatusPayload) => void
   onSaveCoreIdea?: (coreIdea: string) => Promise<void>
+  onOpenMaterials?(): void
+  onGenerateDraft?(): void
+  generating?: boolean
+  generationDisabled?: boolean
 }
 
 export function ConsumerEditorClient(props: ConsumerEditorClientProps) {

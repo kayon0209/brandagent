@@ -182,6 +182,9 @@ export function useDeepResearch(): UseDeepResearchResult {
       setPhase('starting')
       setProgress({ directions: [], completedDirections: 0, searchCalls: 0 })
       setJoinedCards(new Set())
+      // reset() parks the SSE loop via stoppedRef; a later start() must
+      // revive it or the new run's subscription exits before the first event
+      stoppedRef.current = false
       try {
         const key = `research-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
         const created = await startDeepResearch(question, audience, scope, key)

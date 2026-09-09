@@ -80,9 +80,9 @@ describe('PlatformPreview panel', () => {
   })
 
   it('shows the live-draft mode (版式示意) when no master snapshot exists (round-3b WYSIWYG + round-3e split)', () => {
-    // no variant → the panel opens in 当前稿预览 (live draft) mode and the
+    // no variant → the panel opens in 当前内容 (live draft) mode and the
     // platform shape renders as a structural skeleton; there is no dead-end
-    // "先采用当前稿" CTA anymore — that action lives in 平台精修版 mode.
+    // "先采用当前稿" CTA anymore — that action lives in 平台优化 mode.
     render(
       <PlatformPreview
         state={{ status: 'no_master', channels: {} }}
@@ -93,8 +93,8 @@ describe('PlatformPreview panel', () => {
       />,
     )
     // two explicit modes behind a segmented control
-    expect(screen.getByRole('tab', { name: '当前稿预览' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: '平台精修版' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '当前内容' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '平台优化' })).toBeInTheDocument()
     // the dead-end CTA must NOT be present
     expect(screen.queryByText(/先采用当前稿/)).toBeNull()
     // default mode renders the platform skeleton (destination shape)
@@ -112,7 +112,7 @@ describe('PlatformPreview panel', () => {
         onAdopt={jest.fn()}
       />,
     )
-    // variant exists → 平台精修版 mode keeps showing the old content
+    // variant exists → 平台优化 mode keeps showing the old content
     // dual-mode rail renders the draft panel too; scope the assertion to
     // the polished (regenerated) side via testid-scoped query
     expect(screen.getAllByText('上一版内容').length).toBeGreaterThan(0)
@@ -137,6 +137,26 @@ describe('PlatformPreview panel', () => {
     expect(screen.getAllByText('失败前的上一版').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: /重试/ }))
     expect(onRegenerate).toHaveBeenCalled()
+  })
+
+  it('retries the preview request instead of leaving its error state as a dead end', () => {
+    const onRetry = jest.fn()
+    const props = {
+      state: {
+        status: 'error' as const,
+        channels: {},
+        error: { code: 'NETWORK_ERROR', message: '预览请求没有完成' },
+      },
+      onGenerate: jest.fn(),
+      onRegenerate: jest.fn(),
+      onAdopt: jest.fn(),
+      onRetry,
+    } as unknown as React.ComponentProps<typeof PlatformPreview>
+
+    render(<PlatformPreview {...props} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '重试预览' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
   })
 })
 

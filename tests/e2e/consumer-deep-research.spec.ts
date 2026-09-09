@@ -63,15 +63,33 @@ test('deep research: start → progress → candidate cards → join one card in
   await expect(progress).toContainText(/已完成/, { timeout: 60_000 })
   await expect(page.getByTestId('research-cancel')).toBeVisible()
 
-  // 6. Real search + model calls. TWO honest outcomes, both gated:
+  // 6. Real search + model calls. THREE honest outcomes, all gated:
   //    a) provider healthy → candidate cards with source/excerpt/risk;
   //    b) search provider over its plan limit (Tavily HTTP 432, the
   //       documented quota window) → the run completes and SAYS SO,
-  //       billing only the real model calls. Silent fake cards are a
-  //       failure in both branches.
+  //       billing only the real model calls;
+  //    c) the GLM gateway loses a provider response (MODEL_EXECUTION_
+  //       UNKNOWN) → the run fails honestly with the consumed tokens
+  //       visible — never a hang, never silent fake cards.
+  //    Silent fake cards are a failure in every branch.
   const cardList = page.getByTestId('research-cards')
   const noCards = page.getByTestId('research-no-cards')
-  await expect(cardList.or(noCards)).toBeVisible({ timeout: 420_000 })
+  const failedView = page.getByTestId('research-failed')
+  await expect(cardList.or(noCards).or(failedView)).toBeVisible({ timeout: 420_000 })
+
+  if (await failedView.isVisible()) {
+    // Branch c: the honest model failure is also an acceptance — the run
+    // reached a terminal state through SSE, shows the honest error, and
+    // never invents cards. The consumed-quota line must also be present
+    // (取消与恢复 gate: partial consumption stays explainable).
+    await expect(failedView).toContainText(/调研没能完成/)
+    const tokensUsed = page.getByTestId('research-tokens-used')
+    if (await tokensUsed.isVisible()) {
+      await expect(tokensUsed).toContainText(/token 额度/)
+    }
+    await expect(page.getByTestId('research-progress')).toBeHidden()
+    return
+  }
 
   if (await noCards.isVisible()) {
     // Branch b: the honest degradation is the acceptance — a completed

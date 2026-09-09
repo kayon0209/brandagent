@@ -38,10 +38,11 @@ try {
   }
   // poll for the workspace heading: after the ticket exchange the Clerk
   // handshake can still be settling for several seconds — a single
-  // isVisible() check races it and false-negatives (acceptance finding)
+  // isVisible() check races it and false-negatives (acceptance finding).
+  // '项目' is the round-3 workspace heading (was '我的写作' pre-rework).
   let ok = false
   for (let i = 0; i < 10; i++) {
-    ok = await page.getByRole('heading', { name: '我的写作' }).isVisible().catch(() => false)
+    ok = await page.getByRole('heading', { name: '项目', exact: true }).isVisible().catch(() => false)
     if (ok) break
     await page.waitForTimeout(2000)
   }

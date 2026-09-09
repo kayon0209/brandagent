@@ -19,7 +19,14 @@ class ModelCallResult:
 
 class LLMProvider(ABC):
     @abstractmethod
-    async def generate(self, *, system: str, prompt: str, prompt_version: str) -> ModelCallResult:
+    async def generate(
+        self,
+        *,
+        system: str,
+        prompt: str,
+        prompt_version: str,
+        max_output_tokens: int | None = None,
+    ) -> ModelCallResult:
         raise NotImplementedError
 
 

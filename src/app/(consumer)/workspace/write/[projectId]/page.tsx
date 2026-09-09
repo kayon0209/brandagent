@@ -58,6 +58,8 @@ const api: ConsumerDraftApi = {
   acceptSuggestion: acceptConsumerSuggestion as unknown as ConsumerDraftApi['acceptSuggestion'],
 }
 
+const WORKFLOW_STEPS = ['观点', '草稿', '平台优化', '发布']
+
 
 export default function ProjectWritePage() {
   const routeParams = useParams<{ projectId: string }>()
@@ -336,6 +338,20 @@ export default function ProjectWritePage() {
   const publishableVariant =
     variants.state.status !== 'no_master' &&
     Object.values(variants.state.channels ?? {}).some(channel => Boolean(channel?.content?.trim()))
+  const workflowStage = publishableVariant
+    ? 3
+    : variants.state.status !== 'no_master'
+      ? 2
+      : draftText.trim()
+        ? 1
+        : 0
+  const autosaveCopy = status?.saveState === 'saved'
+    ? '已自动保存'
+    : status?.saveState === 'saving' || status?.saveState === 'dirty'
+      ? '正在保存'
+      : status?.saveState === 'error'
+        ? '保存待重试'
+        : '草稿'
 
   if (projectError) {
     return (
@@ -351,12 +367,11 @@ export default function ProjectWritePage() {
     <div className={styles.shell} data-testid="write-layout">
       <header className={styles.topbar}>
         <div className={styles.topbarLeft}>
-          <span className={styles.brand}>BrandAgent</span>
-          {/* back to the workspace list — the write page is reachable again
-              without browser back (no nav islands) */}
-          <Link href="/app" className={styles.topbarBackLink} data-testid="back-to-app">
-            项目
+          <Link href="/app" className={styles.topbarBack} data-testid="back-to-app">
+            ← 返回
           </Link>
+          <span className={styles.topbarDividerLine} aria-hidden />
+          <span className={styles.topbarSection}>今天的写作台</span>
           <button
             type="button"
             className={styles.materialsButton}
@@ -372,16 +387,19 @@ export default function ProjectWritePage() {
           </button>
         </div>
 
-        <div className={styles.documentTitle}>
-          <strong className={styles.documentTitleStrong}>{project?.title ?? '…'}</strong>
-          <span className={styles.documentTitleSpan}>写作台</span>
+        <div className={styles.topbarCenter}>
+          <span className={styles.cloudSave} data-testid="cloud-save">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <path d="M6.5 19a4.5 4.5 0 0 1-.4-8.98 6 6 0 0 1 11.6 1.4A3.8 3.8 0 0 1 17.5 19z" />
+            </svg>
+            <span>自动保存 · {autosaveCopy}</span>
+          </span>
         </div>
 
         <div className={styles.topbarRight}>
-          {/* round-3e (#3): 准备发布 is the SINGLE global publish entry (the
-              rail action bar no longer duplicates it). Disabled until there
-              is a master + at least one platform variant to publish — the
-              tooltip says why instead of silently failing. */}
+          <button type="button" className={styles.previewButton} data-testid="jump-preview" onClick={() => document.querySelector('[data-testid="write-rail"]')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}>
+            预览
+          </button>
           <button
             type="button"
             className={styles.preparePublish}
@@ -391,8 +409,6 @@ export default function ProjectWritePage() {
           >
             准备发布
           </button>
-          {/* N6: account ownership — sign-out lives where the user is.
-              Clerk's UserButton ships its own menu (profile / sign out). */}
           <UserButton afterSignOutUrl="/sign-in" />
         </div>
       </header>
@@ -407,22 +423,20 @@ export default function ProjectWritePage() {
         }}
       >
         <div className={styles.editorColumn}>
-          {/* round-3g A1: manuscript micro-tab — a quiet serif header that
-              names the surface and carries the live save badge on the
-              right; never competes with the body text */}
-          <div className={styles.manuscriptMicroTab} data-testid="manuscript-micro-tab">
-            <span className={styles.manuscriptMicroTitle}>主稿 · 今天的写作台</span>
-            <span className={styles.manuscriptMicroSave}>
-              {status ? (
-                <SaveStatus
-                  state={status.saveState as SaveState}
-                  onResolveConflict={() => status.resolveConflict()}
-                  onRetrySave={() => status.retrySave()}
-                />
-              ) : (
-                '正在载入稿件…'
-              )}
-            </span>
+          <div className={styles.workspaceIntro} data-testid="manuscript-micro-tab">
+            <div className={styles.workspaceCrumb}>
+              <Link href="/app">← 返回</Link><span aria-hidden>／</span><span>今天的写作台</span>
+            </div>
+            <h1>{project?.title ?? '正在打开项目…'}</h1>
+            {project?.core_idea && <p>{project.core_idea}</p>}
+            <div className={styles.workflowStage} aria-label="内容工作流">
+              {WORKFLOW_STEPS.map((step, index) => (
+                <span key={step} data-active={index === workflowStage} data-complete={index < workflowStage}>
+                  <i aria-hidden />{step}
+                </span>
+              ))}
+              <small>· {autosaveCopy}</small>
+            </div>
           </div>
           <ConsumerEditorClient
             handleRef={editorRef}
@@ -431,6 +445,7 @@ export default function ProjectWritePage() {
             api={api}
             onStatus={onStatus}
             onSaveCoreIdea={saveCoreIdea}
+            onOpenMaterials={() => setDrawerOpen(true)}
           />
           {/* round-3e (#4): the empty-draft + banner surfaces belong INSIDE
               the 720px paper column — a full-column white card above the
@@ -463,38 +478,12 @@ export default function ProjectWritePage() {
                 {assistGuidance}
               </p>
             )}
-            {draftText === '' && (
-              <section className={materialStyles.state}>
-              <p>
-                {materials.excerpts.length === 0
-                  ? '稿纸还空着——准备好后，基于核心观点生成第一版。之后关联素材，AI 会贴着你的素材改得更准。'
-                  : '稿纸还空着——基于核心观点和已关联素材，先生成一版初稿试试。'}
+            {generating && generateProgress && (
+              <p role="status" data-testid="generate-progress" className={materialStyles.generateProgress}>
+                {generateProgress}
               </p>
-              {/* N14: first-run narrative — appears only while there is
-                  nothing yet, dissolves as the user completes each step */}
-              {materials.excerpts.length === 0 && !generating && (
-                <p className={materialStyles.firstRunHint} data-testid="first-run-hint">
-                  路线：写下核心观点 → 打开「素材」抽屉挂点素材（可选）→ 生成初稿。每一步都算数。
-                </p>
-              )}
-              <button
-                type="button"
-                className="consumer-primary-button"
-                disabled={generating || quotaExhausted}
-                title={quotaExhausted ? '本月额度已用完，写作与保存仍可用' : undefined}
-                onClick={() => void generateFirstDraft()}
-              >
-                {generating ? '正在写初稿…' : '生成初稿'}
-              </button>
-              {generating && generateProgress && (
-                <p role="status" data-testid="generate-progress" className={materialStyles.generateProgress}>
-                  {generateProgress}
-                  <span aria-hidden> ·</span>
-                </p>
-              )}
-              {generateError && <p role="alert">{generateError}</p>}
-              </section>
             )}
+            {generateError && <p role="alert" className={materialStyles.generateProgress}>{generateError}</p>}
             {generateBanner && !generating && (
               <div role="status" data-testid="generate-banner" className={materialStyles.generateBanner}>
                 <p>{generateBanner}</p>
@@ -515,6 +504,7 @@ export default function ProjectWritePage() {
               onGenerate={() => void variants.generate()}
               onRegenerate={channel => void variants.regenerate(channel)}
               onAdopt={() => void handleAdopt()}
+              onRetry={() => void variants.reload()}
             />
             {variants.state.status !== 'no_master' && <PrePublishReview bubbles={reviewBubbles} />}
           </div>

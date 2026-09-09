@@ -36,3 +36,5 @@ docs/resume-brandagent-ai-pm.md
 **/research/runs/
 # Interrupted Next builds are disposable; never keep backup trees at repo root.
 .next.*-bak.*/
+.gstack/
+.zcode/

@@ -157,11 +157,18 @@ class UsageLedgerService:
         return {**updated, "replayed": False}
 
     async def refund(self, principal: Principal, *, request_id: str, reason: str) -> dict:
-        """Release a reservation without charging (provider failure etc.)."""
+        """Release a reservation without charging (provider failure etc.).
+
+        Settled entries are NEVER refunded: a settled row is a completed,
+        billable charge (crash between a settle and the terminal status
+        write must not erase it). Both refunds and settles are idempotent.
+        """
 
         entry = await self._store.find_entry(principal.workspace_id, request_id)
         if entry is None:
             raise NotFoundError(f"usage entry {request_id} not found")
+        if entry.get("state") == "settled":
+            return {**entry, "replayed": True}
         if entry.get("state") == "refunded":
             return {**entry, "replayed": True}
         updated = await self._store.update_entry(

@@ -189,6 +189,76 @@ test('start failure returns to idle with an honest message', async () => {
   expect(result.current.message).toContain('额度已用完')
 })
 
+test('reset then start still receives progress: the second subscription must not be stillborn', async () => {
+  // Regression: reset() parked the SSE loop via stoppedRef and start()
+  // never revived it, so the SECOND run's subscription exited before the
+  // first event and the panel stayed "running 0/4" forever.
+  let startCalls = 0
+  global.fetch = jest.fn().mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {
+    const target = String(url)
+    const method = init?.method ?? 'GET'
+    if (target.includes('/api/v1/consumer/research') && method === 'POST' && target.endsWith('/research')) {
+      startCalls += 1
+      const created = startCalls === 1 ? { ...START_RUN, run_id: 'run-1' } : { ...START_RUN, run_id: 'run-2' }
+      return { ok: true, text: async () => JSON.stringify({ success: true, data: { ...created, estimated_tokens: 13000 } }) }
+    }
+    if (target.includes('/run-') && target.includes('/events')) {
+      const runId = target.includes('run-2') ? 'run-2' : 'run-1'
+      return sseResponse([
+        { id: 1, event: 'consumer.research.planned.v1', data: `{"data":{"directions":["方向一","方向二"]}}` },
+        {
+          id: 2,
+          event: 'consumer.research.completed.v1',
+          data: `{"data":{"cards":1,"run_id":"${runId}"}}`,
+        },
+      ])
+    }
+    if (target.includes('/run-')) {
+      const runId = target.includes('run-2') ? 'run-2' : 'run-1'
+      return {
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            success: true,
+            data: { ...DONE_RUN, run_id: runId, tokens_used: 1144 },
+          }),
+      }
+    }
+    throw new Error(`unmocked fetch: ${method} ${target}`)
+  })
+
+  const { result } = renderHook(() => useDeepResearch())
+  await act(async () => {
+    await result.current.start('第一次调研问题是什么？', '', '')
+  })
+  await waitFor(
+    () => {
+      expect(result.current.phase).toBe('succeeded')
+    },
+    { timeout: 4000 },
+  )
+
+  act(() => {
+    result.current.reset()
+  })
+  expect(result.current.phase).toBe('idle')
+
+  await act(async () => {
+    await result.current.start('第二次调研问题是什么？', '', '')
+  })
+  // the revived subscription must deliver the second run's terminal event
+  // (previously the poll loop exited before the first event and the
+  // phase stayed 'running' forever — this waitFor is the regression guard)
+  await waitFor(
+    () => {
+      expect(result.current.phase).toBe('succeeded')
+    },
+    { timeout: 4000 },
+  )
+  expect(result.current.run?.run_id).toBe('run-2')
+  expect(result.current.run?.tokens_used).toBe(1144)
+})
+
 test('cancel applies the canceled run and keeps partial cards', async () => {
   global.fetch = jest.fn().mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {
     const target = String(url)

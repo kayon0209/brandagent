@@ -251,6 +251,9 @@ class MaterialService:
         (checksum dedup, deterministic chunks, provenance, events) — the
         recorded excerpt text is the body, so nothing depends on the live
         page still being reachable."""
+        # Final write boundary: historic/corrupt research rows cannot persist
+        # unsafe URL provenance even if an upstream validation was bypassed.
+        assert_safe_material_url(source_url)
         material = ParsedMaterial(
             name=name,
             content=content,

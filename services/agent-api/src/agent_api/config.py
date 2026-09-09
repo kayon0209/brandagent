@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     # NOT the whole monthly quota — a run must be affordable inside the
     # user's remaining balance, not price itself out of existence.
     deep_research_estimated_tokens: int = 13000
+    # Model-gateway read timeout. 60s covers draft/suggestion calls, but a
+    # deep-research synthesis prompt (20 evidence cards ≈ 6K chars) was
+    # measured at 15-50s with occasional 60s+ tails on the Gitee AI
+    # gateway — a ReadTimeout there becomes MODEL_EXECUTION_UNKNOWN and
+    # fails the whole run. Deep research is a "minutes, not seconds"
+    # surface, so the whole app uses the raised ceiling.
+    glm_timeout_seconds: float = 150
 
     def require_tavily_key(self) -> SecretStr:
         if self.tavily_api_key is None or not self.tavily_api_key.get_secret_value():

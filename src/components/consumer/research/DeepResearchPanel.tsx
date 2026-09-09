@@ -20,10 +20,15 @@ import { newIdempotencyKey } from '@/lib/idempotency'
 
 const RISK_HINTS = ['来源为网络公开内容，请核实后引用', '时效性有限，注意数据年份', '观点来自单一来源，建议交叉验证']
 
+function isVerifiedCard(card: ResearchCandidateCard): boolean {
+  // New API responses include this explicit field. Requiring it prevents
+  // historic/corrupt cards from becoming browser links by default.
+  return card.source_url_valid === true && card.excerpt_valid === true
+}
+
 function riskHint(card: ResearchCandidateCard): string {
-  if (!card.reachable) return '来源当前不可访问，摘录为调研时记录'
-  if (!card.excerpt_valid) return '摘录与来源原文的匹配度存疑，请人工核对'
-  return RISK_HINTS[0]
+  if (!isVerifiedCard(card)) return '来源链接或摘录未通过调研校验，不能加入素材'
+  return '来源链接格式安全，摘录与 Tavily 获取内容一致；请核实后引用'
 }
 
 export function DeepResearchPanel({ taskId }: { taskId?: string | null }) {
@@ -140,6 +145,11 @@ export function DeepResearchPanel({ taskId }: { taskId?: string | null }) {
           <p style={{ fontSize: 14, margin: '0 0 8px' }}>
             {phase === 'canceled' ? '调研已取消，以下是取消前拿到的候选素材：' : '候选素材卡片（未加入素材库前不参与生成）：'}
           </p>
+          {typeof run?.tokens_used === 'number' && run.tokens_used > 0 && (
+            <p data-testid="research-tokens-used" style={{ fontSize: 12, margin: '0 0 8px' }}>
+              本次调研实际消耗约 {run.tokens_used} token 额度。
+            </p>
+          )}
           {run?.synthesis && (
             <blockquote
               data-testid="research-synthesis"
@@ -149,7 +159,9 @@ export function DeepResearchPanel({ taskId }: { taskId?: string | null }) {
             </blockquote>
           )}
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {cards.map((card, index) => (
+          {cards.map((card, index) => {
+            const cardVerified = isVerifiedCard(card)
+            return (
               <li
                 key={`${card.url}-${index}`}
                 data-testid="research-card"
@@ -162,22 +174,27 @@ export function DeepResearchPanel({ taskId }: { taskId?: string | null }) {
                 </p>
                 <p style={{ margin: '0 0 4px', fontSize: 12 }}>
                   来源：
-                  <a href={card.url} target="_blank" rel="noreferrer noopener">
-                    {card.url}
-                  </a>
+                  {cardVerified ? (
+                    <a href={card.url} target="_blank" rel="noreferrer noopener">
+                      {card.url}
+                    </a>
+                  ) : (
+                    <span>{card.url}</span>
+                  )}
                   （访问于 {card.retrieved_at?.slice(0, 10) || '—'}）
                 </p>
                 <p style={{ margin: '0 0 8px', fontSize: 12 }}>风险提示：{riskHint(card)}</p>
                 <button
                   type="button"
                   data-testid="research-join-card"
-                  disabled={busy || joinedCards.has(index)}
+                  disabled={busy || joinedCards.has(index) || !cardVerified}
                   onClick={() => void joinCard(index, taskId)}
                 >
                   {joinedCards.has(index) ? '已加入素材库' : '加入素材'}
                 </button>
               </li>
-            ))}
+            )
+          })}
           </ul>
           <button type="button" data-testid="research-reset" onClick={reset} style={{ marginTop: 8 }}>
             再发起一次调研
@@ -188,6 +205,11 @@ export function DeepResearchPanel({ taskId }: { taskId?: string | null }) {
       {phase === 'succeeded' && cards.length === 0 && (
         <div data-testid="research-no-cards" style={{ fontSize: 14 }}>
           <p>{run?.synthesis || '本轮调研没有拿到可核实的来源，建议换个问法或稍后再试。'}</p>
+          {typeof run?.tokens_used === 'number' && run.tokens_used > 0 && (
+            <p data-testid="research-tokens-used" style={{ fontSize: 12, margin: '0 0 8px' }}>
+              本次调研实际消耗约 {run.tokens_used} token 额度。
+            </p>
+          )}
           <button type="button" onClick={reset}>
             重新发起
           </button>
@@ -197,6 +219,11 @@ export function DeepResearchPanel({ taskId }: { taskId?: string | null }) {
       {phase === 'failed' && (
         <div data-testid="research-failed" role="alert" style={{ fontSize: 14 }}>
           <p>调研没能完成：{run?.error || '服务暂时不可用'}</p>
+          {typeof run?.tokens_used === 'number' && run.tokens_used > 0 && (
+            <p data-testid="research-tokens-used" style={{ fontSize: 12, margin: '0 0 8px' }}>
+              中断前已消耗约 {run.tokens_used} token 额度，仅计入实际消耗部分。
+            </p>
+          )}
           <button type="button" onClick={reset}>
             重试
           </button>
