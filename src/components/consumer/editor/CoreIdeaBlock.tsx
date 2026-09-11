@@ -122,6 +122,16 @@ export function CoreIdeaBlock({
         <button
           type="button"
           disabled={!dirty || saveState === 'saving' || !text.trim()}
+          /* X9 (09-10 bug report): the button is disabled whenever the
+           * 600ms autosave already landed — without an explanation it
+           * reads as a dead/fake button. Speak the reason. */
+          title={
+            !text.trim()
+              ? '先写一句核心观点'
+              : dirty
+                ? '保存这次修改'
+                : '改动已自动保存，无需手动保存'
+          }
           onClick={() => void save(text.trim())}
         >
           保存

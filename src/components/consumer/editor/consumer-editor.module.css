@@ -391,7 +391,11 @@
 .canvasHint::before { content: '✎'; color: var(--accent); font-size: 11px; }
 .canvasCount { font-family: var(--mono); color: var(--ink-soft); }
 
-.draftProse .ProseMirror {
+/* tiptap mounts GLOBAL classes (ProseMirror, is-editor-empty) on its DOM.
+ * Inside a CSS module they must be wrapped in :global() or Next hashes
+ * them into selectors that never match — which collapsed the editor to a
+ * one-line invisible box (the 09-10 bug report). */
+.draftProse :global(.ProseMirror) {
   outline: none;
   min-height: 365px;
   font-size: 16px;
@@ -400,11 +404,11 @@
   font-family: var(--serif);
 }
 
-.draftProse .ProseMirror p {
+.draftProse :global(.ProseMirror) p {
   margin: 0 0 25px;
 }
 
-.draftProse .ProseMirror p.is-editor-empty:first-child::before {
+.draftProse :global(.ProseMirror) p:global(.is-editor-empty):first-child::before {
   content: attr(data-placeholder);
   color: var(--muted);
   float: left;
@@ -412,8 +416,8 @@
   pointer-events: none;
 }
 .emptyDraftHint { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
-.draftProse .ProseMirror blockquote { margin: 0 0 25px; padding: 4px 0 4px 17px; border-left: 3px solid var(--sand-deep); color: var(--ink-soft); }
-.draftProse .ProseMirror ul, .draftProse .ProseMirror ol { margin: 0 0 25px; padding-left: 22px; }
+.draftProse :global(.ProseMirror) blockquote { margin: 0 0 25px; padding: 4px 0 4px 17px; border-left: 3px solid var(--sand-deep); color: var(--ink-soft); }
+.draftProse :global(.ProseMirror) ul, .draftProse :global(.ProseMirror) ol { margin: 0 0 25px; padding-left: 22px; }
 
 /* selection toolbar: paper surface, pill buttons (baseline .floating-tools) */
 .toolbar {

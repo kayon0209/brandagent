@@ -26,7 +26,7 @@ describe('CoreIdeaBlock (P1-3: editable core idea)', () => {
     expect(field.value).toBe('把复杂的方法讲成普通人能上手的步骤')
   })
 
-  it('autosaves a changed idea and never renders a competing manual save action', async () => {
+  it('autosaves a changed idea; the manual save button stays honest (enabled while dirty, disabled with an explanation once autosave lands)', async () => {
     jest.useFakeTimers()
     try {
     let release: () => void = () => {}
@@ -36,15 +36,22 @@ describe('CoreIdeaBlock (P1-3: editable core idea)', () => {
     render(<CoreIdeaBlock coreIdea="旧观点" onSave={onSave} />)
     const field = screen.getByTestId('core-idea-input') as HTMLTextAreaElement
     fireEvent.change(field, { target: { value: '新观点' } })
-    expect(screen.queryByRole('button', { name: /保存/ })).toBeNull()
+    // 4a15641 restored the EXPLICIT save button: while dirty it is clickable
+    const saveButton = screen.getByRole('button', { name: '保存' })
+    expect(saveButton).toBeEnabled()
     act(() => { jest.advanceTimersByTime(650) })
     // saving state is visible while the request is in flight
     await waitFor(() => expect(screen.getByText(/正在保存/)).toBeInTheDocument())
     expect(onSave).toHaveBeenCalledWith('新观点')
+    expect(saveButton).toBeDisabled()
     // not yet "saved" — the UI must not claim success before the server does
     expect(screen.queryByText(/已保存/)).toBeNull()
     release()
-    await waitFor(() => expect(screen.getByText(/已自动保存/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('core-idea-saved')).toBeInTheDocument())
+    // once autosave landed the button disables WITH an explanation, never
+    // reading as a dead control (X9, 09-10 bug report)
+    expect(saveButton).toBeDisabled()
+    expect(saveButton.getAttribute('title')).toContain('已自动保存')
     expect((screen.getByTestId('core-idea-input') as HTMLTextAreaElement).value).toBe('新观点')
     } finally { jest.useRealTimers() }
   })
