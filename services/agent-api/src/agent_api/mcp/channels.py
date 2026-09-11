@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from .client import RealMCPClient
+
+logger = logging.getLogger(__name__)
 
 # The C-end product surface is three built-in preview tabs; the MCP spec
 # table may extend it per workspace (agentization P2-3). This tuple is the
@@ -30,8 +33,15 @@ class MCPChannelValidator:
             channels = [str(channel) for channel in result.get("data", {}).get("channels", [])]
             if channels:
                 return tuple(channels)
-        except Exception:  # noqa: BLE001 — degraded listing, see fallback note
-            pass
+        except Exception as exc:  # noqa: BLE001 — degraded listing, see fallback note
+            # Silently swallowing this hid real MCP outages (and, before the
+            # service-token fix, 401s) behind the built-in channel list.  The
+            # fallback is still returned, but the reason is now observable.
+            logger.warning(
+                "mcp_channel_listing_failed workspace=%s error=%r — falling back to built-in channels",
+                workspace_id,
+                exc,
+            )
         return FALLBACK_CONSUMER_CHANNELS
 
     async def validate(

@@ -56,6 +56,59 @@ def test_trusted_scope_rejects_cross_task_and_cross_actor_arguments() -> None:
         scope.authorize("workspace-1", "actor-2", "task-1")
 
 
+# ---------------------------------------------------------------------------
+# Fail closed on a missing Authorization header (security review P0)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_missing_authorization_header_is_rejected_by_default() -> None:
+    """No header must be a 401 — the old "dev mode" pass-through trusted anyone."""
+    application = ServiceAuthMiddleware(scoped_application, "service-secret")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url="http://mcp.test") as client:
+        response = await client.post("/mcp")
+    assert response.status_code == 401
+    assert "trusted service authentication" in response.text
+
+
+async def echo_application(scope, receive, send) -> None:
+    await send({"type": "http.response.start", "status": 200, "headers": []})
+    await send({"type": "http.response.body", "body": b"ok"})
+
+
+@pytest.mark.asyncio
+async def test_anonymous_discovery_requires_explicit_opt_in() -> None:
+    """The dev escape hatch still works, but only when asked for explicitly."""
+    gated = ServiceAuthMiddleware(echo_application, "service-secret")
+    opt_in = ServiceAuthMiddleware(echo_application, "service-secret", allow_anonymous_discovery=True)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=gated), base_url="http://mcp.test") as client:
+        default_response = await client.post("/mcp")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=opt_in), base_url="http://mcp.test") as client:
+        opted_in_response = await client.post("/mcp")
+
+    assert default_response.status_code == 401
+    assert opted_in_response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_anonymous_discovery_still_cannot_execute_tools() -> None:
+    """Defence in depth: discovery may pass, but no scope is bound for tools."""
+    opt_in = ServiceAuthMiddleware(scoped_application, "service-secret", allow_anonymous_discovery=True)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=opt_in), base_url="http://mcp.test") as client:
+        with pytest.raises(PermissionError):
+            await client.post("/mcp")
+
+
+@pytest.mark.asyncio
+async def test_non_mcp_paths_are_never_gated_by_service_token() -> None:
+    """Health checks must keep working without the service token."""
+    application = ServiceAuthMiddleware(echo_application, "service-secret")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url="http://mcp.test") as client:
+        # /health is not under /mcp, so the middleware forwards it untouched
+        response = await client.post("/health")
+    assert response.status_code == 200
+
+
 def test_deployed_app_installs_the_service_auth_middleware(monkeypatch) -> None:
     """The production ASGI app must carry ServiceAuthMiddleware (review P1)."""
 

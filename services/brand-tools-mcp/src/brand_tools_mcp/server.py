@@ -41,7 +41,14 @@ mcp_app.routes.insert(0, Route("/health", health, methods=["GET"]))
 # call dies at require_scope(), while the transport itself would be
 # unauthenticated. Token-only requests fall back to the default system
 # scope; the agent API always sends the scoped headers.
-app = ServiceAuthMiddleware(mcp_app, settings.require_service_token())
+#
+# Headerless requests are rejected (401) unless BRAND_MCP_ALLOW_ANONYMOUS_DISCOVERY
+# is explicitly enabled for local MCP SDK discovery.
+app = ServiceAuthMiddleware(
+    mcp_app,
+    settings.require_service_token(),
+    allow_anonymous_discovery=settings.allow_anonymous_discovery,
+)
 
 
 if __name__ == "__main__":

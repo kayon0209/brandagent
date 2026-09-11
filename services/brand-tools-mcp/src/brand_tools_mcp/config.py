@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     service_token: SecretStr | None = None
     host: str = "127.0.0.1"
     port: int = 8100
+    # Dev-only escape hatch: allow /mcp requests WITHOUT an Authorization header
+    # to reach the transport (MCP SDK session init / tool discovery).  Default is
+    # False so a missing header is rejected with 401 instead of being trusted.
+    # Tool calls still need a bound TrustedCallScope, so this only ever opens
+    # discovery — never tool execution.
+    allow_anonymous_discovery: bool = False
     # public read-only instance (agentization P2-1): token file + listener
     public_tokens_path: str | None = None
     public_port: int = 8200
