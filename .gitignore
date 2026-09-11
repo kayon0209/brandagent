@@ -38,3 +38,9 @@ docs/resume-brandagent-ai-pm.md
 .next.*-bak.*/
 .gstack/
 .zcode/
+
+# ── 本地一次性验证 / 迁移脚本（tmp_*）—— 仅本机，不进仓库 ──
+/_*.py
+tmp_*.py
+tmp_*.mjs
+_verify_shots/
