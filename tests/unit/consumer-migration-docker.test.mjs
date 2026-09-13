@@ -14,6 +14,7 @@ const migrationPath = path.join(repositoryRoot, 'docs', 'migrations', '003_consu
 const checkPath = path.join(repositoryRoot, 'tests', 'unit', 'consumer-migration-checks.sql')
 const rlsCheckPath = path.join(repositoryRoot, 'tests', 'unit', 'consumer-rls-004-checks.sql')
 const rls005CheckPath = path.join(repositoryRoot, 'tests', 'unit', 'consumer-rls-005-checks.sql')
+const securityDefinerCheckPath = path.join(repositoryRoot, 'tests', 'unit', 'security-definer-checks.sql')
 
 test('003_consumer_experience.sql exists and stays additive', () => {
   assert.ok(existsSync(migrationPath), 'docs/migrations/003_consumer_experience.sql is missing')
@@ -40,7 +41,8 @@ test('fresh Compose initialization applies every numbered migration before grant
     '008_consumer_material_kinds.sql:/docker-entrypoint-initdb.d/09-consumer-material-kinds.sql',
     '009_deep_research.sql:/docker-entrypoint-initdb.d/10-deep-research.sql',
     '010_deep_research_orphan_recovery.sql:/docker-entrypoint-initdb.d/11-orphan-recovery.sql',
-    'postgres-grants.sql:/docker-entrypoint-initdb.d/12-grants.sql',
+    '011_harden_increment_token_used.sql:/docker-entrypoint-initdb.d/12-harden-token-rpc.sql',
+    'postgres-grants.sql:/docker-entrypoint-initdb.d/13-grants.sql',
   ]
   let previous = -1
   for (const mount of mounts) {
@@ -85,7 +87,18 @@ test('fresh PostgreSQL applies legacy, BrandFlow and consumer migrations with ch
   try {
     docker([
       'exec', container, 'sh', '-c',
-      'attempt=0; until pg_isready -U postgres; do attempt=$((attempt+1)); [ "$attempt" -ge 30 ] && exit 1; sleep 0.5; done',
+      // postgres:alpine briefly accepts connections during initdb's temporary
+      // server, then restarts as PID 1. Waiting one extra second prevents the
+      // role bootstrap from landing in that short-lived cluster.
+      'attempt=0; until pg_isready -U postgres; do attempt=$((attempt+1)); [ "$attempt" -ge 30 ] && exit 1; sleep 0.5; done; sleep 1; psql -v ON_ERROR_STOP=1 -U postgres -c "SELECT 1" >/dev/null',
+    ])
+
+    // 010 grants recovery functions to brandflow_app and explicitly revokes
+    // them from brandflow_checkpoint. Production Compose creates both roles
+    // before migrations; this disposable gate must model that order too.
+    docker([
+      'exec', container, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-c',
+      'CREATE ROLE brandflow_app LOGIN NOSUPERUSER NOBYPASSRLS; CREATE ROLE brandflow_checkpoint LOGIN NOSUPERUSER NOBYPASSRLS; CREATE SCHEMA brandflow_checkpoint AUTHORIZATION brandflow_checkpoint; ALTER ROLE brandflow_checkpoint IN DATABASE postgres SET search_path TO brandflow_checkpoint;',
     ])
 
     // P1-5 acceptance: the gate applies EVERY consumer migration — 004 RLS
@@ -102,6 +115,7 @@ test('fresh PostgreSQL applies legacy, BrandFlow and consumer migrations with ch
       '008_consumer_material_kinds.sql',
       '009_deep_research.sql',
       '010_deep_research_orphan_recovery.sql',
+      '011_harden_increment_token_used.sql',
     ]) {
       docker(['exec', container, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-f', `/migrations/${file}`])
     }
@@ -114,6 +128,10 @@ test('fresh PostgreSQL applies legacy, BrandFlow and consumer migrations with ch
     // 005 verification: RLS is also FORCED — the owner bypass is closed
     docker(['cp', rls005CheckPath, `${container}:/tmp/consumer-rls-005-checks.sql`])
     docker(['exec', container, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-f', '/tmp/consumer-rls-005-checks.sql'])
+    // 011 verification: the legacy SECURITY DEFINER token RPC is safe for
+    // the isolated checkpoint role to coexist with.
+    docker(['cp', securityDefinerCheckPath, `${container}:/tmp/security-definer-checks.sql`])
+    docker(['exec', container, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-f', '/tmp/security-definer-checks.sql'])
   } finally {
     try {
       docker(['stop', container], { capture: true })

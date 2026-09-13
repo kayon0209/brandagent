@@ -21,15 +21,17 @@ services:
       - ./docs/migrations/008_consumer_material_kinds.sql:/docker-entrypoint-initdb.d/09-consumer-material-kinds.sql:ro
       - ./docs/migrations/009_deep_research.sql:/docker-entrypoint-initdb.d/10-deep-research.sql:ro
       - ./docs/migrations/010_deep_research_orphan_recovery.sql:/docker-entrypoint-initdb.d/11-orphan-recovery.sql:ro
-      - ./docs/deployment/postgres-grants.sql:/docker-entrypoint-initdb.d/12-grants.sql:ro
+      - ./docs/migrations/011_harden_increment_token_used.sql:/docker-entrypoint-initdb.d/12-harden-token-rpc.sql:ro
+      - ./docs/deployment/postgres-grants.sql:/docker-entrypoint-initdb.d/13-grants.sql:ro
       # upgrade path for EXISTING persistent volumes: docker-entrypoint only
-      # runs on FIRST init, so missing 005–010 migrations must be applied to
+      # runs on FIRST init, so missing 005–011 migrations must be applied to
       # an already-running stack explicitly in a maintenance window:
       #   docker compose exec postgres psql -U postgres -d brandflow \
       #     -v ON_ERROR_STOP=1 \
       #     -f /docker-entrypoint-initdb.d/09-consumer-material-kinds.sql
       #     -f /docker-entrypoint-initdb.d/10-deep-research.sql
-      #     -f /docker-entrypoint-initdb.d/11-orphan-recovery.sql
+      #     -f /docker-entrypoint-initdb.d/11-orphan-recovery.sql \
+      #     -f /docker-entrypoint-initdb.d/12-harden-token-rpc.sql
       # (see docs/deployment/RUNBOOK.md — Database rules)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d brandflow"]

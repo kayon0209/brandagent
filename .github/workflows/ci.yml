@@ -49,18 +49,39 @@ jobs:
           sql = ""
           migration_files = sorted(glob.glob("../../docs/migrations/*.sql"))
           grants_file = "../../docs/deployment/postgres-grants.sql"
+          security_check_file = "../../tests/unit/security-definer-checks.sql"
           assert migration_files, "repository migrations were not found"
           assert os.path.isfile(grants_file), "repository grants were not found"
+          assert os.path.isfile(security_check_file), "security-definer check was not found"
           for f in migration_files:
               sql += open(f, encoding="utf-8").read() + "\n"
           with connect(dsn) as conn:
+              # 010 grants to brandflow_app and revokes from
+              # brandflow_checkpoint.  Both roles must therefore exist before
+              # any migration is parsed/executed, not after the batch.
+              conn.execute("""
+              DO $$
+              BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'brandflow_app') THEN
+                  CREATE ROLE brandflow_app LOGIN NOSUPERUSER NOBYPASSRLS;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'brandflow_checkpoint') THEN
+                  CREATE ROLE brandflow_checkpoint LOGIN NOSUPERUSER NOBYPASSRLS;
+                END IF;
+              END
+              $$;
+              """)
+              conn.execute("CREATE SCHEMA IF NOT EXISTS brandflow_checkpoint AUTHORIZATION brandflow_checkpoint")
+              conn.execute("ALTER ROLE brandflow_checkpoint IN DATABASE postgres SET search_path TO brandflow_checkpoint")
               conn.execute(sql)
-              conn.execute("CREATE ROLE brandflow_app LOGIN NOSUPERUSER NOBYPASSRLS")
               grants_sql = "\n".join(line for line in open(grants_file, encoding="utf-8") if not line.lstrip().startswith("\\"))
               assert grants_sql.strip(), "repository grants were empty after removing psql meta-commands"
               conn.execute(grants_sql)
+              security_check_sql = "\n".join(line for line in open(security_check_file, encoding="utf-8") if not line.lstrip().startswith("\\"))
+              assert security_check_sql.strip(), "security-definer check was empty after removing psql meta-commands"
+              conn.execute(security_check_sql)
               conn.commit()
-          print("migrations and non-superuser business grants applied")
+          print("migrations, non-superuser business grants, and SECURITY DEFINER checks applied")
           PY
       - name: Test
         working-directory: services/agent-api

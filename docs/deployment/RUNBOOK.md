@@ -74,8 +74,13 @@ Agent readiness fails closed when PostgreSQL checkpoint isolation, GLM configura
   them into a general cross-workspace read/write interface, and never
   work around them by disabling RLS, granting `BYPASSRLS`, elevating
   the business connection, or setting a global `app.workspace_id`.
+- 011 restricts the legacy `increment_token_used(text, integer)`
+  `SECURITY DEFINER` RPC to Supabase's trusted `service_role` (when that
+  role exists), pins its `search_path = pg_catalog, public`, and revokes
+  execution from `PUBLIC`, `brandflow_app`, and `brandflow_checkpoint`.
+  Do not grant this cross-user quota mutation RPC to a BrandFlow runtime role.
 
-### Applying missing migrations to an EXISTING stack (005–010)
+### Applying missing migrations to an EXISTING stack (005–011)
 
 `docker-entrypoint-initdb.d` only runs when the persistent volume is
 FIRST initialized. For an already-running stack, apply the migration
@@ -84,7 +89,7 @@ explicitly. Schedule a maintenance window first: 008 replaces the existing
 table lock even though it neither deletes rows nor columns. Do not apply any
 migration merely to re-run a test.
 
-After the Compose definition containing the 005–010 mounts has been rolled
+After the Compose definition containing the 005–011 mounts has been rolled
 out, apply only the migration files absent from that database, in order:
 
 ```powershell
@@ -94,7 +99,8 @@ foreach ($migration in @(
   '08-style-report-enrichment.sql',
   '09-consumer-material-kinds.sql',
   '10-deep-research.sql',
-  '11-orphan-recovery.sql'
+  '11-orphan-recovery.sql',
+  '12-harden-token-rpc.sql'
 )) {
   docker compose exec postgres psql -U postgres -d brandflow `
     -v ON_ERROR_STOP=1 `
@@ -109,7 +115,7 @@ docker compose exec postgres psql -U postgres -d brandflow -t -c `
   "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='consumer_projects';"
 ```
 
-Never delete the data volume to "re-run" migrations; upgrade in place. The consumer gate (`RUN_BRANDFLOW_DB_TESTS=true pnpm test:db:consumer`) applies 001–009 on a disposable container, verifies the 004 workspace policies and 005 FORCE hardening (including owner bypass closed), verifies 006 `style_reports` RLS, and proves 007/008 schema contracts. The agent-api RLS gate (`RUN_AGENT_DB_TESTS=true`, see Verification below) additionally proves 009 deep-research RLS and the 010 orphan-recovery entries under the plain `brandflow_app` role.
+Never delete the data volume to "re-run" migrations; upgrade in place. The consumer gate (`RUN_BRANDFLOW_DB_TESTS=true pnpm test:db:consumer`) applies 001–011 on a disposable container, verifies the 004 workspace policies and 005 FORCE hardening (including owner bypass closed), verifies 006 `style_reports` RLS, proves 007/008 schema contracts, and proves the isolated checkpoint role cannot call the 011-hardened token RPC. The agent-api RLS gate (`RUN_AGENT_DB_TESTS=true`, see Verification below) additionally proves 009 deep-research RLS and the 010 orphan-recovery entries under the plain `brandflow_app` role.
 - Content versions, decisions, lineage and audit events are append-only. Never repair them with direct updates.
 
 ## Recovery
