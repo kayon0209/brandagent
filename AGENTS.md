@@ -179,6 +179,14 @@ SUPABASE_SERVICE_ROLE_KEY= # 必填，Supabase 服务密钥（仅服务端）
 
 ## 10. 当前阶段
 
+### 公开介绍页与免费部署
+
+- `docs/site/brandagent/` 保存独立的 Cloudflare Pages 静态介绍页，仅包含已公开的 HTML、CSS、JS、截图、robots 和 headers；完整应用不属于该发布目录。
+- `.github/workflows/pages.yml` 在相关 PR 做无密钥检查，仅在主分支、检查通过且仓库变量 `CLOUDFLARE_PAGES_DEPLOY_ENABLED=true` 时部署现有 `brandagent` Pages 项目。
+- Cloudflare 凭据只放 GitHub Actions Secrets；不写源码、构建产物或本地环境文件。新建凭据与公开发布仍需用户确认。
+- 发布检查命令：`python3 -m unittest discover -s tests/unit -p 'test_pages_site.py' -v`、`python3 scripts/verify_pages_site.py`、`node --check docs/site/brandagent/app.js`。运维说明见 `docs/deployment/cloudflare-pages.md`。
+
+
 **阶段**：Phase 5 验收完成（checkout `cd1f303`）；Phase 6「深度调研」已于 2026-09-08 经用户单项批准完成产品化并真实栈验收（实现 `82458a7` + 验收修复 `6946893`：009 migration、受限多 Agent 编排、SSE 进度与取消、候选素材卡片与加入素材闭环；agent-api 263 / MCP 33 / jest 77 / 真实栈 E2E 全绿，含 Tavily 配额受限时的诚实降级分支）
 **下一步**：Tavily 月度配额恢复后，在真实栈复跑 tests/e2e/consumer-deep-research.spec.ts 的 provider-healthy 分支（完整卡片 + 加入素材断言）；MASTER_PLAN Phase 6 Gate 中「S2 对照实验可复现」仍建议在配额窗口内补一轮 replication（决策记录见 docs/MASTER_PLAN.md「Phase 6 立项决定」）
 **权威计划**：`docs/MASTER_PLAN.md`（阶段与门禁索引）；升级规格全文见 `docs/superpowers/plans/2026-08-28-consumer-brandagent-upgrade.md`
