@@ -1,0 +1,68 @@
+name: BrandAgent public Pages
+
+on:
+  pull_request:
+    paths:
+      - 'docs/site/brandagent/**'
+      - 'scripts/verify_pages_site.py'
+      - 'tests/unit/test_pages_site.py'
+      - '.github/workflows/pages.yml'
+      - '.github/pages-tooling/**'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/site/brandagent/**'
+      - 'scripts/verify_pages_site.py'
+      - 'tests/unit/test_pages_site.py'
+      - '.github/workflows/pages.yml'
+      - '.github/pages-tooling/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Verify release boundary and static resources
+        run: |
+          python3 -m unittest discover -s tests/unit -p 'test_pages_site.py' -v
+          python3 scripts/verify_pages_site.py
+          node --check docs/site/brandagent/app.js
+
+  deploy:
+    needs: validate
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.CLOUDFLARE_PAGES_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: brandagent-pages-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Require deployment credentials
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CF_TOKEN" || { echo 'Missing CLOUDFLARE_API_TOKEN secret'; exit 1; }
+          test -n "$CF_ACCOUNT" || { echo 'Missing CLOUDFLARE_ACCOUNT_ID secret'; exit 1; }
+      - name: Publish only the static introduction
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.151.2'
+          workingDirectory: .github/pages-tooling
+          packageManager: npm
+          command: pages deploy ../../docs/site/brandagent --project-name=brandagent --branch=main --commit-hash=${{ github.sha }}

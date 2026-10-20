@@ -1,0 +1,8 @@
+{
+  "name": "brandagent-pages-tooling",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated tooling for the public static Pages deployment",
+  "engines": { "node": ">=22" },
+  "devDependencies": { "wrangler": "4.151.2" }
+}
