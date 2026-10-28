@@ -196,3 +196,10 @@ SUPABASE_SERVICE_ROLE_KEY= # 必填，Supabase 服务密钥（仅服务端）
 
 _最后更新：2026-09-08 | 维护人：李凯盟_
 _修改本文件需通知相关开发者，规则变更先改文档再改代码。_
+
+## Worktree 收尾（用户规则，2026-10-28）
+
+- worktree 不遗留：在 worktree（含 subagent 在其中执行的任务）中做的任务，完成时必须删除该 worktree 及其分支。它专用的 cargo target 目录一并删除。
+- 删除前二选一：合并进 main；或不合并时，先把未提交改动提交到该分支，再打 `archive/<worktree 名>` tag 存档，然后执行 `git worktree remove` 和 `git branch -D`。
+- 编排 subagent 的会话负责收尾它派生的 worktree。
+- 确需保留的（待用户裁决、有冲突待解），必须在最终回复里点名路径与原因，不得默默留下。

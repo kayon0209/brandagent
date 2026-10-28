@@ -4,7 +4,7 @@
 
 发布目标是已有的 `https://brandagent.pages.dev/`（Cloudflare Pages Direct Upload 项目 `brandagent`）。发布源是 `docs/site/brandagent/` 的六个静态文件，与 Next.js 写作应用和 Python 服务独立。
 
-源文件来自 2026-10-19 经用户确认后公开的静态介绍页；不改变其文案、图片、交互、拟定价格或体验入口。页面没有 AI API、账号、数据库或支付功能。维护说明和验证脚本不在上传目录中。
+2026-10-28 用户批准 V4.2 方案 A：双载体同源重做。正文真值为 `src/components/landing/content.html`，样式真值为 `src/styles/landing.css`，颜色和字体以 `src/styles/consumer-tokens.css` 为准。生成脚本产出 Next 使用的 JSON 与静态介绍页；不可直接编辑生成文件。当前修改仅本地验收，公开发布仍需审阅。静态页没有 AI API、账号、数据库或支付功能。维护说明和验证脚本不在上传目录中。
 
 ## 免费边界
 
@@ -13,6 +13,8 @@
 ## 本地检查
 
 ```sh
+python3 scripts/generate_pages_site.py
+python3 scripts/generate_pages_site.py --check
 python3 -m unittest discover -s tests/unit -p 'test_pages_site.py' -v
 python3 scripts/verify_pages_site.py
 node --check docs/site/brandagent/app.js
@@ -33,7 +35,7 @@ node --check docs/site/brandagent/app.js
 - 相关 PR 仅做无密钥验证，使用 `pull_request`，不用 `pull_request_target`。
 - 仅主分支的相关 push 或在主分支手动触发可以部署，且要求验证通过、启用开关为 true。
 - Actions 均锁定完整提交 SHA，checkout 不保留 Git 凭据；只有发布步骤接收 Cloudflare Token。Wrangler 固定版本，使用带独立 `package.json` 的 `.github/pages-tooling/` 工作目录和 npm，避免向上查找应用依赖；该工具目录不在上传范围内。
-- 首次接通时，人工从 main 触发一次；检查工作流成功、Pages 提交标识与本次 SHA 一致、原网址可打开、图片与脚本可加载、语言和平台示例可切换。没有这些证据不能称自动发布已完成。
+- 发布前先验收预览，再确认生产发布。检查工作流、提交标识、原网址、图标和样式，以及目录、来源脚注和更新日志入口；核对 1440px 与 390px 排版。没有这些证据不能称发布已完成。
 - GitHub 上的其他应用 CI 保持原样，不把 Pages 检查等同于完整应用测试。
 
 ## 回滚

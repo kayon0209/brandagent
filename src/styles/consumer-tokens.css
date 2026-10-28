@@ -1,24 +1,65 @@
-/* Shared consumer design tokens (plan §8.2).
-   Baseline: _sandbox/consumer-ui-concept/index-v4.html — ported verbatim. */
+/* Consumer design tokens — V4.2「记录 / Records」(2026-10-27).
+   Precedent: docs/design-references V4 记录家族；审阅记录见
+   /Users/mac/WorkBuddy/项目/brandagent-ui-audit/V4-记录家族-设计文档.md
+
+   规则（§3.2 台与纸的边界）：
+   - 凡是被「读、改、签」的东西是纸（--sheet 白，浮起，零圆角）；
+   - 其余全是台（--stock 灰，贴地）。
+   - 层级靠线宽（1px/2px）与底色差，不靠阴影圆角；唯一投影是纸的浮起。
+   - 颜色只在有意义处出现：朱红 = 人的判断与待办；系统状态用符号（✓ △ ○ ●）。
+
+   兼容层：下方保留 V1 令牌的全部旧变量名（--canvas/--paper/--accent…），
+   值已重映射到 V4.2。存量组件不必一次改完，但新代码一律用 V4 名称。 */
 
 :root {
-  --canvas: #e9e5dc;
-  --paper: #fffdf8;
-  --paper-warm: #f5f1e8;
-  --sand: #e9e0cf;
-  --sand-deep: #d7c8ae;
-  --brown: #6f5d49;
-  --ink: #27241f;
-  --ink-soft: #514b43;
-  --muted: #8a8278;
-  --line: #ddd6ca;
-  --line-dark: #beb4a6;
-  --accent: #ad5641;
-  --accent-deep: #8f3f2f;
-  --accent-soft: #f3e5df;
-  --green: #657764;
-  --danger: #a33d2e;
-  --serif: "Iowan Old Style", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", STSong, SimSun, serif;
-  --sans: "Aptos", "Avenir Next", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
-  --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  /* ── V4.2 核心 ─────────────────────────────────────────── */
+  --stock: #e9e8e3;            /* 台：中性灰（黄相饱和度 ~8%，2026-10-27 去黄） */
+  --sheet: #ffffff;            /* 纸：纯白 */
+  --paper-warm: #f5f4f1;       /* 小票/热敏纸：微暖灰白 */
+  --ink: #141210;              /* 墨（纸上 18.4:1） */
+  --ink-2: #332d26;            /* 正文（13.4:1） */
+  --grey: #5c5449;             /* 次要（7.3:1） */
+  --grey-2: #6e6558;           /* 说明（5.6:1） */
+  --faint: #7a7163;            /* 极淡——仅限装饰性 mono 拉丁/数字，不得用于中文 */
+  --red: #b23427;              /* 朱：唯一强调色（6.0:1；白字其上 5.3:1） */
+  --red-line: rgba(178, 52, 39, 0.45);
+  --red-wash: rgba(178, 52, 39, 0.06);
+  --hair: rgba(20, 18, 16, 0.17);   /* 发丝线（1px 分隔） */
+  --hair-2: rgba(20, 18, 16, 0.08); /* 更淡的发丝线（行内分隔） */
+  --grid: 34px;                     /* 基线网格 = 17px 正文 × 2.0 行高 */
+  --shadow-paper: 0 30px 56px -50px rgba(20, 18, 16, 0.55); /* 纸的唯一投影 */
+
+  /* 字号阶梯（中文底线 12px；mono 拉丁/数字可到 9.5–11） */
+  --fs-label: 10.5px;   /* mono 标签，字距 .12–.2em，大写 */
+  --fs-note: 12px;      /* 说明文字（中文下限） */
+  --fs-ui: 13px;        /* 界面控件 */
+  --fs-meta: 13.5px;    /* 次要正文 */
+  --fs-body: 15.5px;    /* 阅读正文（稿纸正文用 17px/34px 直排） */
+  --fs-title: 22px;     /* 页标题 */
+
+  --serif: 'Iowan Old Style', 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC', STSong, SimSun, serif;
+  --sans: 'PingFang SC', 'Hiragino Sans GB', 'Avenir Next', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+
+  /* ── 兼容层：V1 旧名 → V4.2 值（存量组件渐进迁移） ───────── */
+  --canvas: #e9e8e3;           /* 旧「画布」= 台 */
+  --paper: #ffffff;            /* 旧「纸」= 纯白 */
+  --sand: #e1e0db;
+  --sand-deep: #c9c7c0;
+  --brown: #5c5449;
+  --ink-soft: #332d26;
+  --muted: #6e6558;            /* 3.0:1 → 5.6:1，修掉可访问性旧账 */
+  --line: rgba(20, 18, 16, 0.17);
+  --line-dark: rgba(20, 18, 16, 0.32);
+  --accent: #b23427;           /* 陶土红 → 朱 */
+  --accent-deep: #8f2b20;
+  --accent-soft: rgba(178, 52, 39, 0.06);
+  --green: #4e5549;            /* 语义「通过」退到灰阶，状态靠符号 */
+  --danger: #b23427;
+}
+
+/* 工作区根：台面（灰）。「纸」由各页自己铺 —— 台纸边界 §3.2。 */
+.consumer-app-root {
+  min-height: 100vh;
+  background: var(--stock);
 }

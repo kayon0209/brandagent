@@ -8,7 +8,7 @@ from urllib.parse import unquote, urlsplit
 
 EXPECTED_FILES = {
     'index.html', 'styles.css', 'app.js', 'robots.txt', '_headers',
-    'assets/workspace.png',
+    'assets/mark.svg',
 }
 SITE = Path(__file__).resolve().parents[1] / 'docs/site/brandagent'
 
@@ -29,13 +29,15 @@ class PublicPage(HTMLParser):
         self.h1_count += tag == 'h1'
         self.has_title |= tag == 'title'
         self.has_description |= tag == 'meta' and attrs.get('name') == 'description'
+        if 'style' in attrs:
+            raise ValueError('Inline styles are blocked by the deployed CSP')
         if tag in {'form', 'iframe'}:
             raise ValueError('This static introduction must not include forms or frames')
         if tag == 'script' and not attrs.get('src'):
             raise ValueError('Inline scripts are blocked by the deployed CSP')
         for attribute in ('src', 'href'):
             if attribute in attrs:
-                self.references.append((tag, attribute, attrs[attribute]))
+                self.references.append((tag, attribute, attrs[attribute], attrs.get('rel', '')))
 
 
 def validate_site(root):
@@ -55,13 +57,15 @@ def validate_site(root):
         raise ValueError('Expected one h1 plus title and description')
     if len(page.ids) != len(set(page.ids)):
         raise ValueError('Duplicate HTML IDs')
-    for tag, attribute, value in page.references:
+    for tag, attribute, value, rel in page.references:
         parsed = urlsplit(value)
         if value.startswith('#'):
             if value != '#' and value[1:] not in page.ids:
                 raise ValueError(f'Broken section anchor: {value}')
             continue
         if parsed.scheme == 'data' and tag == 'link' and value.startswith('data:image/'):
+            continue
+        if tag == 'link' and rel == 'canonical' and value == 'https://brandagent.pages.dev/':
             continue
         if tag == 'a' and parsed.scheme == 'https' and parsed.hostname:
             continue
