@@ -242,8 +242,8 @@
 .v42-landing .colo .bar{display:block}
 .v42-landing .skip{position:absolute;left:-10000px}.v42-landing .skip:focus{position:static;display:block;padding:12px}
 .v42-landing a:focus-visible,.v42-landing button:focus-visible{outline:2px solid var(--ink);outline-offset:4px}
-@media(max-width:1080px){.v42-landing .source-note{grid-column:2}}
-@media(max-width:640px){.v42-landing .source-note{grid-column:1}.v42-landing .pf-head,.v42-landing .band .cap{flex-wrap:wrap}.v42-landing .pf-head{font-size:12px}.v42-landing .nav{min-height:44px}.v42-landing .hero .toc{margin-top:24px;border-left:0;border-top:1px solid var(--hair);padding:16px 0 0}.v42-landing .byline{font-size:12px}.v42-landing .abs p,.v42-landing .pf-body p,.v42-landing .prin p{font:17px/34px var(--serif)}.v42-landing .colo .in{grid-column:1;min-width:0}.v42-landing .prov li{overflow-wrap:anywhere}}
+@media(max-width:1080px){.v42-landing .hero .toc{grid-column:2}.v42-landing .source-note{grid-column:2}}
+@media(max-width:640px){.v42-landing .hero .toc{grid-column:1}.v42-landing .source-note{grid-column:1}.v42-landing .pf-head,.v42-landing .band .cap{flex-wrap:wrap}.v42-landing .pf-head{font-size:12px}.v42-landing .nav{min-height:44px}.v42-landing .hero .toc{margin-top:24px;border-left:0;border-top:1px solid var(--hair);padding:16px 0 0}.v42-landing .byline{font-size:12px}.v42-landing .abs p,.v42-landing .pf-body p,.v42-landing .prin p{font:17px/34px var(--serif)}.v42-landing .colo .in{grid-column:1;min-width:0}.v42-landing .prov li{overflow-wrap:anywhere}}
 
 .v42-landing .colo dl{margin:1em 0}
 
