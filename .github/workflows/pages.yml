@@ -5,6 +5,10 @@ on:
     paths:
       - 'docs/site/brandagent/**'
       - 'scripts/verify_pages_site.py'
+      - 'scripts/generate_pages_site.py'
+      - 'src/components/landing/**'
+      - 'src/styles/landing.css'
+      - 'src/styles/consumer-tokens.css'
       - 'tests/unit/test_pages_site.py'
       - '.github/workflows/pages.yml'
       - '.github/pages-tooling/**'
@@ -13,6 +17,10 @@ on:
     paths:
       - 'docs/site/brandagent/**'
       - 'scripts/verify_pages_site.py'
+      - 'scripts/generate_pages_site.py'
+      - 'src/components/landing/**'
+      - 'src/styles/landing.css'
+      - 'src/styles/consumer-tokens.css'
       - 'tests/unit/test_pages_site.py'
       - '.github/workflows/pages.yml'
       - '.github/pages-tooling/**'
@@ -32,6 +40,7 @@ jobs:
       - name: Verify release boundary and static resources
         run: |
           python3 -m unittest discover -s tests/unit -p 'test_pages_site.py' -v
+          python3 scripts/generate_pages_site.py --check
           python3 scripts/verify_pages_site.py
           node --check docs/site/brandagent/app.js
 
